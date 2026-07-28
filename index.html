@@ -694,6 +694,46 @@ function num(v){ const n=parseFloat(String(v||"").replace(/[^0-9.\-]/g,"")); ret
 const toPar=n=> n===0 ? "E" : (n>0 ? "+"+n : String(n));
 const yes=v=>/^(y|yes|true|paid|in|1)$/i.test(String(v||"").trim());
 
+const nkey=s=>String(s||"").trim().replace(/\s+/g," ").toLowerCase();
+let HEALTH=[];
+const flag=m=>{ if(!HEALTH.includes(m)) HEALTH.push(m); };
+const posInt=v=>{ const n=parseInt(v,10); return (isNaN(n)||n<=0)?null:n; };
+const WORDROUND={one:"1",two:"2",three:"3"};
+function roundNorm(v){
+  const d=String(v||"").replace(/[^0-9]/g,"");
+  if(d) return d;
+  const w=String(v||"").trim().toLowerCase().split(/\s+/).pop();
+  return WORDROUND[w]||"1";
+}
+function activeSeason(){
+  const ys=(STATE.data.scores||[]).map(r=>parseInt(r.year,10)).filter(n=>n>0);
+  if(ys.length) return String(Math.max(...ys));
+  const t=new Date(INFO.first_tee||CONFIG.FIRST_TEE);
+  return String(isNaN(t)?new Date().getFullYear():t.getFullYear());
+}
+function rosterMap(){
+  const m=new Map();
+  (STATE.data.field||[]).filter(r=>r.player&&r.team&&r.year===STATE.year).forEach(r=>{
+    const k=nkey(r.team);
+    if(!m.has(k)) m.set(k,{captain:null,members:[],since:{}});
+    const t=m.get(k);
+    if(nkey(r.player)===k){ if(t.captain) flag(`two captains claim team "${r.team}"`); t.captain=r.player; }
+    else t.members.push(r.player);
+    if(r.since) t.since[r.player]=r.since;
+  });
+  m.forEach((t,k)=>{ if(!t.captain) flag(`team "${k}" has no captain row (player must equal team)`); });
+  return m;
+}
+function teamLabel(key){
+  const t=rosterMap().get(key);
+  if(!t||!t.captain){ const raw=key; return {html:esc(raw),text:raw}; }
+  const names=[t.captain,...t.members];
+  return {
+    html:names.map((n,i)=>`<span${i===0?' class="cap"':''}>${esc(n)}</span>`).join(" &amp; "),
+    text:names.join(" & ")
+  };
+}
+
 function yearsIn(rows){ return [...new Set((rows||[]).map(r=>r.year).filter(Boolean))].sort().reverse(); }
 function forYear(rows,y){
   if(!rows) return [];
@@ -711,28 +751,34 @@ function courseMap(){
 
 /* ---------- build player cards ---------- */
 function buildPlayers(){
-  const scores=forYear(STATE.data.scores,STATE.year).filter(s=>s.player);
+  const roster=rosterMap();
+  const scores=forYear(STATE.data.scores,STATE.year).filter(s=>(s.team||s.player));
   const pars=courseMap();
-  const byName={};
+  const byKey={};
   scores.forEach(s=>{
-    const name=s.player;
-    if(!byName[name]) byName[name]={name,rounds:{}};
-    const rd=String(s.round||"1").replace(/[^0-9]/g,"")||"1";
-    const holes={};
-    let any=false;
-    HOLES.forEach(h=>{ const v=parseInt(s["h"+h],10); if(!isNaN(v)){ holes[h]=v; any=true; } });
-    if(any){ byName[name].rounds[rd]={holes}; }
-    else {
-      const r1=parseInt(s.r1,10), r2=parseInt(s.r2,10);
-      if(!isNaN(r1)) byName[name].rounds["1"]={total:r1};
-      if(!isNaN(r2)) byName[name].rounds["2"]={total:r2};
+    const raw=(s.team||s.player), k=nkey(raw);
+    if(roster.size&&!roster.has(k)){ flag(`score row for unknown team "${raw}" — not counted`); return; }
+    if(!byKey[k]) byKey[k]={key:k,name:(roster.get(k)||{}).captain||raw,rounds:{},fromTotals:false};
+    const rd=roundNorm(s.round);
+    const holes={}; let any=false;
+    HOLES.forEach(h=>{ const v=posInt(s["h"+h]); if(v!==null){ holes[h]=v; any=true; } });
+    if(any){
+      const ex=byKey[k].rounds[rd];
+      if(ex&&ex.holes){
+        Object.keys(holes).forEach(h=>{
+          if(ex.holes[h]!==undefined&&ex.holes[h]!==holes[h])
+            flag(`conflicting entries for ${byKey[k].name} R${rd} h${h} (${ex.holes[h]} vs ${holes[h]}) — using ${holes[h]}`);
+          ex.holes[h]=holes[h];
+        });
+      } else byKey[k].rounds[rd]={holes};
+    } else {
+      const r1=posInt(s.r1), r2=posInt(s.r2);
+      if(r1!==null){ byKey[k].rounds["1"]={total:r1}; byKey[k].fromTotals=true; }
+      if(r2!==null){ byKey[k].rounds["2"]={total:r2}; byKey[k].fromTotals=true; }
     }
   });
-
-  const field=STATE.data.field||[];
-  const hcp={}; field.forEach(f=>{ if(f.player) hcp[f.player.toLowerCase()]=num(f.handicap); });
-
-  return Object.values(byName).map(p=>{
+  const hcp={}; (STATE.data.field||[]).forEach(f=>{ if(f.player) hcp[nkey(f.player)]=num(f.handicap); });
+  return Object.values(byKey).map(p=>{
     let played=0, strokes=0, parPlayed=0;
     const roundTotals={};
     Object.entries(p.rounds).forEach(([rd,r])=>{
@@ -746,19 +792,17 @@ function buildPlayers(){
         if(pars) parPlayed+=Object.values(pars).reduce((a,b)=>a+b,0);
       }
     });
-    const h=hcp[p.name.toLowerCase()]||0;
-    return {
-      name:p.name, rounds:p.rounds, roundTotals, played,
+    const h=hcp[nkey(p.name)]||0;
+    return { key:p.key, name:p.name, rounds:p.rounds, roundTotals, played, fromTotals:p.fromTotals,
       total: played?strokes:null,
       rel: (pars&&played) ? strokes-parPlayed : null,
-      net: played ? Math.round(strokes - h*played/18) : null,
-      hcp:h
-    };
+      net: played ? Math.round(strokes-h*played/18) : null, hcp:h };
   });
 }
 
 function thruLabel(p){
   if(!p.played) return "—";
+  if(p.fromTotals) return Object.keys(p.rounds).length>1?"totals":"R"+Object.keys(p.rounds)[0]+" · total";
   if(p.played>=36) return "F";
   if(p.played===18) return "F · R1";
   return p.played>18 ? "R2 · "+(p.played-18) : "R1 · "+p.played;
@@ -782,7 +826,7 @@ function renderInfo(rows){
 function renderYears(){
   const ys=yearsIn(STATE.data.scores);
   const box=$("#years");
-  if(ys.length&&(!STATE.year||!ys.includes(STATE.year))) STATE.year=ys[0];
+  if(!STATE.year||!ys.includes(STATE.year)) STATE.year=ys.includes(activeSeason())?activeSeason():(ys[0]??activeSeason());
   if(ys.length<2){ box.innerHTML=""; return; }
   box.innerHTML=ys.map(y=>`<button class="year-btn" type="button" data-year="${esc(y)}" aria-pressed="${y===STATE.year}">${esc(y)}</button>`).join("");
   box.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
@@ -803,7 +847,7 @@ function cardHTML(p){
   const pars=courseMap();
   const rds=Object.keys(p.rounds).sort();
   if(!rds.length) return "";
-  return `<div class="card-drop" id="card-${esc(p.name).replace(/\W/g,"")}">` + rds.map(rd=>{
+  return `<div class="card-drop" id="card-${esc(p.key).replace(/ /g,"-")}">` + rds.map(rd=>{
     const r=p.rounds[rd];
     if(!r.holes) return `<div class="nine"><p class="nine-lab">Round ${esc(rd)} — total ${r.total}</p></div>`;
     return [[1,9,"Out"],[10,18,"In"]].map(([a,b,lab])=>{
@@ -857,12 +901,12 @@ function renderLeaderboard(){
   $("#lbBody").innerHTML=players.map(p=>{
     const pos=p.pos;
     const lead=(pos===1)?" lead":"";
-    const id=esc(p.name).replace(/\W/g,"");
-    const open=STATE.open===p.name;
-    return `<button class="lb-row${lead}" type="button" data-player="${esc(p.name)}"
+    const id=esc(p.key).replace(/ /g,"-");
+    const open=STATE.open===p.key;
+    return `<button class="lb-row${lead}" type="button" data-player="${esc(p.key)}"
               aria-expanded="${open}" aria-controls="card-${id}">
         <span class="lb-pos">${pos??"—"}</span>
-        <span class="lb-name">${esc(p.name)}</span>
+        <span class="lb-name">${teamLabel(p.key).html}</span>
         <span class="lb-thru">${thruLabel(p)}</span>
         <span class="lb-num lb-r1">${p.roundTotals["1"]??"—"}</span>
         <span class="lb-num lb-r2">${p.roundTotals["2"]??"—"}</span>
@@ -1240,8 +1284,19 @@ async function loadDebug(){
 }
 
 /* ---------- load ---------- */
+function normalizeYears(data){
+  ["field","scores","calcutta","schedule","pairings","ledger","shame"].forEach(tab=>{
+    const rows=data[tab];
+    if(!rows||!rows.length||!rows.some(r=>r.year)) return;
+    rows.forEach(r=>{
+      if(!r.year){ r.year=activeSeason(); flag("row with blank year defaulted to "+r.year+" ("+tab+")"); }
+    });
+  });
+}
 function paint(data,at,live){
+  HEALTH=[];
   STATE.data=data;
+  normalizeYears(data);
   renderInfo(data.info);
   renderAll();
   const note=live?"Updated "+ago(at):"Saved copy from "+ago(at);
