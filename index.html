@@ -401,7 +401,7 @@
       <div class="fact"><dt>Dates</dt><dd data-info="dates">Aug 14–16</dd></div>
       <div class="fact"><dt>Course</dt><dd data-info="course">Meadow Creek</dd></div>
       <div class="fact"><dt>Lodging</dt><dd data-info="lodging">Bear Creek Lodge</dd></div>
-      <div class="fact"><dt>Format</dt><dd data-info="format">36 holes, stroke</dd></div>
+      <div class="fact"><dt>Format</dt><dd data-info="format">2-day scramble</dd></div>
     </dl>
 
     <div class="holder" id="homeBird">
@@ -417,10 +417,10 @@
   <div class="wrap">
     <p class="eyebrow">Live from the course</p>
     <h2>Leaderboard</h2>
-    <p class="lede">Gross decides The Bird. Net decides who buys. Tap a name for the full card.</p>
+    <p class="lede">Gross decides The Bird. Tap a team for the full card.</p>
     <div class="years" id="years" role="group" aria-label="Tournament year"></div>
     <div class="lb-head">
-      <div>Pos</div><div>Player</div><div>Thru</div>
+      <div>Pos</div><div>Team</div><div>Thru</div>
       <div class="lb-num lb-r1">R1</div><div class="lb-num lb-r2">R2</div>
       <div class="lb-tot lb-total">Total</div><div class="lb-tot">To par</div>
     </div>
@@ -470,7 +470,7 @@
   <div class="wrap">
     <p class="eyebrow">Bid Friday night, paid Sunday</p>
     <h2>The Calcutta</h2>
-    <p class="lede">Every man in the field goes to the highest bidder. Buy back half of yourself or watch someone else cash your round.</p>
+    <p class="lede">Every team goes to the highest bidder Friday night. Owners pay the pot before Sunday's first tee.</p>
     <dl class="pot">
       <div><dt>Pot</dt><dd id="calPot">—</dd></div>
       <div><dt>House</dt><dd id="calRake">—</dd></div>
@@ -482,8 +482,8 @@
 
     <h3 class="subhead">The Board</h3>
     <div class="auc-head">
-      <div>Player</div><div>Owner</div>
-      <div class="auc-back">Buyback</div><div class="auc-price">Price</div>
+      <div>Team</div><div>Owner</div>
+      <div class="auc-back">Paid</div><div class="auc-price">Price</div>
     </div>
     <div id="aucBody">
       <div class="mn-empty">Add a Calcutta tab and the auction board fills in here.</div>
@@ -491,8 +491,8 @@
 
     <h3 class="subhead">The Payout</h3>
     <div class="pay-head">
-      <div>Place</div><div>Player</div><div>Owner</div>
-      <div class="pay-cut">Owner</div>
+      <div>Place</div><div>Team</div><div>Owner</div>
+      <div class="pay-cut">Owner takes</div>
     </div>
     <div id="payBody">
       <div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>
@@ -590,12 +590,12 @@
     <p class="lede">The USGA governs the rest. These override it.</p>
     <ol class="rules">
       <li><span>Two days, two rounds, one course. No substitutions, no early exits, no working the weekend.</span></li>
-      <li><span>Stroke play with full handicap. Gross wins The Bird. Net decides who buys the first round.</span></li>
-      <li><span>One mulligan per nine. Call it before you swing or it never happened.</span></li>
+      <li><span>Two-day scramble, gross score. Gross wins The Bird and keeps it for a year.</span></li>
+      <li><span>One mulligan per team per nine. Call it before the swing or it never happened.</span></li>
       <li><span>Ball in the pines is playable. Ball in the creek is a drop and a story.</span></li>
       <li><span>Phones stay in the cart. A work call costs you a stroke and a round back at the lodge.</span></li>
       <li><span>Gimmes are inside the leather and inside the leather only. The leather is not your driver.</span></li>
-      <li><span>Calcutta is bid Friday after the draw. You may buy back half of yourself at the winning price, and half is the ceiling.</span></li>
+      <li><span>The Calcutta is bid Friday after the draw. Winning bids are due to the pot before Sunday's first tee.</span></li>
       <li><span>Anyone who complains about the pace of play gets told the name of the tournament.</span></li>
     </ol>
   </div>
@@ -1300,25 +1300,34 @@ function renderShame(){
   const cards=[];
 
   if(pars){
-    let worst=null, blow=null, birds=null;
-    const blowCount={}, birdCount={};
-    players.forEach(p=>{
+    let worst=null, collapse=null; const birdCount={};
+    players.filter(p=>!p.fromTotals).forEach(p=>{
+      birdCount[p.key]=birdCount[p.key]||0;
       Object.entries(p.rounds).forEach(([rd,r])=>{
         if(!r.holes) return;
+        let out=0,inn=0,outN=0,inN=0;
         Object.entries(r.holes).forEach(([h,sc])=>{
           const par=pars[h]||0, d=sc-par;
-          if(!worst||d>worst.d) worst={name:p.name,d,sc,h:+h,par,rd};
-          if(d>=2) blowCount[p.name]=(blowCount[p.name]||0)+1;
-          if(d<0) birdCount[p.name]=(birdCount[p.name]||0)+1;
+          if(!worst||d>worst.d) worst={key:p.key,d,sc,h:+h,par,rd};
+          if(d<0) birdCount[p.key]++;
+          if(+h<=9){out+=d;outN++;} else {inn+=d;inN++;}
         });
+        if(outN===9&&inN===9){
+          const swing=inn-out;
+          if(!collapse||swing>collapse.swing) collapse={key:p.key,rd,swing,out,inn};
+        }
       });
     });
-    const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1])[0];
-    blow=top(blowCount); birds=top(birdCount);
-    if(worst) cards.push({award:"Hole of the weekend",who:worst.name,
-      detail:`${worst.sc} on the par-${worst.par} ${worst.h}${worst.h===1?"st":worst.h===2?"nd":worst.h===3?"rd":"th"}, round ${worst.rd}. ${toPar(worst.d)}.`});
-    if(blow) cards.push({award:"Most blow-ups",who:blow[0],detail:`${blow[1]} holes at double bogey or worse.`});
-    if(birds) cards.push({award:"Most birdies",who:birds[0],detail:`${birds[1]} holes under par. The only good news here.`});
+    if(worst) cards.push({award:"Worst team hole",who:teamLabel(worst.key).text,
+      detail:`${worst.sc} on the par-${worst.par} ${worst.h}${ordSuffix(worst.h)}, round ${worst.rd}. ${toPar(worst.d)}.`});
+    if(collapse&&collapse.swing>0) cards.push({award:"Back-nine collapse",who:teamLabel(collapse.key).text,
+      detail:`Round ${collapse.rd}: out ${toPar(collapse.out)}, in ${toPar(collapse.inn)}. It got away.`});
+    const teams=Object.keys(birdCount);
+    if(teams.length){
+      const fewest=teams.reduce((a,b)=>birdCount[b]<birdCount[a]?b:a);
+      cards.push({award:"Fewest birdies",who:teamLabel(fewest).text,
+        detail:`${birdCount[fewest]} team birdies all weekend.`});
+    }
   }
 
   forYear(STATE.data.shame,STATE.year).forEach(r=>{
