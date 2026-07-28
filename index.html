@@ -697,6 +697,7 @@ const yes=v=>/^(y|yes|true|paid|in|1)$/i.test(String(v||"").trim());
 function yearsIn(rows){ return [...new Set((rows||[]).map(r=>r.year).filter(Boolean))].sort().reverse(); }
 function forYear(rows,y){
   if(!rows) return [];
+  if(!y) return rows;
   return rows.some(r=>r.year) ? rows.filter(r=>r.year===y) : rows;
 }
 
@@ -781,8 +782,8 @@ function renderInfo(rows){
 function renderYears(){
   const ys=yearsIn(STATE.data.scores);
   const box=$("#years");
+  if(ys.length&&(!STATE.year||!ys.includes(STATE.year))) STATE.year=ys[0];
   if(ys.length<2){ box.innerHTML=""; return; }
-  if(!STATE.year||!ys.includes(STATE.year)) STATE.year=ys[0];
   box.innerHTML=ys.map(y=>`<button class="year-btn" type="button" data-year="${esc(y)}" aria-pressed="${y===STATE.year}">${esc(y)}</button>`).join("");
   box.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
     STATE.year=b.dataset.year; STATE.open=null; renderAll();
