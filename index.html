@@ -1498,19 +1498,32 @@ function makeIcon(size){
   const x=c.getContext("2d"); const s=size/400;
   x.fillStyle="#0E2019"; x.fillRect(0,0,size,size);
   x.save(); x.scale(s,s);
-  x.strokeStyle="#C8A24A"; x.lineWidth=8;
-  x.beginPath(); x.arc(200,200,178,0,Math.PI*2); x.stroke();
-  x.translate(149,120); x.scale(102/200,133/260);
+  /* Ring is decorative crest framing — at <=192 it only steals room from the
+     mark and vanishes at favicon scale anyway, so small tiles go ring-less
+     and fist-dominant. Large tiles (512 manifest icon) keep it, thickened so
+     the stroke survives OS downscaling. */
+  if(size>192){
+    x.strokeStyle="#C8A24A"; x.lineWidth=16;
+    x.beginPath(); x.arc(200,200,178,0,Math.PI*2); x.stroke();
+  }
+  /* Mark fills ~80% of the tile height (was ~33%, read as a blob at 64px).
+     Uniform scale from the 200x260 MARK_PATH viewBox, centered on the tile. */
+  const markScale=(400*0.8)/260, markW=200*markScale, markH=260*markScale;
+  x.translate((400-markW)/2,(400-markH)/2); x.scale(markScale,markScale);
   x.fillStyle="#C8A24A";
   x.fill(new Path2D(MARK_PATH));            /* same silhouette as <symbol id="mark"> */
   x.strokeStyle="#0E2019"; x.lineCap="round"; x.lineJoin="round";
-  [["M 88 36 C 93 42, 107 42, 112 36",6],
+  const details=[
+   ["M 88 36 C 93 42, 107 42, 112 36",6],
    ["M 81 58 C 89 62, 111 62, 119 58",6],
    ["M 81 86 C 89 90, 111 90, 119 86",6],
    ["M 70 132 L 65 186",7],
    ["M 130 132 L 135 188",7],
    ["M 166 137 L 172 190",7],
-   ["M 19 198 C 45 197, 72 190, 93 180 C 108 173, 120 178, 117 192",10]]
+   ["M 19 198 C 45 197, 72 190, 93 180 C 108 173, 120 178, 117 192",10]];
+  /* Below 100px the fine knuckle creases smear into noise; drop them and
+     keep only the bolder finger-separation + cuff strokes. */
+  (size<100 ? details.slice(3) : details)
     .forEach(([d,w])=>{ x.lineWidth=w; x.stroke(new Path2D(d)); });
   x.restore();
   return c.toDataURL("image/png");
