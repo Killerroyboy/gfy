@@ -137,6 +137,13 @@
   .fld-meta.yes{color:var(--brass)}
   .fld-meta.no{color:var(--rust)}
   .fld-num{text-align:right;font-variant-numeric:tabular-nums;color:var(--bone)}
+  .team-group+.team-group{margin-top:6px;padding-top:6px;border-top:1px solid rgba(200,162,74,.22)}
+  .badge{margin-left:8px;font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;
+         color:var(--sage);border:1px solid rgba(200,162,74,.3);border-radius:2px;
+         padding:1px 6px;vertical-align:middle}
+  .badge-rookie{color:var(--pine);background:var(--brass);border-color:var(--brass)}
+  .rookie-strip{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);
+                padding:10px 6px;border-bottom:1px solid rgba(200,162,74,.13)}
 
   /* pairings */
   .rounds{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(200,162,74,.22);
@@ -430,7 +437,7 @@
     <p class="lede">Deposit holds your bed. No deposit, no bed, and the couch is already spoken for.</p>
     <div class="fld fld-head">
       <div>Player</div><div class="fld-meta">Status</div>
-      <div class="fld-meta">Deposit</div><div class="fld-num fld-hcp">Hcp</div>
+      <div class="fld-meta" id="fldDepositHead">Deposit</div><div class="fld-num fld-hcp">Hcp</div>
     </div>
     <div id="fldBody">
       <div class="lb-empty">Add a Field tab and the roster fills in here.</div>
@@ -757,6 +764,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 const money=n=>CONFIG.CURRENCY+Math.abs(Math.round(n));
 function num(v){ const n=parseFloat(String(v||"").replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; }
 const toPar=n=> n===0 ? "E" : (n>0 ? "+"+n : String(n));
+const ordSuffix=n=>n===1?"st":n===2?"nd":n===3?"rd":"th";
 const yes=v=>/^(y|yes|true|paid|in|1)$/i.test(String(v||"").trim());
 
 const nkey=s=>String(s||"").trim().replace(/\s+/g," ").toLowerCase();
@@ -986,23 +994,68 @@ function renderLeaderboard(){
   }));
 }
 
+function seniorityBadge(since,season){
+  const sy=parseInt(since,10);
+  if(!since||isNaN(sy)) return "";
+  if(sy===season) return "ROOKIE";
+  const yrs=season-sy+1;
+  return yrs+ordSuffix(yrs)+" year";
+}
+
 function renderField(){
   const rows=forYear(STATE.data.field,STATE.year).filter(r=>r.player);
   if(!rows.length){
     $("#fldBody").innerHTML='<div class="lb-empty">Add a Field tab and the roster fills in here.</div>';
     return;
   }
-  $("#fldBody").innerHTML=rows.map(r=>{
+  const depositHead=$("#fldDepositHead");
+  if(depositHead) depositHead.textContent=STATE.year+" bed";
+
+  const season=parseInt(STATE.year,10);
+  const rookies=[];
+  const rowHTML=r=>{
     const inField=yes(r.status)||/^in$/i.test(r.status||"");
     const paid=yes(r.deposit);
     const st=r.status ? esc(r.status) : (inField?"In":"—");
+    const badgeText=seniorityBadge(r.since,season);
+    let badge="";
+    if(badgeText==="ROOKIE"){ badge=`<span class="badge badge-rookie">ROOKIE</span>`; rookies.push(r.player); }
+    else if(badgeText) badge=`<span class="badge">${esc(badgeText)}</span>`;
     return `<div class="fld">
-      <div>${esc(r.player)}</div>
+      <div>${esc(r.player)}${badge}</div>
       <div class="fld-meta ${inField?"yes":""}">${st}</div>
       <div class="fld-meta ${paid?"yes":"no"}">${paid?"Paid":"Owing"}</div>
       <div class="fld-num fld-hcp">${r.handicap||"—"}</div>
     </div>`;
-  }).join("");
+  };
+
+  const roster=rosterMap();
+  let bodyHTML;
+  if(!roster.size){
+    // v1 fallback: no team values present this season, render a flat list.
+    bodyHTML=rows.map(rowHTML).join("");
+  } else {
+    const byPlayer={};
+    rows.forEach(r=>{ byPlayer[nkey(r.player)]=r; });
+
+    const teams=[...roster.entries()].filter(([,t])=>t.captain);
+    const yearOf=v=>{ const n=parseInt(v,10); return isNaN(n)?Infinity:n; };
+    const ordered=teams
+      .map(([k,t],i)=>({k,t,i}))
+      .sort((a,b)=>(yearOf(a.t.since[a.t.captain])-yearOf(b.t.since[b.t.captain]))||(a.i-b.i));
+
+    bodyHTML=ordered.map(({t})=>{
+      const members=[...t.members].sort((a,b)=>yearOf(t.since[a])-yearOf(t.since[b]));
+      const names=[t.captain,...members];
+      const rowsHTML=names.map(n=>{ const r=byPlayer[nkey(n)]; return r?rowHTML(r):""; }).join("");
+      return `<div class="team-group">${rowsHTML}</div>`;
+    }).join("");
+  }
+
+  const stripHTML=rookies.length
+    ? `<div class="rookie-strip">Rookie Class of ${esc(STATE.year)}: ${rookies.map(esc).join(", ")}</div>`
+    : "";
+  $("#fldBody").innerHTML=stripHTML+bodyHTML;
 }
 
 function renderPairings(){
@@ -1105,10 +1158,9 @@ function renderCalcutta(){
     i+=tie.length;
   }
 
-  const ord=n=>n+(n===1?"st":n===2?"nd":n===3?"rd":"th");
   $("#payBody").innerHTML=rowsOut.map(r=>`
     <div class="pay-row">
-      <div class="pay-place">${ord(r.place)}${r.tied?"*":""}</div>
+      <div class="pay-place">${r.place+ordSuffix(r.place)}${r.tied?"*":""}</div>
       <div>${esc(r.player)}<span class="pay-sub">${esc(r.detail)}</span></div>
       <div class="auc-owner">${esc(r.owner)}</div>
       <div class="pay-cut">${r.ownerCut?money(r.ownerCut):"—"}</div>
