@@ -183,8 +183,10 @@
   .auc-owner{color:var(--sage);font-size:.95rem}
   .auc-back{text-align:right;font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
   .auc-price{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
-  .pay-head,.pay-row{display:grid;grid-template-columns:3.4rem 1fr 1fr 5.5rem 5.5rem;gap:10px;
+  .pay-head,.pay-row{display:grid;grid-template-columns:3.4rem 1fr 1fr 5.5rem;gap:10px;
                      align-items:baseline;padding:13px 6px}
+  .pot dd small{display:block;font-family:var(--ui);font-size:.62rem;letter-spacing:.04em;
+               text-transform:none;color:var(--sage);margin-top:6px;font-variant-numeric:tabular-nums}
   .pay-head{font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);
             border-bottom:1px solid var(--brass-dim);padding-bottom:9px}
   .pay-row{border-bottom:1px solid rgba(200,162,74,.13)}
@@ -475,7 +477,9 @@
       <div><dt>House</dt><dd id="calRake">—</dd></div>
       <div><dt>Playing for</dt><dd id="calPayable">—</dd></div>
       <div><dt>Top lot</dt><dd id="calTop">—</dd></div>
+      <div><dt>Outstanding</dt><dd id="calOut">—</dd></div>
     </dl>
+    <p class="basis">Owners pay the winning bid to the pot. Winnings pay the owner in full.</p>
 
     <h3 class="subhead">The Board</h3>
     <div class="auc-head">
@@ -489,7 +493,7 @@
     <h3 class="subhead">The Payout</h3>
     <div class="pay-head">
       <div>Place</div><div>Player</div><div>Owner</div>
-      <div class="pay-cut">Owner</div><div class="pay-cut">Player</div>
+      <div class="pay-cut">Owner</div>
     </div>
     <div id="payBody">
       <div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>
@@ -1095,37 +1099,71 @@ function renderPairings(){
     </div>`).join("");
 }
 
+function calcuttaModel(){
+  const rows=forYear(STATE.data.calcutta,STATE.year).filter(r=>(r.team||r.player));
+  const lots=rows.map(r=>({ key:nkey(r.team||r.player), team:(r.team||r.player),
+    owner:(r.owner||"").trim()||"—", price:num(r.price), collected:yes(r.collected)
+  })).sort((a,b)=>b.price-a.price);
+  const pot=lots.reduce((s,l)=>s+l.price,0);
+  const rakePct=num(INFO.calcutta_rake), rake=pot*rakePct/100;
+  const owed={};
+  lots.filter(l=>!l.collected).forEach(l=>{
+    const k=nkey(l.owner);
+    if(!owed[k]) owed[k]={owner:l.owner,total:0,lots:0};
+    owed[k].total+=l.price; owed[k].lots++;
+  });
+  return { lots, pot, rakePct, rake, payable:pot-rake,
+           outstanding:Object.values(owed).sort((a,b)=>b.total-a.total) };
+}
+function nextYearModel(){
+  const season=activeSeason(), next=String(parseInt(season,10)+1);
+  const field=STATE.data.field||[];
+  const byKey=new Map();
+  field.filter(r=>r.year===season&&r.player).forEach(r=>
+    byKey.set(nkey(r.player),{name:r.player,paid:false,date:"",out:false}));
+  const nxt=field.filter(r=>r.year===next&&r.player);
+  if(!nxt.length) return {open:false,next};
+  nxt.forEach(r=>{
+    const k=nkey(r.player);
+    if(!byKey.has(k)) byKey.set(k,{name:r.player,paid:false,date:"",out:false});
+    const p=byKey.get(k);
+    if(String(r.status||"").trim().toLowerCase()==="out") p.out=true;
+    if(yes(r.deposit)){ p.paid=true; p.date=(r.paid_date||"").trim(); }
+  });
+  const all=[...byKey.values()].filter(p=>!p.out);
+  const paid=all.filter(p=>p.paid).sort((a,b)=>(a.date||"9999")<(b.date||"9999")?-1:1);
+  return {open:true,next,all,paid,owing:all.filter(p=>!p.paid)};
+}
+
 function renderCalcutta(){
-  const rows=forYear(STATE.data.calcutta,STATE.year).filter(r=>r.player);
-  if(!rows.length){
+  const cal=calcuttaModel();
+  const {lots,pot,rakePct,rake,payable,outstanding}=cal;
+  if(!lots.length){
     $("#calPot").textContent="—"; $("#calRake").textContent="—";
     $("#calPayable").textContent="—"; $("#calTop").textContent="—";
+    $("#calOut").textContent="—";
     $("#aucBody").innerHTML='<div class="mn-empty">Add a Calcutta tab and the auction board fills in here.</div>';
     $("#payBody").innerHTML='<div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>';
     $("#calBasis").textContent="";
     return;
   }
 
-  const lots=rows.map(r=>({
-    player:r.player, owner:(r.owner||"").trim()||"—", price:num(r.price),
-    buyback:Math.min(100,Math.max(0,num(r.buyback)))
-  })).sort((a,b)=>b.price-a.price);
-
-  const pot=lots.reduce((s,l)=>s+l.price,0);
-  const rakePct=num(INFO.calcutta_rake);
-  const rake=pot*rakePct/100;
-  const payable=pot-rake;
-
   $("#calPot").textContent=money(pot);
   $("#calRake").textContent=rakePct?money(rake)+" ("+rakePct+"%)":"None";
   $("#calPayable").textContent=money(payable);
-  $("#calTop").textContent=lots.length?money(lots[0].price)+" · "+lots[0].player:"—";
+  $("#calTop").textContent=money(lots[0].price)+" · "+lots[0].team;
+
+  const outTotal=outstanding.reduce((s,o)=>s+o.total,0);
+  $("#calOut").innerHTML=outstanding.length
+    ? money(outTotal)+"<small>"+outstanding.map(o=>
+        esc(o.owner)+" "+money(o.total)+" · "+o.lots+" lot"+(o.lots===1?"":"s")).join(" · ")+"</small>"
+    : "$0<small>Nothing outstanding.</small>";
 
   $("#aucBody").innerHTML=lots.map((l,i)=>`
     <div class="auc-row${i===0?" top":""}">
-      <div>${esc(l.player)}</div>
+      <div>${teamLabel(l.key).html}</div>
       <div class="auc-owner">${esc(l.owner)}</div>
-      <div class="auc-back">${l.buyback?l.buyback+"%":"—"}</div>
+      <div class="auc-back">${l.collected?"✓":"—"}</div>
       <div class="auc-price">${money(l.price)}</div>
     </div>`).join("");
 
@@ -1137,7 +1175,14 @@ function renderCalcutta(){
   const shareAt=p=>{ const s=sched.find(x=>x.place===p); return s?s.share:0; };
   const places=sched.length;
 
-  const basis=(INFO.calcutta_basis||"gross").toLowerCase()==="net"?"net":"gross";
+  const roster=rosterMap();
+  let basis="gross";
+  if(roster.size){
+    if(String(INFO.calcutta_basis||"").toLowerCase()==="net")
+      flag("calcutta_basis=net ignored — no team handicap in a scramble");
+  } else {
+    basis=(INFO.calcutta_basis||"gross").toLowerCase()==="net"?"net":"gross";
+  }
   const ranked=rankedPlayers(basis).filter(p=>p.total!==null);
   if(!ranked.length){ $("#calBasis").textContent="Bids locked. Payouts post once cards do."; return; }
 
@@ -1149,14 +1194,13 @@ function renderCalcutta(){
     const spanned=tie.map((_,k)=>shareAt(ranked[i].pos+k)).reduce((a,b)=>a+b,0);
     const each=spanned/tie.length;
     tie.forEach(p=>{
-      const lot=lots.find(l=>l.player.toLowerCase()===p.name.toLowerCase());
+      const lot=lots.find(l=>l.key===p.key);
       const amt=payable*each/100;
       rowsOut.push({
-        place:ranked[i].pos, tied:tie.length>1, player:p.name,
+        place:ranked[i].pos, tied:tie.length>1, team:p.name,
         detail:(basis==="net"?"net ":"")+(p.rel!==null?toPar(p.rel):p.total)+" · "+thruLabel(p),
         owner:lot?lot.owner:"—",
-        ownerCut: lot ? amt*(100-lot.buyback)/100 : 0,
-        playerCut: lot ? amt*lot.buyback/100 : amt
+        ownerCut: lot ? amt : 0
       });
     });
     i+=tie.length;
@@ -1165,15 +1209,37 @@ function renderCalcutta(){
   $("#payBody").innerHTML=rowsOut.map(r=>`
     <div class="pay-row">
       <div class="pay-place">${r.place+ordSuffix(r.place)}${r.tied?"*":""}</div>
-      <div>${esc(r.player)}<span class="pay-sub">${esc(r.detail)}</span></div>
+      <div>${esc(r.team)}<span class="pay-sub">${esc(r.detail)}</span></div>
       <div class="auc-owner">${esc(r.owner)}</div>
       <div class="pay-cut">${r.ownerCut?money(r.ownerCut):"—"}</div>
-      <div class="pay-cut dim">${r.playerCut?money(r.playerCut):"—"}</div>
     </div>`).join("");
 
   const done=ranked.every(p=>p.played>=36);
   $("#calBasis").textContent=(done?"Final":"Projected")+" · paid on "+basis+
     (rowsOut.some(r=>r.tied)?" · asterisk marks a tie, shares split":"");
+}
+
+function renderNextYear(){
+  const nyBody=$("#nyBody");
+  if(!nyBody) return;
+  const ny=nextYearModel();
+  if(!ny.open){
+    nyBody.innerHTML=`<p>Collection for ${esc(ny.next)} not open yet.</p>`;
+    return;
+  }
+  const paidHTML=ny.paid.length
+    ? "<ol>"+ny.paid.map(p=>`<li>${esc(p.name)}${p.date?" — "+esc(p.date):""}</li>`).join("")+"</ol>"
+    : "";
+  const owingHTML=ny.owing.length
+    ? `<div class="mn-net down">${ny.owing.map(p=>esc(p.name)).join(", ")}</div>`
+    : "";
+  const handle=String(INFO.payment_handle||"").trim();
+  const handleHTML=/^https?:\/\//i.test(handle)
+    ? `<a href="${esc(handle)}">${esc(handle)}</a>`
+    : esc(handle);
+  nyBody.innerHTML=`<p class="eyebrow">${esc(ny.paid.length)} of ${esc(ny.all.length)} paid for ${esc(ny.next)}</p>`+
+    paidHTML+owingHTML+
+    `<p class="basis">Deposit ${money(num(INFO.deposit_amount))} · ${handleHTML}</p>`;
 }
 
 function renderMoney(){
@@ -1329,7 +1395,7 @@ function renderChampions(){
 
 function renderAll(){
   renderYears(); renderLeaderboard(); renderField(); renderPairings();
-  renderCalcutta(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
+  renderCalcutta(); renderNextYear(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
 }
 
 function renderHealth(){
@@ -1528,13 +1594,11 @@ function paintHome(){
   const post=!isNaN(tee)&&Date.now()>tee.getTime()+3*86400000;
   if(!post){ statusEl.innerHTML=""; return; }
   const cd=$("#countdown"); if(cd) cd.innerHTML="";
-  const hasModels=typeof nextYearModel==="function"&&typeof calcuttaModel==="function";
-  const ny=hasModels?nextYearModel():null;
-  const cal=hasModels?calcuttaModel():null;
-  const paid=ny?ny.paid:"—", shown=ny?ny.shown:"—", next=ny?ny.next:"—";
-  const outstanding=cal?cal.outstanding:"—";
-  statusEl.innerHTML=`<a href="#nextyear">${paid} of ${shown} paid for ${esc(next)}</a> · `+
-    `<a href="#calcutta">$${outstanding} Calcutta outstanding</a>`;
+  const ny=nextYearModel(), cal=calcuttaModel();
+  const paid=ny.open?ny.paid.length:0, shown=ny.open?ny.all.length:0;
+  const outTotal=cal.outstanding.reduce((s,o)=>s+o.total,0);
+  statusEl.innerHTML=`<a href="#nextyear">${esc(paid)} of ${esc(shown)} paid for ${esc(ny.next)}</a> · `+
+    `<a href="#calcutta">${esc(money(outTotal))} Calcutta outstanding</a>`;
 }
 function paint(data,results){
   HEALTH=[];
