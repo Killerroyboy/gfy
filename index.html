@@ -308,13 +308,17 @@
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="mark" viewBox="0 0 200 260">
-    <path fill="currentColor" d="M 100 14 C 113 14, 122 24, 122 38 L 122 96 C 125 86, 134 80, 144 82 C 155 84, 160 93, 160 105 L 160 112 C 163 102, 171 97, 179 100 C 187 103, 191 112, 191 124 L 191 194 C 191 218, 175 234, 151 236 L 151 252 L 61 252 L 61 234 C 41 230, 27 214, 25 192 L 23 166 C 21 148, 24 133, 32 125 C 29 106, 39 87, 56 85 C 70 83, 80 93, 80 105 L 80 38 C 80 24, 87 14, 100 14 Z"/>
-    <g fill="none" stroke="var(--pine)" stroke-width="5" stroke-linecap="round">
-      <path d="M 84 60 C 94 66, 108 66, 118 60"/>
-      <path d="M 81 106 L 81 126"/>
-      <path d="M 121 100 L 121 122"/>
-      <path d="M 160 110 L 160 130"/>
-      <path d="M 23 143 C 50 149, 80 161, 102 173 C 114 180, 118 191, 110 198 C 102 205, 90 201, 82 195"/>
+    <!-- The silhouette `d` is injected from MARK_PATH at script start (see below):
+         MARK_PATH is the single authority for the fist outline, shared with makeIcon(). -->
+    <path fill="currentColor"/>
+    <g fill="none" stroke="var(--pine)" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 88 36 C 93 42, 107 42, 112 36" stroke-width="6"/>
+      <path d="M 81 58 C 89 62, 111 62, 119 58" stroke-width="6"/>
+      <path d="M 81 86 C 89 90, 111 90, 119 86" stroke-width="6"/>
+      <path d="M 70 132 L 65 186" stroke-width="7"/>
+      <path d="M 130 132 L 135 188" stroke-width="7"/>
+      <path d="M 166 137 L 172 190" stroke-width="7"/>
+      <path d="M 19 198 C 45 197, 72 190, 93 180 C 108 173, 120 178, 117 192" stroke-width="10"/>
     </g>
   </symbol>
 </svg>
@@ -664,6 +668,16 @@
 </footer>
 
 <script>
+/* ---------- the mark ----------
+   MARK_PATH is the ONE authority for the crest fist silhouette (200x260 viewBox).
+   It is injected into the inline <symbol id="mark"> here and re-used verbatim by
+   makeIcon()'s Path2D further down, so the nav mark, the hero crest, the footer
+   mark and the PNG favicon/app icon can never drift apart. Detail strokes (nail,
+   two finger creases, three folded-finger grooves, thumb) live alongside it in the
+   symbol and in makeIcon's stroke list. */
+const MARK_PATH="M 80 26 C 80 16, 88 12, 100 12 C 112 12, 120 16, 120 26 L 120 106 C 126 108, 129 116, 130 130 C 135 116, 146 109, 155 113 C 162 116, 165 124, 166 135 C 170 125, 179 122, 185 130 C 189 136, 190 145, 190 155 C 191 180, 187 209, 174 233 C 168 242, 158 249, 146 249 L 60 249 C 48 249, 38 241, 32 230 C 23 215, 17 198, 17 182 C 17 167, 20 152, 26 141 C 29 132, 33 122, 39 115 C 44 108, 53 103, 61 107 C 66 110, 69 118, 70 130 C 71 116, 74 108, 80 106 Z";
+document.querySelector("#mark path").setAttribute("d",MARK_PATH);
+
 /* ---------- hash router ----------
    Deliberately its own script, ahead of config.js: view switching must not
    wait on the (parser-blocking) sheet config to load, and none of this
@@ -1488,12 +1502,16 @@ function makeIcon(size){
   x.beginPath(); x.arc(200,200,178,0,Math.PI*2); x.stroke();
   x.translate(149,120); x.scale(102/200,133/260);
   x.fillStyle="#C8A24A";
-  x.fill(new Path2D("M 100 14 C 113 14, 122 24, 122 38 L 122 96 C 125 86, 134 80, 144 82 C 155 84, 160 93, 160 105 L 160 112 C 163 102, 171 97, 179 100 C 187 103, 191 112, 191 124 L 191 194 C 191 218, 175 234, 151 236 L 151 252 L 61 252 L 61 234 C 41 230, 27 214, 25 192 L 23 166 C 21 148, 24 133, 32 125 C 29 106, 39 87, 56 85 C 70 83, 80 93, 80 105 L 80 38 C 80 24, 87 14, 100 14 Z"));
-  x.strokeStyle="#0E2019"; x.lineWidth=10; x.lineCap="round";
-  [["M 84 60 C 94 66, 108 66, 118 60"],["M 81 106 L 81 126"],["M 121 100 L 121 122"],
-   ["M 160 110 L 160 130"],
-   ["M 23 143 C 50 149, 80 161, 102 173 C 114 180, 118 191, 110 198 C 102 205, 90 201, 82 195"]]
-    .forEach(([d])=>x.stroke(new Path2D(d)));
+  x.fill(new Path2D(MARK_PATH));            /* same silhouette as <symbol id="mark"> */
+  x.strokeStyle="#0E2019"; x.lineCap="round"; x.lineJoin="round";
+  [["M 88 36 C 93 42, 107 42, 112 36",6],
+   ["M 81 58 C 89 62, 111 62, 119 58",6],
+   ["M 81 86 C 89 90, 111 90, 119 86",6],
+   ["M 70 132 L 65 186",7],
+   ["M 130 132 L 135 188",7],
+   ["M 166 137 L 172 190",7],
+   ["M 19 198 C 45 197, 72 190, 93 180 C 108 173, 120 178, 117 192",10]]
+    .forEach(([d,w])=>{ x.lineWidth=w; x.stroke(new Path2D(d)); });
   x.restore();
   return c.toDataURL("image/png");
 }
