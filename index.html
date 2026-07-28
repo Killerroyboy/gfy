@@ -1399,12 +1399,13 @@ async function loadDebug(){
     {url:r.url,status:r.status,rows:r.rows,headers:r.headers,state:r.state,reason:r.reason}));
   renderDebugPanel(reps);
   const data={}; reps.forEach(r=>{ data[r.tab]=r.data; });
-  const results=reps.map(r=>({rows:r.data,at:Date.now(),live:r.state==="OK",err:r.state==="OK"?null:r.reason}));
+  const results=reps.map(r=>({rows:r.data,at:r.state==="OK"?Date.now():0,live:r.state==="OK",err:r.state==="OK"?null:r.reason}));
   paint(data,results);
   const bad=reps.filter(r=>r.state!=="OK");
   if(bad.length){
     const msg="DEBUG: "+bad.map(r=>r.tab+" "+r.state+(r.reason?" — "+r.reason:"")).join(" · ");
-    $("#lbSync").textContent=msg; $("#schedSync").textContent=msg;
+    $("#lbSync").textContent=msg; $("#schedSync").textContent=msg; $("#calSync").textContent=msg;
+    const nyEl=$("#nySync"); if(nyEl) nyEl.textContent=msg;
   }
 }
 
