@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E2019">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GFY">
+<title>GFY — McCall, Idaho</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500;6..96,700&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --pine:#0E2019; --pine-2:#132B21; --pine-3:#0A1712;
+    --bone:#E9E3D3; --sage:#8A9B8C; --brass:#C8A24A; --brass-dim:#6F5A26; --rust:#B0705E;
+    --display:"Bodoni Moda", Didot, Georgia, serif;
+    --ui:"Jost", Futura, "Helvetica Neue", Arial, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--pine);color:var(--bone);font-family:var(--ui);
+       font-weight:300;font-size:17px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(120% 80% at 50% 0%, rgba(200,162,74,.09), transparent 60%),
+               radial-gradient(90% 60% at 50% 100%, rgba(0,0,0,.45), transparent 70%)}
+  .wrap{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:0 24px}
+
+  .nav{position:sticky;top:0;z-index:20;background:rgba(10,23,18,.88);
+       backdrop-filter:blur(8px);border-bottom:1px solid rgba(200,162,74,.25)}
+  .nav-inner{max-width:1100px;margin:0 auto;padding:11px 24px;display:flex;align-items:center;gap:14px}
+  .nav-mark{width:19px;height:25px;color:var(--brass);flex:none}
+  .nav-name{font-family:var(--display);font-weight:700;font-size:1.05rem;
+            letter-spacing:.34em;margin-right:auto;padding-left:2px}
+  .nav-links{display:flex;gap:19px;align-items:center;overflow-x:auto;scrollbar-width:none}
+  .nav-links::-webkit-scrollbar{display:none}
+  .nav a{color:var(--sage);text-decoration:none;white-space:nowrap;font-size:.63rem;
+         letter-spacing:.2em;text-transform:uppercase;font-weight:400;padding:4px 0;
+         border-bottom:1px solid transparent;transition:color .2s,border-color .2s}
+  .nav a:hover,.nav a:focus-visible{color:var(--brass);border-bottom-color:var(--brass)}
+
+  .hero{padding:52px 0 70px;text-align:center}
+  .crest{width:min(330px,72vw);height:auto;display:block;margin:0 auto;color:var(--brass)}
+  .wordmark{font-family:var(--display);font-weight:400;font-optical-sizing:auto;
+            font-size:clamp(4.6rem,21vw,12rem);line-height:.9;letter-spacing:.12em;
+            text-indent:.12em;margin:20px 0 0;color:var(--bone)}
+  .expansion{font-size:clamp(.66rem,2.6vw,.86rem);letter-spacing:.44em;text-indent:.44em;
+             text-transform:uppercase;color:var(--brass);font-weight:400;margin:6px 0 0}
+  .countdown{margin:30px 0 0;display:flex;justify-content:center;gap:26px}
+  .cd-unit{min-width:62px}
+  .cd-num{font-family:var(--display);font-size:2.2rem;line-height:1;color:var(--bone);
+          font-variant-numeric:tabular-nums}
+  .cd-lab{font-size:.56rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage);margin-top:7px}
+  .cd-msg{font-family:var(--display);font-size:1.5rem;color:var(--brass);margin:30px 0 0}
+  .hero-rule{width:60px;height:1px;background:var(--brass-dim);margin:26px auto;border:0}
+  .hero-sub{max-width:34ch;margin:0 auto;color:var(--sage);font-size:1.02rem}
+  .hero-actions{margin:30px 0 0;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-block;text-decoration:none;font-size:.64rem;letter-spacing:.22em;
+       text-transform:uppercase;color:var(--bone);border:1px solid rgba(200,162,74,.45);
+       padding:12px 22px;background:none;font-family:var(--ui);cursor:pointer;
+       transition:background .2s,border-color .2s}
+  .btn:hover,.btn:focus-visible{background:rgba(200,162,74,.12);border-color:var(--brass)}
+  .facts{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin:46px 0 0;
+         background:rgba(200,162,74,.22);border:1px solid rgba(200,162,74,.22)}
+  .fact{background:var(--pine);padding:20px 14px}
+  .fact dt{font-size:.6rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage);margin:0 0 8px}
+  .fact dd{margin:0;font-family:var(--display);font-size:1.12rem;color:var(--bone)}
+
+  .band{padding:74px 0;position:relative}
+  .band-alt{background:var(--pine-2)}
+  .band-dark{background:var(--pine-3)}
+  .eyebrow{font-size:.62rem;letter-spacing:.34em;text-transform:uppercase;color:var(--brass);margin:0 0 10px}
+  .band h2{font-family:var(--display);font-weight:400;font-size:clamp(2rem,6vw,3.1rem);
+           line-height:1.05;margin:0 0 8px}
+  .band .lede{color:var(--sage);max-width:52ch;margin:0 0 30px}
+  .sync{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--brass-dim);
+        margin:14px 0 0;min-height:1em}
+  .subhead{font-family:var(--display);font-size:1.4rem;margin:44px 0 16px;font-weight:400}
+
+  .years{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 26px}
+  .year-btn{font-family:var(--display);font-size:.95rem;letter-spacing:.06em;color:var(--sage);
+            background:none;border:1px solid rgba(200,162,74,.22);padding:7px 15px;cursor:pointer;
+            transition:color .18s,border-color .18s,background .18s}
+  .year-btn:hover{color:var(--bone);border-color:var(--brass-dim)}
+  .year-btn[aria-pressed="true"]{color:var(--pine);background:var(--brass);border-color:var(--brass)}
+
+  /* leaderboard */
+  .lb-head,.lb-row{display:grid;grid-template-columns:2.4rem 1fr 4rem 3.2rem 3.2rem 4rem 4rem;
+                   gap:10px;align-items:baseline;padding:13px 6px;text-align:left}
+  .lb-head{font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);
+           border-bottom:1px solid var(--brass-dim);padding-bottom:9px}
+  .lb-row{border-bottom:1px solid rgba(200,162,74,.13);transition:background .18s;
+          width:100%;background:none;border-left:0;border-right:0;border-top:0;
+          color:inherit;font-family:inherit;font-size:inherit;cursor:pointer}
+  .lb-row:hover,.lb-row:focus-visible{background:rgba(200,162,74,.06)}
+  .lb-row.lead .lb-pos,.lb-row.lead .lb-name{color:var(--brass)}
+  .lb-pos{font-family:var(--display);font-size:1rem;color:var(--sage)}
+  .lb-name{font-size:1rem}
+  .lb-thru{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
+  .lb-num{text-align:right;font-variant-numeric:tabular-nums;font-size:.95rem;color:var(--sage)}
+  .lb-tot{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
+  .lb-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
+
+  /* per-player card */
+  .card-drop{background:rgba(0,0,0,.22);border-bottom:1px solid rgba(200,162,74,.13);
+             padding:20px 8px 24px}
+  .card-drop[hidden]{display:none}
+  .nine{margin-bottom:16px}
+  .nine-lab{font-size:.56rem;letter-spacing:.24em;text-transform:uppercase;color:var(--brass);margin:0 0 8px}
+  .holes{display:grid;grid-template-columns:repeat(10,1fr);gap:3px}
+  .hcell{text-align:center;padding:5px 1px;border:1px solid rgba(200,162,74,.14)}
+  .hcell .hn{font-size:.5rem;letter-spacing:.08em;color:var(--sage);display:block}
+  .hcell .hp{font-size:.5rem;color:var(--brass-dim);display:block}
+  .hcell .hs{font-family:var(--display);font-size:1rem;color:var(--bone);
+             font-variant-numeric:tabular-nums;display:block;margin-top:2px}
+  .hcell.sum{border-color:var(--brass-dim);background:rgba(200,162,74,.07)}
+  .hcell.under .hs{color:var(--brass);font-weight:700}
+  .hcell.bogey .hs{color:var(--sage)}
+  .hcell.blowup .hs{color:var(--rust)}
+
+  /* field */
+  .fld{display:grid;grid-template-columns:1fr 6rem 6rem 5rem;gap:10px;align-items:baseline;
+       padding:13px 6px;border-bottom:1px solid rgba(200,162,74,.13)}
+  .fld-head{font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);
+            border-bottom:1px solid var(--brass-dim);padding-bottom:9px}
+  .fld-meta{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
+  .fld-meta.yes{color:var(--brass)}
+  .fld-meta.no{color:var(--rust)}
+  .fld-num{text-align:right;font-variant-numeric:tabular-nums;color:var(--bone)}
+
+  /* pairings */
+  .rounds{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(200,162,74,.22);
+          border:1px solid rgba(200,162,74,.22)}
+  .round{background:var(--pine-2);padding:28px 26px}
+  .band-alt .round{background:var(--pine)}
+  .round h3{font-family:var(--display);font-weight:400;font-size:1.5rem;margin:0 0 4px}
+  .round .when{font-size:.6rem;letter-spacing:.24em;text-transform:uppercase;color:var(--brass);margin:0 0 18px}
+  .grp{padding:12px 0;border-top:1px solid rgba(200,162,74,.16);display:grid;
+       grid-template-columns:4.2rem 1fr;gap:12px;align-items:baseline}
+  .grp-time{font-family:var(--display);color:var(--brass);font-size:.95rem}
+  .grp-who{font-size:.95rem;color:var(--bone)}
+
+  /* money */
+  .pot{display:flex;gap:1px;background:rgba(200,162,74,.22);border:1px solid rgba(200,162,74,.22);margin:0 0 28px}
+  .pot div{background:var(--pine);padding:20px 22px;flex:1}
+  .band-alt .pot div{background:var(--pine-2)}
+  .pot dt{font-size:.6rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage);margin:0 0 8px}
+  .pot dd{margin:0;font-family:var(--display);font-size:1.6rem;color:var(--bone);font-variant-numeric:tabular-nums}
+  .mn-head,.mn-row{display:grid;grid-template-columns:1fr 5rem 5rem 5.5rem;gap:10px;
+                   align-items:baseline;padding:13px 6px}
+  .mn-head{font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);
+           border-bottom:1px solid var(--brass-dim);padding-bottom:9px}
+  .mn-row{border-bottom:1px solid rgba(200,162,74,.13)}
+  .mn-num{text-align:right;font-variant-numeric:tabular-nums;color:var(--sage);font-size:.95rem}
+  .mn-net{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
+  .mn-net.up{color:var(--brass)}
+  .mn-net.down{color:var(--rust)}
+  .mn-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
+  /* calcutta */
+  .auc-head,.auc-row{display:grid;grid-template-columns:1fr 1fr 5rem 5.5rem;gap:10px;
+                     align-items:baseline;padding:13px 6px}
+  .auc-head{font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);
+            border-bottom:1px solid var(--brass-dim);padding-bottom:9px}
+  .auc-row{border-bottom:1px solid rgba(200,162,74,.13)}
+  .auc-row.top .auc-price{color:var(--brass)}
+  .auc-owner{color:var(--sage);font-size:.95rem}
+  .auc-back{text-align:right;font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
+  .auc-price{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
+  .pay-head,.pay-row{display:grid;grid-template-columns:3.4rem 1fr 1fr 5.5rem 5.5rem;gap:10px;
+                     align-items:baseline;padding:13px 6px}
+  .pay-head{font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);
+            border-bottom:1px solid var(--brass-dim);padding-bottom:9px}
+  .pay-row{border-bottom:1px solid rgba(200,162,74,.13)}
+  .pay-place{font-family:var(--display);font-size:1.1rem;color:var(--brass)}
+  .pay-sub{display:block;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
+  .pay-cut{text-align:right;font-variant-numeric:tabular-nums;color:var(--bone)}
+  .pay-cut.dim{color:var(--sage)}
+  .basis{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--brass-dim);margin:16px 0 0}
+
+  /* shame */
+  .shame{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;
+         background:rgba(200,162,74,.22);border:1px solid rgba(200,162,74,.22)}
+  .sh-card{background:var(--pine-2);padding:26px 24px}
+  .band-dark .sh-card{background:var(--pine)}
+  .sh-award{font-size:.58rem;letter-spacing:.26em;text-transform:uppercase;color:var(--brass);margin:0 0 10px}
+  .sh-who{font-family:var(--display);font-size:1.5rem;margin:0 0 6px;line-height:1.15}
+  .sh-detail{margin:0;color:var(--sage);font-size:.92rem}
+
+  .day{margin-bottom:32px}
+  .day-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--brass-dim);
+            padding-bottom:8px;margin-bottom:2px}
+  .day-head strong{font-family:var(--display);font-size:1.25rem;font-weight:500;letter-spacing:.06em}
+  .day-head span{font-size:.62rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage);margin-left:auto}
+  .slot{display:grid;grid-template-columns:7.5rem 1fr 12rem;gap:16px;align-items:baseline;
+        padding:14px 0;border-bottom:1px solid rgba(200,162,74,.14)}
+  .slot-time{font-family:var(--display);font-size:1rem;color:var(--brass);letter-spacing:.06em}
+  .slot-what{font-size:1.02rem;color:var(--bone)}
+  .slot-where{font-size:.66rem;letter-spacing:.18em;text-transform:uppercase;color:var(--sage);text-align:right}
+
+  .grounds{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(200,162,74,.22);
+           border:1px solid rgba(200,162,74,.22)}
+  .ground{background:var(--pine);padding:34px 30px}
+  .band-alt .ground{background:var(--pine-2)}
+  .ground .kicker{font-size:.6rem;letter-spacing:.26em;text-transform:uppercase;color:var(--brass);margin:0 0 12px}
+  .ground h3{font-family:var(--display);font-weight:400;font-size:1.7rem;margin:0 0 14px;line-height:1.15}
+  .ground p{margin:0 0 16px;color:var(--sage)}
+  .ground ul{list-style:none;padding:0;margin:0;border-top:1px solid rgba(200,162,74,.16)}
+  .ground li{display:flex;justify-content:space-between;gap:16px;padding:9px 0;
+             border-bottom:1px solid rgba(200,162,74,.16);font-size:.9rem}
+  .ground li span:first-child{color:var(--sage);font-size:.66rem;letter-spacing:.18em;
+                              text-transform:uppercase;padding-top:3px}
+  .ground li span:last-child{text-align:right;color:var(--bone)}
+
+  .rules{list-style:none;counter-reset:rule;padding:0;margin:0;columns:2;column-gap:56px}
+  .rules li{counter-increment:rule;break-inside:avoid;display:grid;grid-template-columns:2.4rem 1fr;
+            gap:6px;padding:16px 0;border-bottom:1px solid rgba(200,162,74,.14)}
+  .rules li::before{content:counter(rule,decimal-leading-zero);font-family:var(--display);
+                    color:var(--brass);font-size:.95rem;padding-top:2px}
+  .rules li span{color:var(--bone);font-size:.97rem}
+
+  .ledger{border-top:1px solid var(--brass-dim)}
+  .entry{display:grid;grid-template-columns:6rem 1fr 7rem;gap:16px;align-items:baseline;
+         padding:16px 4px;border-bottom:1px solid rgba(200,162,74,.14);
+         transition:background .18s,padding-left .18s}
+  .entry:hover{background:rgba(200,162,74,.06);padding-left:12px}
+  .entry-year{font-family:var(--display);font-size:1.15rem;color:var(--brass)}
+  .entry-name{font-size:1.05rem}
+  .entry-name.blank{color:var(--brass-dim);font-style:italic;font-size:.95rem}
+  .entry-score{text-align:right;font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:var(--sage)}
+  .holder{margin-top:34px;padding:26px 30px;border:1px solid rgba(200,162,74,.3);
+          display:flex;align-items:center;gap:26px}
+  .holder svg{width:44px;height:57px;color:var(--brass);flex:none}
+  .holder p{margin:0;color:var(--sage);font-size:.95rem}
+  .holder strong{display:block;font-family:var(--display);font-weight:400;color:var(--bone);
+                 font-size:1.35rem;margin-bottom:4px}
+
+  .photo-frame{border:1px solid rgba(200,162,74,.22);background:var(--pine-2);height:520px;overflow:hidden}
+  .photo-frame iframe{width:100%;height:100%;border:0;display:block}
+  .photo-empty{padding:60px 30px;text-align:center;color:var(--brass-dim);font-style:italic}
+
+  footer{background:var(--pine-3);border-top:1px solid rgba(200,162,74,.22);
+         padding:46px 0 54px;text-align:center}
+  footer svg{width:26px;height:34px;color:var(--brass-dim)}
+  .foot-name{font-family:var(--display);letter-spacing:.34em;text-indent:.34em;font-size:1rem;margin:14px 0 6px}
+  .foot-note{font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);margin:0}
+
+  .rise{opacity:0;transform:translateY(14px);animation:rise .9s cubic-bezier(.2,.7,.2,1) forwards}
+  .d1{animation-delay:.05s}.d2{animation-delay:.28s}.d3{animation-delay:.44s}.d4{animation-delay:.6s}
+  @keyframes rise{to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){
+    .rise{animation:none;opacity:1;transform:none}
+    html{scroll-behavior:auto}
+    .entry,.lb-row,.year-btn{transition:none}
+  }
+
+  @media (max-width:820px){
+    .facts{grid-template-columns:1fr 1fr}
+    .grounds,.rounds,.shame{grid-template-columns:1fr}
+    .rules{columns:1}
+    .pot{flex-direction:column}
+  }
+  @media (max-width:560px){
+    body{font-size:16px}
+    .band{padding:54px 0}
+    .slot{grid-template-columns:1fr;gap:2px;padding:16px 0}
+    .slot-where{text-align:left}
+    .lb-head,.lb-row{grid-template-columns:1.9rem 1fr 3.4rem 4rem;gap:8px}
+    .lb-r1,.lb-r2,.lb-total{display:none}
+    .mn-head,.mn-row{grid-template-columns:1fr 4rem 5rem}
+    .mn-won{display:none}
+    .auc-head,.auc-row{grid-template-columns:1fr 1fr 4.6rem}
+    .auc-back{display:none}
+    .pay-head,.pay-row{grid-template-columns:3rem 1fr 4.8rem 4.8rem}
+    .pay-head div:nth-child(3),.pay-row .auc-owner{display:none}
+    .fld{grid-template-columns:1fr 5rem 4rem}
+    .fld-hcp{display:none}
+    .holes{gap:2px}
+    .hcell{padding:4px 0}
+    .hcell .hs{font-size:.85rem}
+    .holder{flex-direction:column;text-align:center;gap:16px}
+    .entry{grid-template-columns:4.4rem 1fr}
+    .entry-score{grid-column:2;text-align:left}
+    .countdown{gap:16px}
+    .cd-unit{min-width:52px}
+    .photo-frame{height:420px}
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 200 260">
+    <path fill="currentColor" d="M 100 14 C 113 14, 122 24, 122 38 L 122 96 C 125 86, 134 80, 144 82 C 155 84, 160 93, 160 105 L 160 112 C 163 102, 171 97, 179 100 C 187 103, 191 112, 191 124 L 191 194 C 191 218, 175 234, 151 236 L 151 252 L 61 252 L 61 234 C 41 230, 27 214, 25 192 L 23 166 C 21 148, 24 133, 32 125 C 29 106, 39 87, 56 85 C 70 83, 80 93, 80 105 L 80 38 C 80 24, 87 14, 100 14 Z"/>
+    <g fill="none" stroke="var(--pine)" stroke-width="5" stroke-linecap="round">
+      <path d="M 84 60 C 94 66, 108 66, 118 60"/>
+      <path d="M 81 106 L 81 126"/>
+      <path d="M 121 100 L 121 122"/>
+      <path d="M 160 110 L 160 130"/>
+      <path d="M 23 143 C 50 149, 80 161, 102 173 C 114 180, 118 191, 110 198 C 102 205, 90 201, 82 195"/>
+    </g>
+  </symbol>
+</svg>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <svg class="nav-mark" aria-hidden="true"><use href="#mark"/></svg>
+    <div class="nav-name">GFY</div>
+    <div class="nav-links">
+      <a href="#leaderboard">Board</a>
+      <a href="#field">Field</a>
+      <a href="#pairings">Pairings</a>
+      <a href="#calcutta">Calcutta</a>
+      <a href="#money">Money</a>
+      <a href="#card">Card</a>
+      <a href="#rules">Rules</a>
+      <a href="#champions">Champions</a>
+      <a href="#shame">Shame</a>
+      <a href="#photos">Photos</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <svg class="crest rise d1" viewBox="0 0 400 400" role="img"
+         aria-label="GFY crest: a raised middle finger flanked by pine boughs">
+      <defs>
+        <path id="arcTop" d="M 34.6 139.8 A 176 176 0 0 1 365.4 139.8"/>
+        <path id="arcBot" d="M 34.6 260.2 A 176 176 0 0 0 365.4 260.2"/>
+      </defs>
+      <g fill="none" stroke="currentColor">
+        <circle cx="200" cy="200" r="192" stroke-width="2"/>
+        <circle cx="200" cy="200" r="160" stroke-width="1"/>
+      </g>
+      <g fill="currentColor" font-family="Jost, sans-serif" font-size="17" letter-spacing="5.5">
+        <text><textPath href="#arcTop" startOffset="50%" text-anchor="middle">GO FUCK YOURSELF</textPath></text>
+        <text font-size="15" letter-spacing="6.5"><textPath href="#arcBot" startOffset="50%" text-anchor="middle">McCALL · IDAHO</textPath></text>
+      </g>
+      <g fill="currentColor">
+        <rect x="20" y="196" width="9" height="9" transform="rotate(45 24.5 200.5)"/>
+        <rect x="371" y="196" width="9" height="9" transform="rotate(45 375.5 200.5)"/>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round">
+        <g transform="translate(114,154)">
+          <path d="M0 100 C -9 72 -9 38 -3 4"/>
+          <path d="M-1 90 l -19 10 M-1 90 l -16 -5"/>
+          <path d="M-3 75 l -21 8 M-3 75 l -17 -6"/>
+          <path d="M-5 60 l -21 6 M-5 60 l -17 -8"/>
+          <path d="M-6 45 l -20 4 M-6 45 l -16 -9"/>
+          <path d="M-5 30 l -18 2 M-5 30 l -14 -10"/>
+          <path d="M-4 15 l -15 0"/>
+        </g>
+        <g transform="translate(286,154) scale(-1,1)">
+          <path d="M0 100 C -9 72 -9 38 -3 4"/>
+          <path d="M-1 90 l -19 10 M-1 90 l -16 -5"/>
+          <path d="M-3 75 l -21 8 M-3 75 l -17 -6"/>
+          <path d="M-5 60 l -21 6 M-5 60 l -17 -8"/>
+          <path d="M-6 45 l -20 4 M-6 45 l -16 -9"/>
+          <path d="M-5 30 l -18 2 M-5 30 l -14 -10"/>
+          <path d="M-4 15 l -15 0"/>
+        </g>
+      </g>
+      <use href="#mark" x="149" y="120" width="102" height="133"/>
+      <text id="crestEst" x="200" y="298" fill="currentColor" text-anchor="middle"
+            font-family="Jost, sans-serif" font-size="13" letter-spacing="5">EST. 2019</text>
+    </svg>
+
+    <h1 class="wordmark rise d2">GFY</h1>
+    <p class="expansion rise d2">Go Fuck Yourself</p>
+    <div id="countdown" class="countdown rise d3" aria-live="polite"></div>
+    <hr class="hero-rule rise d3">
+    <p class="hero-sub rise d3">Two rounds at Meadow Creek. Two nights at Bear Creek Lodge. One trophy nobody wants to explain.</p>
+
+    <div class="hero-actions rise d4">
+      <button class="btn" id="icsBtn" type="button">Add to calendar</button>
+      <button class="btn" id="installBtn" type="button" hidden>Install app</button>
+      <a class="btn" id="sheetBtn" href="#" target="_blank" rel="noopener" hidden>Enter scores</a>
+    </div>
+
+    <dl class="facts rise d4">
+      <div class="fact"><dt>Dates</dt><dd data-info="dates">Aug 14–16</dd></div>
+      <div class="fact"><dt>Course</dt><dd data-info="course">Meadow Creek</dd></div>
+      <div class="fact"><dt>Lodging</dt><dd data-info="lodging">Bear Creek Lodge</dd></div>
+      <div class="fact"><dt>Format</dt><dd data-info="format">36 holes, stroke</dd></div>
+    </dl>
+  </div>
+</header>
+
+<section class="band band-alt" id="leaderboard">
+  <div class="wrap">
+    <p class="eyebrow">Live from the course</p>
+    <h2>Leaderboard</h2>
+    <p class="lede">Gross decides The Bird. Net decides who buys. Tap a name for the full card.</p>
+    <div class="years" id="years" role="group" aria-label="Tournament year"></div>
+    <div class="lb-head">
+      <div>Pos</div><div>Player</div><div>Thru</div>
+      <div class="lb-num lb-r1">R1</div><div class="lb-num lb-r2">R2</div>
+      <div class="lb-tot lb-total">Total</div><div class="lb-tot">To par</div>
+    </div>
+    <div id="lbBody">
+      <div class="lb-empty">No cards posted yet. Scores appear here as the sheet fills in.</div>
+    </div>
+    <p class="sync" id="lbSync"></p>
+  </div>
+</section>
+
+<section class="band" id="field">
+  <div class="wrap">
+    <p class="eyebrow">Who's in</p>
+    <h2>The Field</h2>
+    <p class="lede">Deposit holds your bed. No deposit, no bed, and the couch is already spoken for.</p>
+    <div class="fld fld-head">
+      <div>Player</div><div class="fld-meta">Status</div>
+      <div class="fld-meta">Deposit</div><div class="fld-num fld-hcp">Hcp</div>
+    </div>
+    <div id="fldBody">
+      <div class="lb-empty">Add a Field tab and the roster fills in here.</div>
+    </div>
+  </div>
+</section>
+
+<section class="band band-alt" id="pairings">
+  <div class="wrap">
+    <p class="eyebrow">Who you're stuck with</p>
+    <h2>Pairings</h2>
+    <p class="lede">Drawn Friday night. Leaders go out last on Sunday.</p>
+    <div class="rounds" id="pairBody">
+      <div class="round">
+        <h3>Round One</h3>
+        <p class="when">Saturday · Shotgun</p>
+        <div class="grp"><div class="grp-time">—</div><div class="grp-who">Groups post after the Friday draw.</div></div>
+      </div>
+      <div class="round">
+        <h3>Round Two</h3>
+        <p class="when">Sunday · Tee times</p>
+        <div class="grp"><div class="grp-time">—</div><div class="grp-who">Set by Saturday's standings.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="calcutta">
+  <div class="wrap">
+    <p class="eyebrow">Bid Friday night, paid Sunday</p>
+    <h2>The Calcutta</h2>
+    <p class="lede">Every man in the field goes to the highest bidder. Buy back half of yourself or watch someone else cash your round.</p>
+    <dl class="pot">
+      <div><dt>Pot</dt><dd id="calPot">—</dd></div>
+      <div><dt>House</dt><dd id="calRake">—</dd></div>
+      <div><dt>Playing for</dt><dd id="calPayable">—</dd></div>
+      <div><dt>Top lot</dt><dd id="calTop">—</dd></div>
+    </dl>
+
+    <h3 class="subhead">The Board</h3>
+    <div class="auc-head">
+      <div>Player</div><div>Owner</div>
+      <div class="auc-back">Buyback</div><div class="auc-price">Price</div>
+    </div>
+    <div id="aucBody">
+      <div class="mn-empty">Add a Calcutta tab and the auction board fills in here.</div>
+    </div>
+
+    <h3 class="subhead">The Payout</h3>
+    <div class="pay-head">
+      <div>Place</div><div>Player</div><div>Owner</div>
+      <div class="pay-cut">Owner</div><div class="pay-cut">Player</div>
+    </div>
+    <div id="payBody">
+      <div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>
+    </div>
+    <p class="basis" id="calBasis"></p>
+  </div>
+</section>
+
+<section class="band band-alt" id="money">
+  <div class="wrap">
+    <p class="eyebrow">Settle up before anyone drives home</p>
+    <h2>The Damage</h2>
+    <p class="lede">Buy-ins and whatever got bet on the 14th. Calcutta is tracked separately. Positive means the pot owes you.</p>
+    <dl class="pot">
+      <div><dt>Pot</dt><dd id="potTotal">—</dd></div>
+      <div><dt>Players in</dt><dd id="potPlayers">—</dd></div>
+      <div><dt>Unsettled</dt><dd id="potOpen">—</dd></div>
+    </dl>
+    <div class="mn-head">
+      <div>Player</div><div class="mn-num">In</div>
+      <div class="mn-num mn-won">Won</div><div class="mn-net">Net</div>
+    </div>
+    <div id="mnBody">
+      <div class="mn-empty">Add a Ledger tab and the settle-up math runs itself.</div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="card">
+  <div class="wrap">
+    <p class="eyebrow">The weekend</p>
+    <h2>The Card</h2>
+    <p class="lede">Everything is optional except the tee times. Show up late and you are playing from wherever the group is.</p>
+    <div id="scheduleBody">
+      <div class="day">
+        <div class="day-head"><strong>Day One</strong><span>Friday</span></div>
+        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Check in, claim a bed, unload the coolers</div><div class="slot-where">Bear Creek Lodge</div></div>
+        <div class="slot"><div class="slot-time">5:30 pm</div><div class="slot-what">Draw for pairings and settle the handicaps</div><div class="slot-where">Lodge deck</div></div>
+        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Dinner, cards, bad decisions</div><div class="slot-where">Lodge</div></div>
+      </div>
+      <div class="day">
+        <div class="day-head"><strong>Day Two</strong><span>Saturday</span></div>
+        <div class="slot"><div class="slot-time">7:30 am</div><div class="slot-what">Coffee and quiet regret</div><div class="slot-where">Lodge</div></div>
+        <div class="slot"><div class="slot-time">9:00 am</div><div class="slot-what">Round One — shotgun start</div><div class="slot-where">Meadow Creek</div></div>
+        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Steaks on the lodge grill</div><div class="slot-where">Bear Creek Lodge</div></div>
+      </div>
+      <div class="day">
+        <div class="day-head"><strong>Day Three</strong><span>Sunday</span></div>
+        <div class="slot"><div class="slot-time">8:30 am</div><div class="slot-what">Round Two — leaders out last</div><div class="slot-where">Meadow Creek</div></div>
+        <div class="slot"><div class="slot-time">2:00 pm</div><div class="slot-what">Presentation of The Bird</div><div class="slot-where">18th green</div></div>
+        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Everyone goes home</div><div class="slot-where">GFY</div></div>
+      </div>
+    </div>
+    <p class="sync" id="schedSync"></p>
+  </div>
+</section>
+
+<section class="band band-alt" id="grounds">
+  <div class="wrap">
+    <p class="eyebrow">Where it happens</p>
+    <h2>The Grounds</h2>
+    <p class="lede">Same two places every year. That is the whole tradition.</p>
+    <div class="grounds">
+      <div class="ground">
+        <p class="kicker">Base camp</p>
+        <h3>Bear Creek Lodge</h3>
+        <p>Two nights, everyone under one roof. Rooms go in the order people paid, not the order people asked.</p>
+        <ul>
+          <li><span>Nights</span><span>Friday &amp; Saturday</span></li>
+          <li><span>Check in</span><span>3:00 pm Friday</span></li>
+          <li><span>Check out</span><span>11:00 am Sunday</span></li>
+          <li><span>Bring</span><span>Cooler, cash, layers</span></li>
+        </ul>
+      </div>
+      <div class="ground">
+        <p class="kicker">The venue</p>
+        <h3>Meadow Creek</h3>
+        <p>Thirty-six holes over two mornings. Mountain air adds distance and takes it right back on the greens.</p>
+        <ul>
+          <li><span>Rounds</span><span>Two, 18 each</span></li>
+          <li><span>Tees</span><span>White, no negotiating</span></li>
+          <li><span>Carts</span><span>Booked with the block</span></li>
+          <li><span>Pace</span><span>Four hours, hard stop</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="rules">
+  <div class="wrap">
+    <p class="eyebrow">Committee decisions, final</p>
+    <h2>Local Rules</h2>
+    <p class="lede">The USGA governs the rest. These override it.</p>
+    <ol class="rules">
+      <li><span>Two days, two rounds, one course. No substitutions, no early exits, no working the weekend.</span></li>
+      <li><span>Stroke play with full handicap. Gross wins The Bird. Net decides who buys the first round.</span></li>
+      <li><span>One mulligan per nine. Call it before you swing or it never happened.</span></li>
+      <li><span>Ball in the pines is playable. Ball in the creek is a drop and a story.</span></li>
+      <li><span>Phones stay in the cart. A work call costs you a stroke and a round back at the lodge.</span></li>
+      <li><span>Gimmes are inside the leather and inside the leather only. The leather is not your driver.</span></li>
+      <li><span>Calcutta is bid Friday after the draw. You may buy back half of yourself at the winning price, and half is the ceiling.</span></li>
+      <li><span>Anyone who complains about the pace of play gets told the name of the tournament.</span></li>
+    </ol>
+  </div>
+</section>
+
+<section class="band band-alt" id="champions">
+  <div class="wrap">
+    <p class="eyebrow">The record</p>
+    <h2>Champions</h2>
+    <p class="lede">Winner keeps The Bird for a year and is responsible for getting it back to McCall.</p>
+    <div class="ledger" id="champBody">
+      <div class="entry"><div class="entry-year">2025</div><div class="entry-name blank">Open</div><div class="entry-score">—</div></div>
+      <div class="entry"><div class="entry-year">2024</div><div class="entry-name blank">Add name</div><div class="entry-score">—</div></div>
+      <div class="entry"><div class="entry-year">2023</div><div class="entry-name blank">Add name</div><div class="entry-score">—</div></div>
+      <div class="entry"><div class="entry-year">2022</div><div class="entry-name blank">Add name</div><div class="entry-score">—</div></div>
+      <div class="entry"><div class="entry-year">2021</div><div class="entry-name blank">Add name</div><div class="entry-score">—</div></div>
+      <div class="entry"><div class="entry-year">2019</div><div class="entry-name blank">Add name</div><div class="entry-score">Inaugural</div></div>
+    </div>
+    <div class="holder">
+      <svg aria-hidden="true"><use href="#mark"/></svg>
+      <p><strong>The Bird</strong>Held for one year. Displayed somewhere visible. Returned to the first tee, cleaned, or the holder plays from the back tees.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band band-dark" id="shame">
+  <div class="wrap">
+    <p class="eyebrow">The other record</p>
+    <h2>Hall of Shame</h2>
+    <p class="lede">Computed automatically from the cards, plus whatever the committee saw with its own eyes.</p>
+    <div class="shame" id="shameBody">
+      <div class="sh-card">
+        <p class="sh-award">Awaiting evidence</p>
+        <p class="sh-who">—</p>
+        <p class="sh-detail">Post hole-by-hole scores and the awards calculate themselves.</p>
+      </div>
+      <div class="sh-card">
+        <p class="sh-award">Committee discretion</p>
+        <p class="sh-who">—</p>
+        <p class="sh-detail">Add a Shame tab for lost balls, cart incidents, and anything the math can't capture.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="photos">
+  <div class="wrap">
+    <p class="eyebrow">Evidence</p>
+    <h2>The Album</h2>
+    <p class="lede">Shared Drive folder. Upload from your phone during the round and it shows up here.</p>
+    <div class="photo-frame" id="photoFrame">
+      <div class="photo-empty">Connect a Drive folder and every photo the group uploads lands in this grid.</div>
+    </div>
+    <div class="hero-actions" style="justify-content:flex-start">
+      <a class="btn" id="driveBtn" href="#" target="_blank" rel="noopener" hidden>Add photos</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <svg aria-hidden="true"><use href="#mark"/></svg>
+  <p class="foot-name">GFY</p>
+  <p class="foot-note" id="footNote">McCall, Idaho · Est. 2019</p>
+</footer>
+
+<script>
+/* ============================================================
+   CONFIG
+   Tabs: Info, Course, Field, Scores, Schedule, Pairings, Ledger,
+         Champions, Shame
+   File > Share > Publish to web > Entire document > CSV
+   ============================================================ */
+const CONFIG = {
+  PUB_ID: "",
+  GID: { info:"0", course:"", field:"", scores:"", schedule:"", pairings:"",
+         calcutta:"", payout:"", ledger:"", champions:"", shame:"" },
+  SHEET_EDIT_URL: "",
+  DRIVE_FOLDER_ID: "",
+  FIRST_TEE: "2026-08-15T09:00:00-06:00",
+  CURRENCY: "$",
+  REFRESH_MS: 60000
+};
+
+const $ = s => document.querySelector(s);
+const CACHE_KEY = "gfy-cache-v5";
+let INFO = {};
+const HOLES = Array.from({length:18},(_,i)=>i+1);
+let STATE = { data:{}, year:null, open:null };
+
+/* ---------- CSV ---------- */
+function parseCSV(text){
+  const rows=[]; let row=[], field="", q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else q=false; } else field+=c; }
+    else if(c==='"') q=true;
+    else if(c===",") { row.push(field); field=""; }
+    else if(c==="\n"){ row.push(field); rows.push(row); row=[]; field=""; }
+    else if(c!=="\r") field+=c;
+  }
+  if(field!=="" || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r=>r.some(c=>c.trim()!==""));
+}
+function toObjects(rows){
+  if(!rows.length) return [];
+  const head = rows[0].map(h=>h.trim().toLowerCase());
+  return rows.slice(1).map(r=>{ const o={}; head.forEach((h,i)=>o[h]=(r[i]||"").trim()); return o; });
+}
+async function pull(tab){
+  const gid=CONFIG.GID[tab];
+  if(!CONFIG.PUB_ID || !gid) return null;
+  const res=await fetch(`https://docs.google.com/spreadsheets/d/e/${CONFIG.PUB_ID}/pub?gid=${gid}&single=true&output=csv&t=${Date.now()}`);
+  if(!res.ok) throw new Error(tab+" "+res.status);
+  return toObjects(parseCSV(await res.text()));
+}
+
+/* ---------- utils ---------- */
+const readCache=()=>{ try{ return JSON.parse(localStorage.getItem(CACHE_KEY)); }catch(e){ return null; } };
+const writeCache=d=>{ try{ localStorage.setItem(CACHE_KEY,JSON.stringify({at:Date.now(),data:d})); }catch(e){} };
+function ago(ms){
+  const m=Math.round((Date.now()-ms)/60000);
+  if(m<1) return "just now";
+  if(m<60) return m+" min ago";
+  const h=Math.round(m/60);
+  return h<24 ? h+" hr ago" : Math.round(h/24)+" days ago";
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money=n=>CONFIG.CURRENCY+Math.abs(Math.round(n));
+function num(v){ const n=parseFloat(String(v||"").replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; }
+const toPar=n=> n===0 ? "E" : (n>0 ? "+"+n : String(n));
+const yes=v=>/^(y|yes|true|paid|in|1)$/i.test(String(v||"").trim());
+
+function yearsIn(rows){ return [...new Set((rows||[]).map(r=>r.year).filter(Boolean))].sort().reverse(); }
+function forYear(rows,y){
+  if(!rows) return [];
+  return rows.some(r=>r.year) ? rows.filter(r=>r.year===y) : rows;
+}
+
+/* ---------- course ---------- */
+function courseMap(){
+  const rows=STATE.data.course||[];
+  const pars={};
+  rows.forEach(r=>{ const h=parseInt(r.hole,10); if(h>=1&&h<=18) pars[h]=parseInt(r.par,10)||0; });
+  return Object.keys(pars).length===18 ? pars : null;
+}
+
+/* ---------- build player cards ---------- */
+function buildPlayers(){
+  const scores=forYear(STATE.data.scores,STATE.year).filter(s=>s.player);
+  const pars=courseMap();
+  const byName={};
+  scores.forEach(s=>{
+    const name=s.player;
+    if(!byName[name]) byName[name]={name,rounds:{}};
+    const rd=String(s.round||"1").replace(/[^0-9]/g,"")||"1";
+    const holes={};
+    let any=false;
+    HOLES.forEach(h=>{ const v=parseInt(s["h"+h],10); if(!isNaN(v)){ holes[h]=v; any=true; } });
+    if(any){ byName[name].rounds[rd]={holes}; }
+    else {
+      const r1=parseInt(s.r1,10), r2=parseInt(s.r2,10);
+      if(!isNaN(r1)) byName[name].rounds["1"]={total:r1};
+      if(!isNaN(r2)) byName[name].rounds["2"]={total:r2};
+    }
+  });
+
+  const field=STATE.data.field||[];
+  const hcp={}; field.forEach(f=>{ if(f.player) hcp[f.player.toLowerCase()]=num(f.handicap); });
+
+  return Object.values(byName).map(p=>{
+    let played=0, strokes=0, parPlayed=0;
+    const roundTotals={};
+    Object.entries(p.rounds).forEach(([rd,r])=>{
+      if(r.holes){
+        const hs=Object.keys(r.holes).map(Number);
+        roundTotals[rd]=hs.reduce((s,h)=>s+r.holes[h],0);
+        played+=hs.length; strokes+=roundTotals[rd];
+        if(pars) parPlayed+=hs.reduce((s,h)=>s+(pars[h]||0),0);
+      } else {
+        roundTotals[rd]=r.total; played+=18; strokes+=r.total;
+        if(pars) parPlayed+=Object.values(pars).reduce((a,b)=>a+b,0);
+      }
+    });
+    const h=hcp[p.name.toLowerCase()]||0;
+    return {
+      name:p.name, rounds:p.rounds, roundTotals, played,
+      total: played?strokes:null,
+      rel: (pars&&played) ? strokes-parPlayed : null,
+      net: played ? Math.round(strokes - h*played/18) : null,
+      hcp:h
+    };
+  });
+}
+
+function thruLabel(p){
+  if(!p.played) return "—";
+  if(p.played>=36) return "F";
+  if(p.played===18) return "F · R1";
+  return p.played>18 ? "R2 · "+(p.played-18) : "R1 · "+p.played;
+}
+
+/* ---------- renderers ---------- */
+function renderInfo(rows){
+  if(!rows) return;
+  const map={}; rows.forEach(r=>{ if(r.key) map[r.key.toLowerCase()]=r.value; });
+  INFO=map;
+  document.querySelectorAll("[data-info]").forEach(el=>{
+    if(map[el.dataset.info]) el.textContent=map[el.dataset.info];
+  });
+  if(map.first_tee) CONFIG.FIRST_TEE=map.first_tee;
+  if(map.est_year){
+    $("#crestEst").textContent="EST. "+map.est_year;
+    $("#footNote").textContent="McCall, Idaho · Est. "+map.est_year;
+  }
+}
+
+function renderYears(){
+  const ys=yearsIn(STATE.data.scores);
+  const box=$("#years");
+  if(ys.length<2){ box.innerHTML=""; return; }
+  if(!STATE.year||!ys.includes(STATE.year)) STATE.year=ys[0];
+  box.innerHTML=ys.map(y=>`<button class="year-btn" type="button" data-year="${esc(y)}" aria-pressed="${y===STATE.year}">${esc(y)}</button>`).join("");
+  box.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+    STATE.year=b.dataset.year; STATE.open=null; renderAll();
+  }));
+}
+
+function scoreClass(score,par){
+  if(!par) return "";
+  const d=score-par;
+  if(d<0) return " under";
+  if(d===1) return " bogey";
+  if(d>=2) return " blowup";
+  return "";
+}
+
+function cardHTML(p){
+  const pars=courseMap();
+  const rds=Object.keys(p.rounds).sort();
+  if(!rds.length) return "";
+  return `<div class="card-drop" id="card-${esc(p.name).replace(/\W/g,"")}">` + rds.map(rd=>{
+    const r=p.rounds[rd];
+    if(!r.holes) return `<div class="nine"><p class="nine-lab">Round ${esc(rd)} — total ${r.total}</p></div>`;
+    return [[1,9,"Out"],[10,18,"In"]].map(([a,b,lab])=>{
+      const hs=HOLES.filter(h=>h>=a&&h<=b);
+      const sub=hs.reduce((s,h)=>s+(r.holes[h]||0),0);
+      return `<div class="nine">
+        <p class="nine-lab">Round ${esc(rd)} · ${lab}</p>
+        <div class="holes">
+          ${hs.map(h=>{
+            const sc=r.holes[h];
+            const par=pars?pars[h]:null;
+            return `<div class="hcell${sc?scoreClass(sc,par):""}">
+              <span class="hn">${h}</span>
+              <span class="hp">${par?"par "+par:"&nbsp;"}</span>
+              <span class="hs">${sc||"–"}</span></div>`;
+          }).join("")}
+          <div class="hcell sum"><span class="hn">${lab}</span><span class="hp">&nbsp;</span><span class="hs">${sub||"–"}</span></div>
+        </div></div>`;
+    }).join("");
+  }).join("") + `</div>`;
+}
+
+function rankedPlayers(basis){
+  const useNet = basis==="net";
+  const players=buildPlayers();
+  const key=p=>{
+    if(useNet) return p.net;
+    return p.rel!==null ? p.rel : p.total;
+  };
+  players.sort((a,b)=>{
+    const ka=key(a), kb=key(b);
+    if(ka===null&&kb===null) return a.name.localeCompare(b.name);
+    if(ka===null) return 1;
+    if(kb===null) return -1;
+    if(ka!==kb) return ka-kb;
+    return b.played-a.played;
+  });
+  let pos=0, prev=null, i=0;
+  players.forEach(p=>{
+    i++;
+    const k=key(p);
+    if(k!==prev){ pos=i; prev=k; }
+    p.pos = p.total===null ? null : pos;
+  });
+  return players;
+}
+
+function renderLeaderboard(){
+  const players=rankedPlayers("gross");
+  if(!players.length) return;
+  $("#lbBody").innerHTML=players.map(p=>{
+    const pos=p.pos;
+    const lead=(pos===1)?" lead":"";
+    const id=esc(p.name).replace(/\W/g,"");
+    const open=STATE.open===p.name;
+    return `<button class="lb-row${lead}" type="button" data-player="${esc(p.name)}"
+              aria-expanded="${open}" aria-controls="card-${id}">
+        <span class="lb-pos">${pos??"—"}</span>
+        <span class="lb-name">${esc(p.name)}</span>
+        <span class="lb-thru">${thruLabel(p)}</span>
+        <span class="lb-num lb-r1">${p.roundTotals["1"]??"—"}</span>
+        <span class="lb-num lb-r2">${p.roundTotals["2"]??"—"}</span>
+        <span class="lb-tot lb-total">${p.total??"—"}</span>
+        <span class="lb-tot">${p.rel!==null?toPar(p.rel):(p.total??"—")}</span>
+      </button>` + (open?cardHTML(p):"");
+  }).join("");
+
+  $("#lbBody").querySelectorAll(".lb-row").forEach(b=>b.addEventListener("click",()=>{
+    STATE.open = STATE.open===b.dataset.player ? null : b.dataset.player;
+    renderLeaderboard();
+  }));
+}
+
+function renderField(){
+  const rows=forYear(STATE.data.field,STATE.year).filter(r=>r.player);
+  if(!rows.length) return;
+  $("#fldBody").innerHTML=rows.map(r=>{
+    const inField=yes(r.status)||/^in$/i.test(r.status||"");
+    const paid=yes(r.deposit);
+    const st=r.status ? esc(r.status) : (inField?"In":"—");
+    return `<div class="fld">
+      <div>${esc(r.player)}</div>
+      <div class="fld-meta ${inField?"yes":""}">${st}</div>
+      <div class="fld-meta ${paid?"yes":"no"}">${paid?"Paid":"Owing"}</div>
+      <div class="fld-num fld-hcp">${r.handicap||"—"}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderPairings(){
+  const rows=forYear(STATE.data.pairings,STATE.year).filter(r=>r.players);
+  if(!rows.length) return;
+  const rounds=[];
+  rows.forEach(r=>{
+    let x=rounds.find(o=>o.name===r.round);
+    if(!x){ x={name:r.round||"Round",when:r.when||"",groups:[]}; rounds.push(x); }
+    x.groups.push(r);
+  });
+  $("#pairBody").innerHTML=rounds.map(r=>`
+    <div class="round">
+      <h3>${esc(r.name)}</h3>
+      <p class="when">${esc(r.when)}</p>
+      ${r.groups.map(g=>`<div class="grp">
+        <div class="grp-time">${esc(g.time||"—")}</div>
+        <div class="grp-who">${esc(g.players)}</div>
+      </div>`).join("")}
+    </div>`).join("");
+}
+
+function renderCalcutta(){
+  const rows=forYear(STATE.data.calcutta,STATE.year).filter(r=>r.player);
+  if(!rows.length) return;
+
+  const lots=rows.map(r=>({
+    player:r.player, owner:(r.owner||"").trim()||"—", price:num(r.price),
+    buyback:Math.min(100,Math.max(0,num(r.buyback)))
+  })).sort((a,b)=>b.price-a.price);
+
+  const pot=lots.reduce((s,l)=>s+l.price,0);
+  const rakePct=num(INFO.calcutta_rake);
+  const rake=pot*rakePct/100;
+  const payable=pot-rake;
+
+  $("#calPot").textContent=money(pot);
+  $("#calRake").textContent=rakePct?money(rake)+" ("+rakePct+"%)":"None";
+  $("#calPayable").textContent=money(payable);
+  $("#calTop").textContent=lots.length?money(lots[0].price)+" · "+lots[0].player:"—";
+
+  $("#aucBody").innerHTML=lots.map((l,i)=>`
+    <div class="auc-row${i===0?" top":""}">
+      <div>${esc(l.player)}</div>
+      <div class="auc-owner">${esc(l.owner)}</div>
+      <div class="auc-back">${l.buyback?l.buyback+"%":"—"}</div>
+      <div class="auc-price">${money(l.price)}</div>
+    </div>`).join("");
+
+  /* payout schedule */
+  let sched=forYear(STATE.data.payout,STATE.year)
+    .map(r=>({place:parseInt(r.place,10),share:num(r.share)}))
+    .filter(r=>r.place>0).sort((a,b)=>a.place-b.place);
+  if(!sched.length) sched=[{place:1,share:50},{place:2,share:30},{place:3,share:20}];
+  const shareAt=p=>{ const s=sched.find(x=>x.place===p); return s?s.share:0; };
+  const places=sched.length;
+
+  const basis=(INFO.calcutta_basis||"gross").toLowerCase()==="net"?"net":"gross";
+  const ranked=rankedPlayers(basis).filter(p=>p.total!==null);
+  if(!ranked.length){ $("#calBasis").textContent="Bids locked. Payouts post once cards do."; return; }
+
+  /* group ties, split the combined shares evenly */
+  const rowsOut=[];
+  let i=0;
+  while(i<ranked.length && ranked[i].pos<=places){
+    const tie=ranked.filter(p=>p.pos===ranked[i].pos);
+    const spanned=tie.map((_,k)=>shareAt(ranked[i].pos+k)).reduce((a,b)=>a+b,0);
+    const each=spanned/tie.length;
+    tie.forEach(p=>{
+      const lot=lots.find(l=>l.player.toLowerCase()===p.name.toLowerCase());
+      const amt=payable*each/100;
+      rowsOut.push({
+        place:ranked[i].pos, tied:tie.length>1, player:p.name,
+        detail:(basis==="net"?"net ":"")+(p.rel!==null?toPar(p.rel):p.total)+" · "+thruLabel(p),
+        owner:lot?lot.owner:"—",
+        ownerCut: lot ? amt*(100-lot.buyback)/100 : 0,
+        playerCut: lot ? amt*lot.buyback/100 : amt
+      });
+    });
+    i+=tie.length;
+  }
+
+  const ord=n=>n+(n===1?"st":n===2?"nd":n===3?"rd":"th");
+  $("#payBody").innerHTML=rowsOut.map(r=>`
+    <div class="pay-row">
+      <div class="pay-place">${ord(r.place)}${r.tied?"*":""}</div>
+      <div>${esc(r.player)}<span class="pay-sub">${esc(r.detail)}</span></div>
+      <div class="auc-owner">${esc(r.owner)}</div>
+      <div class="pay-cut">${r.ownerCut?money(r.ownerCut):"—"}</div>
+      <div class="pay-cut dim">${r.playerCut?money(r.playerCut):"—"}</div>
+    </div>`).join("");
+
+  const done=ranked.every(p=>p.played>=36);
+  $("#calBasis").textContent=(done?"Final":"Projected")+" · paid on "+basis+
+    (rowsOut.some(r=>r.tied)?" · asterisk marks a tie, shares split":"");
+}
+
+function renderMoney(){
+  const rows=forYear(STATE.data.ledger,STATE.year).filter(r=>r.player);
+  if(rows.length){
+    const people=rows.map(r=>({
+      name:r.player, inn:num(r.buyin||r.in), won:num(r.won), settled:yes(r.settled)
+    }));
+    people.forEach(p=>p.net=p.won-p.inn);
+    people.sort((a,b)=>b.net-a.net);
+    $("#potTotal").textContent=money(people.reduce((s,p)=>s+p.inn,0));
+    $("#potPlayers").textContent=people.length;
+    $("#potOpen").textContent=people.filter(p=>!p.settled&&p.net!==0).length;
+    $("#mnBody").innerHTML=people.map(p=>{
+      const cls=p.net>0?" up":(p.net<0?" down":"");
+      const sign=p.net>0?"+":(p.net<0?"−":"");
+      return `<div class="mn-row">
+        <div>${esc(p.name)}</div>
+        <div class="mn-num">${money(p.inn)}</div>
+        <div class="mn-num mn-won">${money(p.won)}</div>
+        <div class="mn-net${cls}">${sign}${money(p.net)}</div>
+      </div>`;
+    }).join("");
+  }
+}
+
+function renderShame(){
+  const pars=courseMap();
+  const players=buildPlayers();
+  const cards=[];
+
+  if(pars){
+    let worst=null, blow=null, birds=null;
+    const blowCount={}, birdCount={};
+    players.forEach(p=>{
+      Object.entries(p.rounds).forEach(([rd,r])=>{
+        if(!r.holes) return;
+        Object.entries(r.holes).forEach(([h,sc])=>{
+          const par=pars[h]||0, d=sc-par;
+          if(!worst||d>worst.d) worst={name:p.name,d,sc,h:+h,par,rd};
+          if(d>=2) blowCount[p.name]=(blowCount[p.name]||0)+1;
+          if(d<0) birdCount[p.name]=(birdCount[p.name]||0)+1;
+        });
+      });
+    });
+    const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1])[0];
+    blow=top(blowCount); birds=top(birdCount);
+    if(worst) cards.push({award:"Hole of the weekend",who:worst.name,
+      detail:`${worst.sc} on the par-${worst.par} ${worst.h}${worst.h===1?"st":worst.h===2?"nd":worst.h===3?"rd":"th"}, round ${worst.rd}. ${toPar(worst.d)}.`});
+    if(blow) cards.push({award:"Most blow-ups",who:blow[0],detail:`${blow[1]} holes at double bogey or worse.`});
+    if(birds) cards.push({award:"Most birdies",who:birds[0],detail:`${birds[1]} holes under par. The only good news here.`});
+  }
+
+  forYear(STATE.data.shame,STATE.year).forEach(r=>{
+    if(r.award) cards.push({award:r.award,who:r.player||"—",detail:r.detail||""});
+  });
+
+  if(!cards.length) return;
+  $("#shameBody").innerHTML=cards.map(c=>`
+    <div class="sh-card">
+      <p class="sh-award">${esc(c.award)}</p>
+      <p class="sh-who">${esc(c.who)}</p>
+      <p class="sh-detail">${esc(c.detail)}</p>
+    </div>`).join("");
+}
+
+function renderSchedule(){
+  const rows=forYear(STATE.data.schedule,STATE.year).filter(r=>r.event);
+  if(!rows.length) return;
+  const days=[];
+  rows.forEach(r=>{
+    let d=days.find(x=>x.name===r.day);
+    if(!d){ d={name:r.day||"",label:r.label||"",slots:[]}; days.push(d); }
+    d.slots.push(r);
+  });
+  $("#scheduleBody").innerHTML=days.map(d=>`
+    <div class="day">
+      <div class="day-head"><strong>${esc(d.name)}</strong><span>${esc(d.label)}</span></div>
+      ${d.slots.map(s=>`<div class="slot">
+        <div class="slot-time">${esc(s.time||"")}</div>
+        <div class="slot-what">${esc(s.event)}</div>
+        <div class="slot-where">${esc(s.location||"")}</div>
+      </div>`).join("")}
+    </div>`).join("");
+}
+
+function renderChampions(){
+  const rows=STATE.data.champions;
+  if(!rows||!rows.length) return;
+  $("#champBody").innerHTML=rows.filter(r=>r.year).map(r=>{
+    const blank=!r.champion;
+    return `<div class="entry">
+      <div class="entry-year">${esc(r.year)}</div>
+      <div class="entry-name${blank?" blank":""}">${esc(r.champion||"Open")}</div>
+      <div class="entry-score">${esc(r.score||"—")}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderAll(){
+  renderYears(); renderLeaderboard(); renderField(); renderPairings();
+  renderCalcutta(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
+}
+
+/* ---------- countdown ---------- */
+function tick(){
+  const el=$("#countdown");
+  const t=new Date(CONFIG.FIRST_TEE).getTime();
+  if(isNaN(t)){ el.innerHTML=""; return; }
+  const diff=t-Date.now();
+  if(diff<=0){
+    el.innerHTML = diff>-3*86400000 ? '<p class="cd-msg">In play</p>' : '<p class="cd-msg">See you next year</p>';
+    return;
+  }
+  const d=Math.floor(diff/86400000), h=Math.floor(diff%86400000/3600000), m=Math.floor(diff%3600000/60000);
+  el.innerHTML=[[d,"Days"],[h,"Hours"],[m,"Minutes"]]
+    .map(([n,l])=>`<div class="cd-unit"><div class="cd-num">${String(n).padStart(2,"0")}</div><div class="cd-lab">${l}</div></div>`).join("");
+}
+
+/* ---------- calendar ---------- */
+const pad=n=>String(n).padStart(2,"0");
+const stamp=d=>d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+"T"+pad(d.getUTCHours())+pad(d.getUTCMinutes())+"00Z";
+$("#icsBtn").addEventListener("click",()=>{
+  const start=new Date(CONFIG.FIRST_TEE);
+  if(isNaN(start)) return;
+  const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//GFY//McCall//EN","BEGIN:VEVENT",
+    "UID:gfy-"+start.getFullYear()+"@mccall","DTSTAMP:"+stamp(new Date()),
+    "DTSTART:"+stamp(new Date(start.getTime()-18*3600000)),
+    "DTEND:"+stamp(new Date(start.getTime()+30*3600000)),
+    "SUMMARY:GFY — McCall, Idaho","LOCATION:Bear Creek Lodge, McCall, Idaho",
+    "DESCRIPTION:Two rounds at Meadow Creek. Two nights at Bear Creek Lodge.",
+    "END:VEVENT","END:VCALENDAR"].join("\r\n");
+  const url=URL.createObjectURL(new Blob([ics],{type:"text/calendar"}));
+  const a=document.createElement("a"); a.href=url; a.download="gfy.ics"; a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* ---------- installable app ---------- */
+function makeIcon(size){
+  const c=document.createElement("canvas"); c.width=c.height=size;
+  const x=c.getContext("2d"); const s=size/400;
+  x.fillStyle="#0E2019"; x.fillRect(0,0,size,size);
+  x.save(); x.scale(s,s);
+  x.strokeStyle="#C8A24A"; x.lineWidth=8;
+  x.beginPath(); x.arc(200,200,178,0,Math.PI*2); x.stroke();
+  x.translate(149,120); x.scale(102/200,133/260);
+  x.fillStyle="#C8A24A";
+  x.fill(new Path2D("M 100 14 C 113 14, 122 24, 122 38 L 122 96 C 125 86, 134 80, 144 82 C 155 84, 160 93, 160 105 L 160 112 C 163 102, 171 97, 179 100 C 187 103, 191 112, 191 124 L 191 194 C 191 218, 175 234, 151 236 L 151 252 L 61 252 L 61 234 C 41 230, 27 214, 25 192 L 23 166 C 21 148, 24 133, 32 125 C 29 106, 39 87, 56 85 C 70 83, 80 93, 80 105 L 80 38 C 80 24, 87 14, 100 14 Z"));
+  x.strokeStyle="#0E2019"; x.lineWidth=10; x.lineCap="round";
+  [["M 84 60 C 94 66, 108 66, 118 60"],["M 81 106 L 81 126"],["M 121 100 L 121 122"],
+   ["M 160 110 L 160 130"],
+   ["M 23 143 C 50 149, 80 161, 102 173 C 114 180, 118 191, 110 198 C 102 205, 90 201, 82 195"]]
+    .forEach(([d])=>x.stroke(new Path2D(d)));
+  x.restore();
+  return c.toDataURL("image/png");
+}
+try{
+  const icon=makeIcon(512);
+  const apple=document.createElement("link");
+  apple.rel="apple-touch-icon"; apple.href=makeIcon(180);
+  document.head.appendChild(apple);
+  const fav=document.createElement("link");
+  fav.rel="icon"; fav.type="image/png"; fav.href=makeIcon(64);
+  document.head.appendChild(fav);
+  const mf={ name:"GFY — McCall, Idaho", short_name:"GFY", start_url:".",
+    display:"standalone", background_color:"#0E2019", theme_color:"#0E2019",
+    icons:[{src:icon,sizes:"512x512",type:"image/png",purpose:"any"}] };
+  const link=document.createElement("link");
+  link.rel="manifest";
+  link.href=URL.createObjectURL(new Blob([JSON.stringify(mf)],{type:"application/manifest+json"}));
+  document.head.appendChild(link);
+}catch(e){}
+
+let deferredPrompt=null;
+window.addEventListener("beforeinstallprompt",e=>{
+  e.preventDefault(); deferredPrompt=e; $("#installBtn").hidden=false;
+});
+$("#installBtn").addEventListener("click",async()=>{
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt(); await deferredPrompt.userChoice;
+  deferredPrompt=null; $("#installBtn").hidden=true;
+});
+
+if(CONFIG.SHEET_EDIT_URL){ const b=$("#sheetBtn"); b.href=CONFIG.SHEET_EDIT_URL; b.hidden=false; }
+if(CONFIG.DRIVE_FOLDER_ID){
+  $("#photoFrame").innerHTML=`<iframe title="GFY photo album" loading="lazy" src="https://drive.google.com/embeddedfolderview?id=${CONFIG.DRIVE_FOLDER_ID}#grid"></iframe>`;
+  const d=$("#driveBtn");
+  d.href="https://drive.google.com/drive/folders/"+CONFIG.DRIVE_FOLDER_ID;
+  d.hidden=false;
+}
+
+/* ---------- load ---------- */
+function paint(data,at,live){
+  STATE.data=data;
+  renderInfo(data.info);
+  renderAll();
+  const note=live?"Updated "+ago(at):"Saved copy from "+ago(at);
+  $("#lbSync").textContent=note; $("#schedSync").textContent=note;
+  tick();
+}
+async function load(){
+  if(!CONFIG.PUB_ID){
+    const c=readCache(); if(c) paint(c.data,c.at,false);
+    return;
+  }
+  try{
+    const tabs=["info","course","field","scores","schedule","pairings",
+                "calcutta","payout","ledger","champions","shame"];
+    const got=await Promise.all(tabs.map(pull));
+    const data={}; tabs.forEach((t,i)=>data[t]=got[i]);
+    writeCache(data); paint(data,Date.now(),true);
+  }catch(e){
+    const c=readCache();
+    if(c) paint(c.data,c.at,false);
+    else { $("#lbSync").textContent="Offline — showing the printed card";
+           $("#schedSync").textContent="Offline — showing the printed card"; }
+  }
+}
+
+tick(); setInterval(tick,30000);
+load(); setInterval(load,CONFIG.REFRESH_MS);
+</script>
+</body>
+</html>
