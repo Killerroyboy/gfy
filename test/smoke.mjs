@@ -314,9 +314,14 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
 {
   const eightCount = (fldBodyText.match(/8th year/g) || []).length;
   const rookieBadge = doc.querySelector("#fldBody .badge-rookie");
+  const fourNamesOk = ["Duck","Hammer","Moose","Tex"].every(name => {
+    const body = doc.querySelector("#fldBody");
+    const nameEl = [...body.querySelectorAll("*")].find(el => el.textContent.includes(name));
+    return nameEl && nearestTextAncestor(nameEl, "8th year");
+  });
   check("F1: seniority badges — '8th year' ×4 (Duck/Hammer/Moose/Tex), ROOKIE on Tank",
-    eightCount === 4 && !!rookieBadge && nearestTextAncestor(rookieBadge, "Tank"),
-    "eightCount=" + eightCount + " rookieBadgeText=" + (rookieBadge?.textContent || "none"));
+    eightCount === 4 && !!rookieBadge && nearestTextAncestor(rookieBadge, "Tank") && fourNamesOk,
+    "eightCount=" + eightCount + " rookieBadgeText=" + (rookieBadge?.textContent || "none") + " fourNamesOk=" + fourNamesOk);
 }
 
 {
@@ -353,7 +358,7 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
 {
   const aucRows = [...doc.querySelectorAll("#aucBody .auc-row")];
   const isMarkedCollected = row => /collect/i.test(row.className || "") || /✓|check/i.test(row.textContent || "");
-  const findRow = team => aucRows.find(r => new RegExp("\\b" + team + "\\b").test(r.textContent || ""));
+  const findRow = team => aucRows.find(r => new RegExp("\\b" + team + "\\b").test(r.children[0]?.textContent || ""));
   const collectedOk = ["Duck", "Tex", "Bear"].every(t => { const r = findRow(t); return !!r && isMarkedCollected(r); });
   const uncollectedOk = ["Sully", "Moose"].every(t => { const r = findRow(t); return !!r && !isMarkedCollected(r); });
   check("G3: collected lots marked (Duck, Tex, Bear) vs uncollected (Sully, Moose)",
@@ -434,7 +439,7 @@ check("H5: deposit amount and payment handle rendered",
 
   const collapse = shameCards.find(c => /back-nine collapse/i.test(c.award));
   check("I2: back-nine-collapse card — Duck & Hammer, round 2 (out 34 → in 40, +6 swing)",
-    !!collapse && /Duck/.test(collapse.who) && /Hammer/.test(collapse.who) && /round 2/i.test(collapse.detail),
+    !!collapse && /Duck/.test(collapse.who) && /Hammer/.test(collapse.who) && /round 2/i.test(collapse.detail) && /out -2/.test(collapse.detail) && /in \+4/.test(collapse.detail),
     JSON.stringify(collapse));
 
   const committee = shameCards.find(c => /most balls lost/i.test(c.award));
