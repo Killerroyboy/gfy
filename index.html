@@ -645,6 +645,8 @@ if (typeof CONFIG === "undefined") {
 
 const $ = s => document.querySelector(s);
 const CACHE_KEY = "gfy-cache-v5";
+const TABS = ["info","course","field","scores","schedule","pairings",
+              "calcutta","payout","ledger","champions","shame"];
 let INFO = {};
 const HOLES = Array.from({length:18},(_,i)=>i+1);
 let STATE = { data:{}, year:null, open:null };
@@ -1174,6 +1176,68 @@ if(CONFIG.DRIVE_FOLDER_ID){
   d.hidden=false;
 }
 
+/* ---------- debug mode (?debug=1) ----------
+   Diagnostic view of the sheet pull. Reports every tab as OK / EMPTY /
+   FAILED with the real reason, on screen and in the console. Never falls
+   back to the cache silently, and never WRITES the cache either, so a
+   debug run can't poison normal mode's offline copy. */
+const DEBUG = new URLSearchParams(location.search).has("debug");
+
+async function pullDebug(tab){
+  const rep={tab,url:"",status:"—",rows:0,headers:[],state:"FAILED",reason:"",data:null};
+  if(!CONFIG.PUB_ID){ rep.reason="CONFIG.PUB_ID is empty"; return rep; }
+  if(!CONFIG.GID[tab]){ rep.reason="no gid in CONFIG.GID."+tab; return rep; }
+  rep.url=`https://docs.google.com/spreadsheets/d/e/${CONFIG.PUB_ID}/pub?gid=${CONFIG.GID[tab]}&single=true&output=csv&t=${Date.now()}`;
+  try{
+    const res=await fetch(rep.url);
+    rep.status=res.status;
+    if(!res.ok){ rep.reason="HTTP "+res.status; return rep; }
+    const text=await res.text();
+    if(/^\s*<(!doctype|html)/i.test(text)){
+      rep.reason="response is HTML, not CSV — wrong PUB_ID (use the published /d/e/… id, not the edit-URL id) or sheet not published to web";
+      return rep;
+    }
+    const grid=parseCSV(text);
+    rep.headers=grid.length?grid[0].map(h=>h.trim().toLowerCase()):[];
+    rep.data=toObjects(grid);
+    rep.rows=rep.data.length;
+    rep.state=rep.rows?"OK":"EMPTY";
+    if(!rep.rows) rep.reason="fetch succeeded but no data rows under the header";
+  }catch(e){
+    rep.reason=(e&&e.message)?e.message:String(e);
+  }
+  return rep;
+}
+
+function renderDebugPanel(reps){
+  let el=document.getElementById("debugPanel");
+  if(!el){
+    el=document.createElement("div");
+    el.id="debugPanel";
+    el.style.cssText="position:fixed;left:10px;bottom:10px;z-index:999;"+
+      "max-width:min(92vw,480px);max-height:45vh;overflow:auto;"+
+      "background:rgba(10,23,18,.96);border:1px solid #C8A24A;color:#E9E3D3;"+
+      "font:12px/1.5 ui-monospace,Menlo,monospace;padding:10px 12px;white-space:pre-wrap";
+    document.body.appendChild(el);
+  }
+  el.textContent="GFY DEBUG — sheet pull @ "+new Date().toLocaleTimeString()+"\n"+
+    reps.map(r=>`${r.state.padEnd(6)} ${r.tab.padEnd(9)} ${r.state==="OK"?r.rows+" rows":r.reason}`).join("\n");
+}
+
+async function loadDebug(){
+  const reps=await Promise.all(TABS.map(pullDebug));
+  reps.forEach(r=>console.log("[GFY debug]",r.tab,
+    {url:r.url,status:r.status,rows:r.rows,headers:r.headers,state:r.state,reason:r.reason}));
+  renderDebugPanel(reps);
+  const data={}; reps.forEach(r=>{ data[r.tab]=r.data; });
+  paint(data,Date.now(),true);
+  const bad=reps.filter(r=>r.state!=="OK");
+  if(bad.length){
+    const msg="DEBUG: "+bad.map(r=>r.tab+" "+r.state+(r.reason?" — "+r.reason:"")).join(" · ");
+    $("#lbSync").textContent=msg; $("#schedSync").textContent=msg;
+  }
+}
+
 /* ---------- load ---------- */
 function paint(data,at,live){
   STATE.data=data;
@@ -1184,15 +1248,14 @@ function paint(data,at,live){
   tick();
 }
 async function load(){
+  if(DEBUG) return loadDebug();
   if(!CONFIG.PUB_ID){
     const c=readCache(); if(c) paint(c.data,c.at,false);
     return;
   }
   try{
-    const tabs=["info","course","field","scores","schedule","pairings",
-                "calcutta","payout","ledger","champions","shame"];
-    const got=await Promise.all(tabs.map(pull));
-    const data={}; tabs.forEach((t,i)=>data[t]=got[i]);
+    const got=await Promise.all(TABS.map(pull));
+    const data={}; TABS.forEach((t,i)=>data[t]=got[i]);
     writeCache(data); paint(data,Date.now(),true);
   }catch(e){
     const c=readCache();
