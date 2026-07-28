@@ -1,6 +1,6 @@
-year,player,owner,price,buyback
-2025,Duck,Tex,120,50
-2025,Hammer,"Johnson, Wade",100,
-2025,Moose,Sully,80,50
-2025,"Johnson, Wade",Duck,60,
-2025,Sully,Hammer,40,25
+year,team,owner,price,collected
+2026,Duck,Tex,120,TRUE
+2026,Sully,Tex,100,
+2026,Moose,Sock,80,
+2026,Tex,Bear,60,TRUE
+2026,Bear,Duck,40,TRUE

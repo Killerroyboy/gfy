@@ -1,7 +1,15 @@
-year,player,handicap,status,deposit
-2025,Duck,8,In,yes
-2025,Hammer,10,In,yes
-2025,"Johnson, Wade",12,In,yes
-2025,Sully,15,In,
-2025,Moose,9,In,yes
-2025,Tex,18,In,yes
+year,player,team,since,handicap,status,deposit,paid_date
+2026,Duck,Duck,2019,8,In,TRUE,
+2026,Hammer,Duck,2019,10,In,TRUE,
+2026,Sully,Sully,2021,15,In,TRUE,
+2026,"Johnson, Wade",Sully,2022,12,In,TRUE,
+2026,Moose,Moose,2019,9,In,TRUE,
+2026,Sock,Moose,2020,14,In,TRUE,
+2026,Tex,Tex,2019,18,In,TRUE,
+2026,Tank,Tex,2026,20,In,TRUE,
+2026,Bear,Bear,2023,11,In,TRUE,
+2027,Duck,,,,,TRUE,2026-08-20
+2027,Tank,,,,,TRUE,2026-08-22
+2027,Crash,,,,,TRUE,2026-09-01
+2027,Hammer,,,,,,
+2027,Sock,,,,out,,

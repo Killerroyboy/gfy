@@ -2,8 +2,10 @@ key,value
 dates,Aug 14–16
 course,Meadow Creek
 lodging,Bear Creek Lodge
-format,"36 holes, stroke"
+format,2-day scramble
 first_tee,2026-08-15T09:00:00-06:00
 est_year,2019
 calcutta_rake,10
 calcutta_basis,gross
+deposit_amount,200
+payment_handle,Venmo @gfy-duck
