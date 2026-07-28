@@ -76,6 +76,14 @@
   .band .lede{color:var(--sage);max-width:52ch;margin:0 0 30px}
   .sync{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--brass-dim);
         margin:14px 0 0;min-height:1em}
+
+  .health-strip{position:fixed;right:10px;bottom:10px;z-index:999;
+    max-width:min(92vw,420px);max-height:40vh;overflow:auto;
+    background:rgba(10,23,18,.96);border:1px solid var(--rust);color:var(--bone);
+    font:12px/1.5 ui-monospace,Menlo,monospace;padding:10px 12px}
+  .health-strip[hidden]{display:none}
+  .health-strip summary{cursor:pointer;color:var(--rust)}
+  .health-strip div{padding:4px 0 0}
   .subhead{font-family:var(--display);font-size:1.4rem;margin:44px 0 16px;font-weight:400}
 
   .years{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 26px}
@@ -470,6 +478,7 @@
       <div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>
     </div>
     <p class="basis" id="calBasis"></p>
+    <p class="sync" id="calSync"></p>
   </div>
 </section>
 
@@ -644,7 +653,7 @@ if (typeof CONFIG === "undefined") {
 }
 
 const $ = s => document.querySelector(s);
-const CACHE_KEY = "gfy-cache-v5";
+const CACHE_KEY = "gfy-cache-v2";
 const TABS = ["info","course","field","scores","schedule","pairings",
               "calcutta","payout","ledger","champions","shame"];
 let INFO = {};
@@ -670,17 +679,46 @@ function toObjects(rows){
   const head = rows[0].map(h=>h.trim().toLowerCase());
   return rows.slice(1).map(r=>{ const o={}; head.forEach((h,i)=>o[h]=(r[i]||"").trim()); return o; });
 }
+const FPRINT={info:["key"],course:["hole"],field:["player"],scores:["h1","r1"],
+  schedule:["event"],pairings:["players"],calcutta:["price"],payout:["share"],
+  ledger:["buyin"],champions:["champion"],shame:["award"]};
+const BACKOFF={};   // tab -> next-allowed epoch ms
 async function pull(tab){
   const gid=CONFIG.GID[tab];
-  if(!CONFIG.PUB_ID || !gid) return null;
-  const res=await fetch(`https://docs.google.com/spreadsheets/d/e/${CONFIG.PUB_ID}/pub?gid=${gid}&single=true&output=csv&t=${Date.now()}`);
-  if(!res.ok) throw new Error(tab+" "+res.status);
-  return toObjects(parseCSV(await res.text()));
+  if(!CONFIG.PUB_ID||!gid) return {rows:null,at:0,live:false,err:null};
+  if(BACKOFF[tab]&&Date.now()<BACKOFF[tab]) return cacheTab(tab,"backoff");
+  try{
+    const res=await fetch(`https://docs.google.com/spreadsheets/d/e/${CONFIG.PUB_ID}/pub?gid=${gid}&single=true&output=csv`);
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const text=await res.text();
+    if(/^\s*<(!doctype|html)/i.test(text)) throw new Error("HTML response — wrong PUB_ID or not published");
+    const grid=parseCSV(text);
+    const heads=grid.length?grid[0].map(h=>h.trim().toLowerCase()):[];
+    if(!FPRINT[tab].some(h=>heads.includes(h)))
+      throw new Error(`headers don't look like the ${tab} tab (gid swapped?)`);
+    BACKOFF[tab]=0;
+    return {rows:toObjects(grid),at:Date.now(),live:true,err:null};
+  }catch(e){
+    BACKOFF[tab]=Date.now()+Math.min(300000,(BACKOFF[tab]?120000:30000));
+    return cacheTab(tab,(e&&e.message)||String(e));
+  }
+}
+function cacheTab(tab,err){
+  const c=readCache();
+  const t=c&&c.tabs&&c.tabs[tab];
+  return {rows:t?t.rows:null,at:t?t.at:0,live:false,err};
 }
 
 /* ---------- utils ---------- */
 const readCache=()=>{ try{ return JSON.parse(localStorage.getItem(CACHE_KEY)); }catch(e){ return null; } };
-const writeCache=d=>{ try{ localStorage.setItem(CACHE_KEY,JSON.stringify({at:Date.now(),data:d})); }catch(e){} };
+function writeCache(results){
+  try{
+    const prev=readCache()||{tabs:{}};
+    const tabs=Object.assign({},prev.tabs);
+    TABS.forEach((t,i)=>{ if(results[i].live) tabs[t]={rows:results[i].rows,at:results[i].at}; });
+    localStorage.setItem(CACHE_KEY,JSON.stringify({tabs}));
+  }catch(e){}
+}
 function ago(ms){
   const m=Math.round((Date.now()-ms)/60000);
   if(m<1) return "just now";
@@ -923,7 +961,10 @@ function renderLeaderboard(){
 
 function renderField(){
   const rows=forYear(STATE.data.field,STATE.year).filter(r=>r.player);
-  if(!rows.length) return;
+  if(!rows.length){
+    $("#fldBody").innerHTML='<div class="lb-empty">Add a Field tab and the roster fills in here.</div>';
+    return;
+  }
   $("#fldBody").innerHTML=rows.map(r=>{
     const inField=yes(r.status)||/^in$/i.test(r.status||"");
     const paid=yes(r.deposit);
@@ -939,7 +980,20 @@ function renderField(){
 
 function renderPairings(){
   const rows=forYear(STATE.data.pairings,STATE.year).filter(r=>r.players);
-  if(!rows.length) return;
+  if(!rows.length){
+    $("#pairBody").innerHTML=`
+      <div class="round">
+        <h3>Round One</h3>
+        <p class="when">Saturday · Shotgun</p>
+        <div class="grp"><div class="grp-time">—</div><div class="grp-who">Groups post after the Friday draw.</div></div>
+      </div>
+      <div class="round">
+        <h3>Round Two</h3>
+        <p class="when">Sunday · Tee times</p>
+        <div class="grp"><div class="grp-time">—</div><div class="grp-who">Set by Saturday's standings.</div></div>
+      </div>`;
+    return;
+  }
   const rounds=[];
   rows.forEach(r=>{
     let x=rounds.find(o=>o.name===r.round);
@@ -959,7 +1013,14 @@ function renderPairings(){
 
 function renderCalcutta(){
   const rows=forYear(STATE.data.calcutta,STATE.year).filter(r=>r.player);
-  if(!rows.length) return;
+  if(!rows.length){
+    $("#calPot").textContent="—"; $("#calRake").textContent="—";
+    $("#calPayable").textContent="—"; $("#calTop").textContent="—";
+    $("#aucBody").innerHTML='<div class="mn-empty">Add a Calcutta tab and the auction board fills in here.</div>';
+    $("#payBody").innerHTML='<div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>';
+    $("#calBasis").textContent="";
+    return;
+  }
 
   const lots=rows.map(r=>({
     player:r.player, owner:(r.owner||"").trim()||"—", price:num(r.price),
@@ -1034,26 +1095,29 @@ function renderCalcutta(){
 
 function renderMoney(){
   const rows=forYear(STATE.data.ledger,STATE.year).filter(r=>r.player);
-  if(rows.length){
-    const people=rows.map(r=>({
-      name:r.player, inn:num(r.buyin||r.in), won:num(r.won), settled:yes(r.settled)
-    }));
-    people.forEach(p=>p.net=p.won-p.inn);
-    people.sort((a,b)=>b.net-a.net);
-    $("#potTotal").textContent=money(people.reduce((s,p)=>s+p.inn,0));
-    $("#potPlayers").textContent=people.length;
-    $("#potOpen").textContent=people.filter(p=>!p.settled&&p.net!==0).length;
-    $("#mnBody").innerHTML=people.map(p=>{
-      const cls=p.net>0?" up":(p.net<0?" down":"");
-      const sign=p.net>0?"+":(p.net<0?"−":"");
-      return `<div class="mn-row">
-        <div>${esc(p.name)}</div>
-        <div class="mn-num">${money(p.inn)}</div>
-        <div class="mn-num mn-won">${money(p.won)}</div>
-        <div class="mn-net${cls}">${sign}${money(p.net)}</div>
-      </div>`;
-    }).join("");
+  if(!rows.length){
+    $("#potTotal").textContent="—"; $("#potPlayers").textContent="—"; $("#potOpen").textContent="—";
+    $("#mnBody").innerHTML='<div class="mn-empty">Add a Ledger tab and the settle-up math runs itself.</div>';
+    return;
   }
+  const people=rows.map(r=>({
+    name:r.player, inn:num(r.buyin||r.in), won:num(r.won), settled:yes(r.settled)
+  }));
+  people.forEach(p=>p.net=p.won-p.inn);
+  people.sort((a,b)=>b.net-a.net);
+  $("#potTotal").textContent=money(people.reduce((s,p)=>s+p.inn,0));
+  $("#potPlayers").textContent=people.length;
+  $("#potOpen").textContent=people.filter(p=>!p.settled&&p.net!==0).length;
+  $("#mnBody").innerHTML=people.map(p=>{
+    const cls=p.net>0?" up":(p.net<0?" down":"");
+    const sign=p.net>0?"+":(p.net<0?"−":"");
+    return `<div class="mn-row">
+      <div>${esc(p.name)}</div>
+      <div class="mn-num">${money(p.inn)}</div>
+      <div class="mn-num mn-won">${money(p.won)}</div>
+      <div class="mn-net${cls}">${sign}${money(p.net)}</div>
+    </div>`;
+  }).join("");
 }
 
 function renderShame(){
@@ -1087,7 +1151,20 @@ function renderShame(){
     if(r.award) cards.push({award:r.award,who:r.player||"—",detail:r.detail||""});
   });
 
-  if(!cards.length) return;
+  if(!cards.length){
+    $("#shameBody").innerHTML=`
+      <div class="sh-card">
+        <p class="sh-award">Awaiting evidence</p>
+        <p class="sh-who">—</p>
+        <p class="sh-detail">Post hole-by-hole scores and the awards calculate themselves.</p>
+      </div>
+      <div class="sh-card">
+        <p class="sh-award">Committee discretion</p>
+        <p class="sh-who">—</p>
+        <p class="sh-detail">Add a Shame tab for lost balls, cart incidents, and anything the math can't capture.</p>
+      </div>`;
+    return;
+  }
   $("#shameBody").innerHTML=cards.map(c=>`
     <div class="sh-card">
       <p class="sh-award">${esc(c.award)}</p>
@@ -1098,7 +1175,28 @@ function renderShame(){
 
 function renderSchedule(){
   const rows=forYear(STATE.data.schedule,STATE.year).filter(r=>r.event);
-  if(!rows.length) return;
+  if(!rows.length){
+    $("#scheduleBody").innerHTML=`
+      <div class="day">
+        <div class="day-head"><strong>Day One</strong><span>Friday</span></div>
+        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Check in, claim a bed, unload the coolers</div><div class="slot-where">Bear Creek Lodge</div></div>
+        <div class="slot"><div class="slot-time">5:30 pm</div><div class="slot-what">Draw for pairings and settle the handicaps</div><div class="slot-where">Lodge deck</div></div>
+        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Dinner, cards, bad decisions</div><div class="slot-where">Lodge</div></div>
+      </div>
+      <div class="day">
+        <div class="day-head"><strong>Day Two</strong><span>Saturday</span></div>
+        <div class="slot"><div class="slot-time">7:30 am</div><div class="slot-what">Coffee and quiet regret</div><div class="slot-where">Lodge</div></div>
+        <div class="slot"><div class="slot-time">9:00 am</div><div class="slot-what">Round One — shotgun start</div><div class="slot-where">Meadow Creek</div></div>
+        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Steaks on the lodge grill</div><div class="slot-where">Bear Creek Lodge</div></div>
+      </div>
+      <div class="day">
+        <div class="day-head"><strong>Day Three</strong><span>Sunday</span></div>
+        <div class="slot"><div class="slot-time">8:30 am</div><div class="slot-what">Round Two — leaders out last</div><div class="slot-where">Meadow Creek</div></div>
+        <div class="slot"><div class="slot-time">2:00 pm</div><div class="slot-what">Presentation of The Bird</div><div class="slot-where">18th green</div></div>
+        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Everyone goes home</div><div class="slot-where">GFY</div></div>
+      </div>`;
+    return;
+  }
   const days=[];
   rows.forEach(r=>{
     let d=days.find(x=>x.name===r.day);
@@ -1118,7 +1216,16 @@ function renderSchedule(){
 
 function renderChampions(){
   const rows=STATE.data.champions;
-  if(!rows||!rows.length) return;
+  if(!rows||!rows.length){
+    $("#champBody").innerHTML=`
+      <div class="entry"><div class="entry-year">2025</div><div class="entry-name blank">Open</div><div class="entry-score">—</div></div>
+      <div class="entry"><div class="entry-year">2024</div><div class="entry-name blank">Add name</div><div class="entry-score">—</div></div>
+      <div class="entry"><div class="entry-year">2023</div><div class="entry-name blank">Add name</div><div class="entry-score">—</div></div>
+      <div class="entry"><div class="entry-year">2022</div><div class="entry-name blank">Add name</div><div class="entry-score">—</div></div>
+      <div class="entry"><div class="entry-year">2021</div><div class="entry-name blank">Add name</div><div class="entry-score">—</div></div>
+      <div class="entry"><div class="entry-year">2019</div><div class="entry-name blank">Add name</div><div class="entry-score">Inaugural</div></div>`;
+    return;
+  }
   $("#champBody").innerHTML=rows.filter(r=>r.year).map(r=>{
     const blank=!r.champion;
     return `<div class="entry">
@@ -1132,6 +1239,19 @@ function renderChampions(){
 function renderAll(){
   renderYears(); renderLeaderboard(); renderField(); renderPairings();
   renderCalcutta(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
+}
+
+function renderHealth(){
+  let el=document.getElementById("healthStrip");
+  if(!el){
+    el=document.createElement("div");
+    el.id="healthStrip"; el.className="health-strip";
+    document.body.appendChild(el);
+  }
+  if(!HEALTH.length){ el.hidden=true; el.innerHTML=""; return; }
+  el.hidden=false;
+  el.innerHTML=`<details><summary>⚠ ${HEALTH.length} data warning${HEALTH.length===1?"":"s"}</summary>`+
+    HEALTH.map(h=>`<div>${esc(h)}</div>`).join("")+`</details>`;
 }
 
 /* ---------- countdown ---------- */
@@ -1244,6 +1364,10 @@ async function pullDebug(tab){
     }
     const grid=parseCSV(text);
     rep.headers=grid.length?grid[0].map(h=>h.trim().toLowerCase()):[];
+    if(!FPRINT[tab].some(h=>rep.headers.includes(h))){
+      rep.reason=`headers don't look like the ${tab} tab (gid swapped?)`;
+      return rep;
+    }
     rep.data=toObjects(grid);
     rep.rows=rep.data.length;
     rep.state=rep.rows?"OK":"EMPTY";
@@ -1275,7 +1399,8 @@ async function loadDebug(){
     {url:r.url,status:r.status,rows:r.rows,headers:r.headers,state:r.state,reason:r.reason}));
   renderDebugPanel(reps);
   const data={}; reps.forEach(r=>{ data[r.tab]=r.data; });
-  paint(data,Date.now(),true);
+  const results=reps.map(r=>({rows:r.data,at:Date.now(),live:r.state==="OK",err:r.state==="OK"?null:r.reason}));
+  paint(data,results);
   const bad=reps.filter(r=>r.state!=="OK");
   if(bad.length){
     const msg="DEBUG: "+bad.map(r=>r.tab+" "+r.state+(r.reason?" — "+r.reason:"")).join(" · ");
@@ -1293,32 +1418,33 @@ function normalizeYears(data){
     });
   });
 }
-function paint(data,at,live){
+function stampFor(tab,results){
+  const r=results[TABS.indexOf(tab)];
+  if(!r) return "";
+  if(r.live) return "Updated "+ago(r.at);
+  if(r.at) return "Saved copy from "+ago(r.at)+" — "+r.err;
+  return "Offline"+(r.err?" — "+r.err:"");
+}
+function paint(data,results){
   HEALTH=[];
   STATE.data=data;
+  results.forEach((r,i)=>{ if(!r.live) flag(TABS[i]+": "+r.err); });
   normalizeYears(data);
   renderInfo(data.info);
   renderAll();
-  const note=live?"Updated "+ago(at):"Saved copy from "+ago(at);
-  $("#lbSync").textContent=note; $("#schedSync").textContent=note;
+  $("#lbSync").textContent=stampFor("scores",results);
+  $("#schedSync").textContent=stampFor("schedule",results);
+  $("#calSync").textContent=stampFor("calcutta",results);
+  const nyEl=$("#nySync"); if(nyEl) nyEl.textContent=stampFor("field",results);
   tick();
+  renderHealth();
 }
 async function load(){
   if(DEBUG) return loadDebug();
-  if(!CONFIG.PUB_ID){
-    const c=readCache(); if(c) paint(c.data,c.at,false);
-    return;
-  }
-  try{
-    const got=await Promise.all(TABS.map(pull));
-    const data={}; TABS.forEach((t,i)=>data[t]=got[i]);
-    writeCache(data); paint(data,Date.now(),true);
-  }catch(e){
-    const c=readCache();
-    if(c) paint(c.data,c.at,false);
-    else { $("#lbSync").textContent="Offline — showing the printed card";
-           $("#schedSync").textContent="Offline — showing the printed card"; }
-  }
+  const got=await Promise.all(TABS.map(pull));
+  const data={}; TABS.forEach((t,i)=>data[t]=got[i].rows);
+  writeCache(got);
+  paint(data,got);
 }
 
 tick(); setInterval(tick,30000);
