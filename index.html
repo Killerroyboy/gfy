@@ -632,23 +632,16 @@
   <p class="foot-note" id="footNote">McCall, Idaho · Est. 2019</p>
 </footer>
 
+<script src="config.js"></script>
 <script>
-/* ============================================================
-   CONFIG
-   Tabs: Info, Course, Field, Scores, Schedule, Pairings, Ledger,
-         Champions, Shame
-   File > Share > Publish to web > Entire document > CSV
-   ============================================================ */
-const CONFIG = {
-  PUB_ID: "",
-  GID: { info:"0", course:"", field:"", scores:"", schedule:"", pairings:"",
-         calcutta:"", payout:"", ledger:"", champions:"", shame:"" },
-  SHEET_EDIT_URL: "",
-  DRIVE_FOLDER_ID: "",
-  FIRST_TEE: "2026-08-15T09:00:00-06:00",
-  CURRENCY: "$",
-  REFRESH_MS: 60000
-};
+/* CONFIG lives in config.js, loaded above. If that file failed to load,
+   fall back to an empty config — loudly — so the page still renders its
+   printed-card content instead of dying on a ReferenceError. */
+if (typeof CONFIG === "undefined") {
+  console.error("GFY: config.js failed to load — running with an empty config");
+  window.CONFIG = { PUB_ID:"", GID:{}, SHEET_EDIT_URL:"", DRIVE_FOLDER_ID:"",
+                    FIRST_TEE:"", CURRENCY:"$", REFRESH_MS:60000 };
+}
 
 const $ = s => document.querySelector(s);
 const CACHE_KEY = "gfy-cache-v5";
