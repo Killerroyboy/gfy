@@ -255,6 +255,19 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
     "calSync=" + calSyncText + " | nySync=" + nySyncText);
 }
 
+{
+  const domD5 = makeDom("?debug=1");
+  await until(() => domD5.window.document.getElementById("debugPanel"));
+  const dbgPanel = domD5.window.document.getElementById("debugPanel");
+  const dbgText = dbgPanel?.textContent || "";
+  const okCount = (dbgText.match(/\bOK\b/g) || []).length;
+  const hasFailed = /FAILED/i.test(dbgText);
+  domD5.window.close();
+  check("D5: debug happy path — 11 tabs OK",
+    okCount === 11 && !hasFailed,
+    "okCount=" + okCount + " hasFailed=" + hasFailed + " | " + dbgText.slice(0, 300));
+}
+
 /* ---------------------------------------------------------------------
    GROUP E — tabs/Home (Task 5)
    --------------------------------------------------------------------- */

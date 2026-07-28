@@ -1042,7 +1042,7 @@ function renderLeaderboard(){
     return `<button class="lb-row${lead}" type="button" data-player="${esc(p.key)}"
               aria-expanded="${open}" aria-controls="card-${id}">
         <span class="lb-pos">${pos??"—"}</span>
-        <span class="lb-name">${teamLabel(p.key).html}</span>
+        <span class="lb-name">${teamLabel(p.key, p.name).html}</span>
         <span class="lb-thru">${thruLabel(p)}</span>
         <span class="lb-num lb-r1">${p.roundTotals["1"]??"—"}</span>
         <span class="lb-num lb-r2">${p.roundTotals["2"]??"—"}</span>
@@ -1286,7 +1286,7 @@ function renderCalcutta(){
     tie.forEach(p=>{
       const lot=lots.find(l=>l.key===p.key);
       rowsOut.push({
-        place:ranked[i].pos, tied:tie.length>1, key:p.key,
+        place:ranked[i].pos, tied:tie.length>1, key:p.key, name:p.name,
         detail:(basis==="net"?"net ":"")+(p.rel!==null?toPar(p.rel):p.total)+" · "+thruLabel(p),
         owner:lot?lot.owner:"—",
         each, lot
@@ -1312,7 +1312,7 @@ function renderCalcutta(){
   $("#payBody").innerHTML=rowsOut.map(r=>`
     <div class="pay-row">
       <div class="pay-place">${r.place+ordSuffix(r.place)}${r.tied?"*":""}</div>
-      <div>${teamLabel(r.key).html}<span class="pay-sub">${esc(r.detail)}</span></div>
+      <div>${teamLabel(r.key, r.name).html}<span class="pay-sub">${esc(r.detail)}</span></div>
       <div class="auc-owner">${esc(r.owner)}</div>
       <div class="pay-cut">${r.ownerCut?money(r.ownerCut):"—"}</div>
     </div>`).join("");
@@ -1388,25 +1388,26 @@ function renderShame(){
         let out=0,inn=0,outN=0,inN=0;
         Object.entries(r.holes).forEach(([h,sc])=>{
           const par=pars[h]||0, d=sc-par;
-          if(!worst||d>worst.d) worst={key:p.key,d,sc,h:+h,par,rd};
+          if(!worst||d>worst.d) worst={key:p.key,name:p.name,d,sc,h:+h,par,rd};
           if(d<0) birdCount[p.key]++;
           if(+h<=9){out+=d;outN++;} else {inn+=d;inN++;}
         });
         if(outN===9&&inN===9){
           const swing=inn-out;
-          if(!collapse||swing>collapse.swing) collapse={key:p.key,rd,swing,out,inn};
+          if(!collapse||swing>collapse.swing) collapse={key:p.key,name:p.name,rd,swing,out,inn};
         }
       });
     });
-    if(worst) cards.push({award:"Worst team hole",who:teamLabel(worst.key).text,
+    if(worst) cards.push({award:"Worst team hole",who:teamLabel(worst.key, worst.name).text,
       detail:`${worst.sc} on the par-${worst.par} ${worst.h}${ordSuffix(worst.h)}, round ${worst.rd}. ${toPar(worst.d)}.`});
-    if(collapse&&collapse.swing>0) cards.push({award:"Back-nine collapse",who:teamLabel(collapse.key).text,
+    if(collapse&&collapse.swing>0) cards.push({award:"Back-nine collapse",who:teamLabel(collapse.key, collapse.name).text,
       detail:`Round ${collapse.rd}: out ${toPar(collapse.out)}, in ${toPar(collapse.inn)}. It got away.`});
     const teams=Object.keys(birdCount);
     if(teams.length){
-      const fewest=teams.reduce((a,b)=>birdCount[b]<birdCount[a]?b:a);
-      cards.push({award:"Fewest birdies",who:teamLabel(fewest).text,
-        detail:`${birdCount[fewest]} team birdies all weekend.`});
+      const fewestKey=teams.reduce((a,b)=>birdCount[b]<birdCount[a]?b:a);
+      const fewestPlayer=players.find(p=>p.key===fewestKey);
+      cards.push({award:"Fewest birdies",who:teamLabel(fewestKey, fewestPlayer?.name).text,
+        detail:`${birdCount[fewestKey]} team birdies all weekend.`});
     }
   }
 
@@ -1739,7 +1740,8 @@ function paintHome(){
   const nyHTML=ny.open
     ? `<a href="#nextyear">${esc(ny.paid.length)} of ${esc(ny.all.length)} paid for ${esc(ny.next)}</a>`
     : `<a href="#nextyear">Collection for ${esc(ny.next)} not open yet</a>`;
-  statusEl.innerHTML=nyHTML+` · <a href="#calcutta">${esc(money(outTotal))} Calcutta outstanding</a>`;
+  const calHTML=cal.lots.length>0 ? ` · <a href="#calcutta">${esc(money(outTotal))} Calcutta outstanding</a>` : "";
+  statusEl.innerHTML=nyHTML+calHTML;
 }
 function paint(data,results){
   HEALTH=[];
