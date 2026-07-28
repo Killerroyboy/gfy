@@ -108,11 +108,14 @@ about a minute later.
 ### 7. Check your work
 
 **Start with the health strip** — it's the first thing to check, no URL
-tricks required. A one-line strip near the top of the live site (collapsed
-by default; tap to expand) calls out anything the sheet gets wrong:
-unmatched score captains, duplicate captains, blank years, cells it can't
-parse as a price or handicap, and similar. If a team is missing from the
-board or a number looks off, check the strip before anything else.
+tricks required. A one-line strip fixed at the bottom-right of the live
+site (collapsed by default; tap to expand) calls out anything the sheet
+gets wrong: unmatched score captains, duplicate captains, blank years,
+cells it can't parse as a price or handicap, and similar. It only ever
+appears when there's something real to flag — an unconfigured or fully
+offline site shows no strip at all rather than a fabricated warning. If a
+team is missing from the board or a number looks off, check the strip
+before anything else.
 
 For the full picture, open the live site with `?debug=1` on the end of the
 address:
@@ -194,7 +197,7 @@ Run the test before deploying any change:
 
 ```
 npm install
-npm test        # must end "39/39 assertions passed"
+npm test        # the last line must read TALLY TOTAL with zero failures
 ```
 
 Local preview (config.js does not load right from a double-clicked file —

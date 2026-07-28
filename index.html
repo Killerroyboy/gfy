@@ -39,6 +39,7 @@
          letter-spacing:.2em;text-transform:uppercase;font-weight:400;padding:4px 0;
          border-bottom:1px solid transparent;transition:color .2s,border-color .2s}
   .nav a:hover,.nav a:focus-visible{color:var(--brass);border-bottom-color:var(--brass)}
+  .nav a.active{color:var(--brass);border-bottom-color:var(--brass)}
   .view[hidden]{display:none}
 
   .hero{padding:52px 0 70px;text-align:center}
@@ -77,6 +78,7 @@
   .band .lede{color:var(--sage);max-width:52ch;margin:0 0 30px}
   .sync{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--brass-dim);
         margin:14px 0 0;min-height:1em}
+  #homeStatus a,#nyBody a{color:var(--brass);text-decoration:none;border-bottom:1px solid var(--brass-dim)}
 
   .health-strip{position:fixed;right:10px;bottom:10px;z-index:999;
     max-width:min(92vw,420px);max-height:40vh;overflow:auto;
@@ -106,6 +108,8 @@
   .lb-row.lead .lb-pos,.lb-row.lead .lb-name{color:var(--brass)}
   .lb-pos{font-family:var(--display);font-size:1rem;color:var(--sage)}
   .lb-name{font-size:1rem}
+  .cap{font-weight:600}
+  .cap::after{content:"ᶜ";font-size:.6em;vertical-align:super;color:var(--brass)}
   .lb-thru{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
   .lb-num{text-align:right;font-variant-numeric:tabular-nums;font-size:.95rem;color:var(--sage)}
   .lb-tot{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
@@ -144,6 +148,8 @@
   .badge-rookie{color:var(--pine);background:var(--brass);border-color:var(--brass)}
   .rookie-strip{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);
                 padding:10px 6px;border-bottom:1px solid rgba(200,162,74,.13)}
+  .unassigned-lab{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--rust);
+                  padding:10px 6px 4px}
 
   /* pairings */
   .rounds{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(200,162,74,.22);
@@ -287,7 +293,7 @@
     .lb-r1,.lb-r2,.lb-total{display:none}
     .mn-head,.mn-row{grid-template-columns:1fr 4rem 5rem}
     .mn-won{display:none}
-    .auc-head,.auc-row{grid-template-columns:1fr 1fr 2rem 4.6rem}
+    .auc-head,.auc-row{grid-template-columns:1fr 1fr 2.4rem 4.6rem}
     .pay-head,.pay-row{grid-template-columns:3rem 1fr 1fr 4.8rem}
     .pay-row .pay-sub{display:none}
     .fld{grid-template-columns:1fr 5rem 4rem}
@@ -407,6 +413,8 @@
       <a class="btn" id="sheetBtn" href="#" target="_blank" rel="noopener" hidden>Enter scores</a>
     </div>
 
+    <div id="homeStatus"></div>
+
     <dl class="facts rise d4">
       <div class="fact"><dt>Dates</dt><dd data-info="dates">Aug 14–16</dd></div>
       <div class="fact"><dt>Course</dt><dd data-info="course">Meadow Creek</dd></div>
@@ -418,8 +426,6 @@
       <svg aria-hidden="true"><use href="#mark"/></svg>
       <p><strong>The Bird</strong>Held for one year. Displayed somewhere visible. Returned to the first tee, cleaned, or the holder plays from the back tees.</p>
     </div>
-
-    <div id="homeStatus"></div>
   </div>
 </section>
 
@@ -699,8 +705,10 @@ document.querySelector("#mark path").setAttribute("d",MARK_PATH);
    wait on the (parser-blocking) sheet config to load, and none of this
    touches CONFIG/INFO/fetch — it only toggles which .view section shows. */
 const VIEWS=["home","board","field","pairings","calcutta","money","schedule","rules","champions","shame","photos","nextyear"];
+const VIEW_ALIASES={leaderboard:"board",card:"schedule",grounds:"schedule"};
 function showView(name){
-  const v=VIEWS.includes(name)?name:"home";
+  const aliased=VIEW_ALIASES[name]||name;
+  const v=VIEWS.includes(aliased)?aliased:"home";
   document.querySelectorAll(".view").forEach(s=>{ s.hidden=s.dataset.view!==v; });
   document.querySelectorAll(".nav a").forEach(a=>a.classList.toggle("active",a.hash==="#"+v));
 }
@@ -749,11 +757,17 @@ function toObjects(rows){
 const FPRINT={info:["key"],course:["hole"],field:["player"],scores:["h1","r1"],
   schedule:["event"],pairings:["players"],calcutta:["price"],payout:["share"],
   ledger:["buyin"],champions:["champion"],shame:["award"]};
-const BACKOFF={};   // tab -> next-allowed epoch ms
+const BACKOFF={};      // tab -> next-allowed epoch ms
+const BACKOFF_N={};    // tab -> consecutive-failure count (drives the curve)
+const LAST_ERR={};     // tab -> last REAL error message (never the backoff sentinel)
+const BACKOFF_CURVE=[30000,120000,300000];   // 30s, 120s, 300s cap
 async function pull(tab){
   const gid=CONFIG.GID[tab];
   if(!CONFIG.PUB_ID||!gid) return {rows:null,at:0,live:false,err:null};
-  if(BACKOFF[tab]&&Date.now()<BACKOFF[tab]) return cacheTab(tab,"backoff");
+  // Skipping this cycle because we're still backed off is not itself a new
+  // error — reuse the last real failure reason so "backoff" never reaches
+  // a stamp or the health strip.
+  if(BACKOFF[tab]&&Date.now()<BACKOFF[tab]) return cacheTab(tab,LAST_ERR[tab]||null);
   try{
     const res=await fetch(`https://docs.google.com/spreadsheets/d/e/${CONFIG.PUB_ID}/pub?gid=${gid}&single=true&output=csv`);
     if(!res.ok) throw new Error("HTTP "+res.status);
@@ -763,11 +777,14 @@ async function pull(tab){
     const heads=grid.length?grid[0].map(h=>h.trim().toLowerCase()):[];
     if(!FPRINT[tab].some(h=>heads.includes(h)))
       throw new Error(`headers don't look like the ${tab} tab (gid swapped?)`);
-    BACKOFF[tab]=0;
+    BACKOFF[tab]=0; BACKOFF_N[tab]=0; LAST_ERR[tab]=null;
     return {rows:toObjects(grid),at:Date.now(),live:true,err:null};
   }catch(e){
-    BACKOFF[tab]=Date.now()+Math.min(300000,(BACKOFF[tab]?120000:30000));
-    return cacheTab(tab,(e&&e.message)||String(e));
+    const msg=(e&&e.message)||String(e);
+    LAST_ERR[tab]=msg;
+    BACKOFF_N[tab]=(BACKOFF_N[tab]||0)+1;
+    BACKOFF[tab]=Date.now()+BACKOFF_CURVE[Math.min(BACKOFF_N[tab]-1,BACKOFF_CURVE.length-1)];
+    return cacheTab(tab,msg);
   }
 }
 function cacheTab(tab,err){
@@ -830,9 +847,9 @@ function rosterMap(){
   m.forEach((t,k)=>{ if(!t.captain) flag(`team "${k}" has no captain row (player must equal team)`); });
   return m;
 }
-function teamLabel(key){
+function teamLabel(key,rawFallback){
   const t=rosterMap().get(key);
-  if(!t||!t.captain){ const raw=key; return {html:esc(raw),text:raw}; }
+  if(!t||!t.captain){ const raw=rawFallback!==undefined&&rawFallback!==""?rawFallback:key; return {html:esc(raw),text:raw}; }
   const names=[t.captain,...t.members];
   return {
     html:names.map((n,i)=>`<span${i===0?' class="cap"':''}>${esc(n)}</span>`).join(" &amp; "),
@@ -876,15 +893,28 @@ function buildPlayers(){
             flag(`conflicting entries for ${byKey[k].name} R${rd} h${h} (${ex.holes[h]} vs ${holes[h]}) — using ${holes[h]}`);
           ex.holes[h]=holes[h];
         });
-      } else byKey[k].rounds[rd]={holes};
+      } else {
+        if(ex&&ex.total!==undefined)
+          flag(`round ${rd} total for ${byKey[k].name} replaced by hole-by-hole entry`);
+        byKey[k].rounds[rd]={holes};
+      }
     } else {
       const r1=posInt(s.r1), r2=posInt(s.r2);
-      if(r1!==null){ byKey[k].rounds["1"]={total:r1}; byKey[k].fromTotals=true; }
-      if(r2!==null){ byKey[k].rounds["2"]={total:r2}; byKey[k].fromTotals=true; }
+      if(r1!==null){
+        const ex1=byKey[k].rounds["1"];
+        if(ex1&&ex1.holes) flag(`round 1 total for ${byKey[k].name} ignored — hole-by-hole entry exists`);
+        else { byKey[k].rounds["1"]={total:r1}; byKey[k].fromTotals=true; }
+      }
+      if(r2!==null){
+        const ex2=byKey[k].rounds["2"];
+        if(ex2&&ex2.holes) flag(`round 2 total for ${byKey[k].name} ignored — hole-by-hole entry exists`);
+        else { byKey[k].rounds["2"]={total:r2}; byKey[k].fromTotals=true; }
+      }
     }
   });
   const hcp={}; (STATE.data.field||[]).forEach(f=>{ if(f.player) hcp[nkey(f.player)]=num(f.handicap); });
   return Object.values(byKey).map(p=>{
+    p.fromTotals=Object.values(p.rounds).some(r=>!r.holes);
     let played=0, strokes=0, parPlayed=0;
     const roundTotals={};
     Object.entries(p.rounds).forEach(([rd,r])=>{
@@ -1079,14 +1109,26 @@ function renderField(){
       // Fallback || relies on NaN being falsy (Infinity-Infinity=NaN); never change to ??
       .sort((a,b)=>(yearOf(a.t.since[a.t.captain])-yearOf(b.t.since[b.t.captain]))||(a.i-b.i));
 
+    const renderedKeys=new Set();
     bodyHTML=ordered.map(({t})=>{
       const members=[...t.members];
       const mi=new Map(members.map((m,i)=>[m,i]));
       members.sort((a,b)=>(yearOf(t.since[a])-yearOf(t.since[b]))||(mi.get(a)-mi.get(b)));
       const names=[t.captain,...members];
+      names.forEach(n=>renderedKeys.add(nkey(n)));
       const rowsHTML=names.map(n=>{ const r=byPlayer[nkey(n)]; return r?rowHTML(r):""; }).join("");
       return `<div class="team-group">${rowsHTML}</div>`;
     }).join("");
+
+    // Nothing with a player name may vanish: a blank team, or a team value
+    // that matches no captain, must not silently drop the row. Collect
+    // whatever wasn't rendered above into a visible Unassigned group.
+    const unassigned=rows.filter(r=>!renderedKeys.has(nkey(r.player)));
+    if(unassigned.length){
+      unassigned.forEach(r=>flag('player "'+r.player+'" has no team — listed under Unassigned'));
+      bodyHTML+=`<div class="team-group"><div class="unassigned-lab">Unassigned</div>`+
+        unassigned.map(rowHTML).join("")+`</div>`;
+    }
   }
 
   const stripHTML=rookies.length
@@ -1130,10 +1172,15 @@ function renderPairings(){
 
 function calcuttaModel(year=STATE.year){
   const rows=forYear(STATE.data.calcutta,year).filter(r=>(r.team||r.player));
+  const roster=rosterMap();
   const lots=rows.map(r=>{
-    const team=r.team||r.player, raw=num(r.price);
+    // `team` keeps the sheet's RAW casing/spelling for board display — the
+    // key is the only thing that gets lowercased for matching, so an
+    // unmatched lot never regresses to showing its lowercased nkey.
+    const team=r.team||r.player, raw=num(r.price), key=nkey(team);
     if(raw<0) flag('negative price on lot "'+team+'"');
-    return { key:nkey(team), team, owner:(r.owner||"").trim()||"—",
+    if(roster.size&&!roster.has(key)) flag('calcutta lot for unknown team "'+team+'"');
+    return { key, team, owner:(r.owner||"").trim()||"—",
       price: raw<0 ? 0 : Math.round(raw), collected:yes(r.collected) };
   }).sort((a,b)=>b.price-a.price);
   const pot=lots.reduce((s,l)=>s+l.price,0);
@@ -1198,8 +1245,8 @@ function renderCalcutta(){
 
   $("#aucBody").innerHTML=lots.map((l,i)=>`
     <div class="auc-row${i===0?" top":""}">
-      <div>${teamLabel(l.key).html}</div>
-      <div class="auc-owner">${esc(l.owner)}</div>
+      <div>${teamLabel(l.key,l.team).html}</div>
+      <div class="auc-owner">${esc(l.owner==="—"?"Unassigned":l.owner)}</div>
       <div class="auc-back">${l.collected?"✓":"—"}</div>
       <div class="auc-price">${money(l.price)}</div>
     </div>`).join("");
@@ -1270,7 +1317,8 @@ function renderCalcutta(){
 
   const done=ranked.every(p=>p.played>=36);
   $("#calBasis").textContent=(done?"Final":"Projected")+" · paid on "+basis+
-    (rowsOut.some(r=>r.tied)?" · asterisk marks a tie, shares split":"");
+    (rowsOut.some(r=>r.tied)?" · asterisk marks a tie, shares split":"")+
+    (rowsOut.some(r=>!r.lot)?" · unsold lots' shares stay in the pot":"");
 }
 
 function renderNextYear(){
@@ -1480,6 +1528,10 @@ function tick(){
   const el=$("#countdown");
   const t=new Date(CONFIG.FIRST_TEE).getTime();
   if(isNaN(t)){ el.innerHTML=""; return; }
+  // Same post-event guard as paintHome: once we're more than 3 days past
+  // first tee the status strip owns Home, and this must keep #countdown
+  // empty on every tick — not just the first time paintHome clears it.
+  if(Date.now()>t+3*86400000){ el.innerHTML=""; return; }
   const diff=t-Date.now();
   if(diff<=0){
     el.innerHTML = diff>-3*86400000 ? '<p class="cd-msg">In play</p>' : '<p class="cd-msg">See you next year</p>';
@@ -1665,7 +1717,8 @@ function stampFor(tab,results){
   if(!r) return "";
   if(r.live) return "Updated "+ago(r.at);
   if(r.at) return "Saved copy from "+ago(r.at)+" — "+r.err;
-  return "Offline"+(r.err?" — "+r.err:"");
+  if(!r.err) return "";
+  return "Offline — "+r.err;
 }
 /* Date-aware Home: pre-event shows the countdown as today; once we're
    more than 3 days past first tee, the countdown gives way to a status
@@ -1680,15 +1733,16 @@ function paintHome(){
   if(!post){ statusEl.innerHTML=""; return; }
   const cd=$("#countdown"); if(cd) cd.innerHTML="";
   const ny=nextYearModel(), cal=calcuttaModel(activeSeason());
-  const paid=ny.open?ny.paid.length:0, shown=ny.open?ny.all.length:0;
   const outTotal=cal.outstanding.reduce((s,o)=>s+o.total,0);
-  statusEl.innerHTML=`<a href="#nextyear">${esc(paid)} of ${esc(shown)} paid for ${esc(ny.next)}</a> · `+
-    `<a href="#calcutta">${esc(money(outTotal))} Calcutta outstanding</a>`;
+  const nyHTML=ny.open
+    ? `<a href="#nextyear">${esc(ny.paid.length)} of ${esc(ny.all.length)} paid for ${esc(ny.next)}</a>`
+    : `<a href="#nextyear">Collection for ${esc(ny.next)} not open yet</a>`;
+  statusEl.innerHTML=nyHTML+` · <a href="#calcutta">${esc(money(outTotal))} Calcutta outstanding</a>`;
 }
 function paint(data,results){
   HEALTH=[];
   STATE.data=data;
-  results.forEach((r,i)=>{ if(!r.live) flag(TABS[i]+": "+r.err); });
+  results.forEach((r,i)=>{ if(!r.live&&r.err) flag(TABS[i]+": "+r.err); });
   normalizeYears(data);
   renderInfo(data.info);
   renderAll();

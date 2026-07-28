@@ -251,7 +251,7 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
   const calSyncText = doc.querySelector("#calSync")?.textContent || "";
   const nySyncText = doc.querySelector("#nySync")?.textContent || "";
   check("D4: calcutta and next-year sections have their own 'Updated' freshness stamps",
-    calSyncText.trim().length > 0 && nySyncText.trim().length > 0,
+    /^Updated/.test(calSyncText.trim()) && /^Updated/.test(nySyncText.trim()),
     "calSync=" + calSyncText + " | nySync=" + nySyncText);
 }
 
@@ -469,13 +469,75 @@ check("H5: deposit amount and payment handle rendered",
 }
 
 /* ---------------------------------------------------------------------
-   Tally — per group, then total. Later tasks grep these lines.
+   GROUP Z — guardrails (Z0) + unconfigured deploy (Z1-Z4, final review)
    --------------------------------------------------------------------- */
+check("Z0: zero page errors in plain mode", dom.pageErrors.length === 0,
+  JSON.stringify(dom.pageErrors));
+
+{
+  const cacheRaw = dom.window.localStorage.getItem("gfy-cache-v2");
+  let cacheOK = false, cacheDetail = cacheRaw;
+  try {
+    const parsed = JSON.parse(cacheRaw);
+    cacheOK = !!(parsed && parsed.tabs && parsed.tabs.scores
+      && Array.isArray(parsed.tabs.scores.rows) && parsed.tabs.scores.rows.length > 0);
+  } catch (e) { cacheDetail = "parse error: " + e.message + " raw=" + cacheRaw; }
+  check("Z0: localStorage cache retains scores rows after a live load", cacheOK, cacheDetail);
+}
+
 dom.window.close();
 
+// Z1-Z4 — the state of live main: real config.js (empty PUB_ID/GID), every
+// fetch rejecting. No fabricated warnings, no fabricated stamps — just the
+// printed-card fallback content and a running countdown.
+{
+  const realConfigJS = readFileSync(path.join(ROOT, "config.js"), "utf8");
+  const rejectAllFetch = () => Promise.reject(new Error("network unavailable in test"));
+  const errorsZ = [];
+  const vcZ = new VirtualConsole();
+  vcZ.on("jsdomError", e => { if (!envNoise.test(e.message)) errorsZ.push(e.message + (e.cause ? " :: " + e.cause : "")); });
+  vcZ.on("error", (...a) => errorsZ.push("console.error: " + a.join(" ")));
+  const domZ = new JSDOM(html, {
+    runScripts: "dangerously", url: "http://localhost/", virtualConsole: vcZ,
+    beforeParse(window) { window.fetch = rejectAllFetch; },
+    resources: { interceptors: [requestInterceptor((request) => {
+      if (request.url.endsWith("/config.js"))
+        return new Response(realConfigJS, { headers: { "Content-Type": "application/javascript" } });
+      return new Response("", { headers: { "Content-Type": "text/css" } });
+    })] },
+  });
+  domZ.pageErrors = errorsZ;
+  await settle();
+  const zdoc = domZ.window.document;
+
+  const lbEmptyText = zdoc.querySelector("#lbBody .lb-empty")?.textContent || "";
+  check("Z1: unconfigured deploy — fallback board content renders ('No cards posted yet')",
+    /No cards posted yet/.test(lbEmptyText), "lbBody=" + lbEmptyText + " pageErrors=" + JSON.stringify(domZ.pageErrors));
+
+  const cdUnitsZ = zdoc.querySelectorAll("#countdown .cd-unit").length;
+  check("Z2: unconfigured deploy — countdown still renders off config.js's default FIRST_TEE",
+    cdUnitsZ > 0, "cdUnits=" + cdUnitsZ);
+
+  const healthElZ = zdoc.querySelector("#healthStrip");
+  const healthHasContent = !!healthElZ && !healthElZ.hidden && (healthElZ.textContent || "").trim().length > 0;
+  check("Z3: unconfigured deploy — no #healthStrip with content (no fabricated warnings)",
+    !healthHasContent,
+    "present=" + !!healthElZ + " hidden=" + (healthElZ ? healthElZ.hidden : "n/a") + " text=" + (healthElZ?.textContent || ""));
+
+  const stampIdsZ = ["lbSync", "schedSync", "calSync", "nySync"];
+  const stampsZ = stampIdsZ.map(id => (zdoc.querySelector("#" + id)?.textContent || "").trim());
+  check("Z4: unconfigured deploy — all four freshness stamps are empty (no fabricated Offline text)",
+    stampsZ.every(s => s === ""), JSON.stringify(stampsZ));
+
+  domZ.window.close();
+}
+
+/* ---------------------------------------------------------------------
+   Tally — per group, then total. Later tasks grep these lines.
+   --------------------------------------------------------------------- */
 const groupTally = {};
 results.forEach(([name, ok]) => {
-  const m = name.match(/^([A-I])\d+:/);
+  const m = name.match(/^([A-IZ])\d+:/);
   if (!m) return;
   const g = m[1];
   groupTally[g] = groupTally[g] || { pass: 0, total: 0 };
@@ -484,7 +546,7 @@ results.forEach(([name, ok]) => {
 });
 
 console.log("");
-["A", "B", "C", "D", "E", "F", "G", "H", "I"].forEach(g => {
+["A", "B", "C", "D", "E", "F", "G", "H", "I", "Z"].forEach(g => {
   if (groupTally[g]) console.log(`TALLY ${g} ${groupTally[g].pass}/${groupTally[g].total}`);
 });
 const failed = results.filter(r => !r[1]).length;
