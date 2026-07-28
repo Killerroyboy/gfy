@@ -312,16 +312,19 @@
          MARK_PATH is the single authority for the fist outline, shared with makeIcon(). -->
     <path fill="currentColor"/>
     <g fill="none" stroke="var(--pine)" stroke-linecap="round" stroke-linejoin="round">
-      <!-- fine (first 4): nail, DIP crease pair, PIP crease pair, folded-finger PIP
-           ridges. makeIcon() drops exactly these below 100px. -->
-      <path d="M 92 30 C 90 41, 94 49, 100 49 C 106 49, 110 41, 108 30" stroke-width="5"/>
-      <path d="M 85 57 C 92 62, 110 62, 115 57 M 91 66 C 96 69, 106 69, 110 66" stroke-width="5"/>
-      <path d="M 84 85 C 91 90, 110 90, 117 85 M 90 94 C 95 97, 108 97, 112 94" stroke-width="5"/>
-      <path d="M 128 147 C 134 142, 145 142, 151 147 M 160 159 C 165 155, 171 156, 174 160" stroke-width="5"/>
-      <!-- structural: the three folded-finger separations, and the thumb crossing
-           over the folded index. These survive at favicon size. -->
-      <path d="M 80 133 C 80 137, 80 140, 79 143 M 122 133 C 124 146, 124 158, 123 170 M 156 143 C 158 153, 158 163, 156 173" stroke-width="6"/>
-      <path d="M 36 147 C 44 141, 53 138, 62 138 C 72 138, 78 145, 76 156" stroke-width="8"/>
+      <!-- fine (first 5): fingernail, the three DIP creases, the PIP "eye" at the
+           finger's base, the ring/pinky/index knuckle folds, the thumbnail.
+           makeIcon() drops exactly these below 100px. -->
+      <path d="M 98 20 C 104 16, 117 16, 122 20 C 122 29, 119 46, 110 46 C 101 46, 98 29, 98 20 Z" stroke-width="5"/>
+      <path d="M 94 58 C 101 64, 116 64, 123 58 M 93 66 C 100 72, 115 72, 122 66 M 96 74 C 102 79, 114 79, 119 74" stroke-width="5"/>
+      <path d="M 88 128 C 95 120, 114 120, 120 126 M 88 132 C 95 140, 113 140, 119 132 M 92 141 C 98 148, 110 148, 115 141" stroke-width="5"/>
+      <path d="M 126 149 C 132 157, 140 158, 146 153 M 156 152 C 163 159, 173 160, 180 154 M 42 135 C 50 143, 60 144, 66 138 M 44 144 C 51 150, 59 151, 64 146" stroke-width="5"/>
+      <path d="M 47 100 C 52 97, 62 96, 67 98 C 71 102, 72 108, 71 113 C 65 115, 54 115, 49 113 C 46 110, 45 104, 47 100 Z" stroke-width="5"/>
+      <!-- structural: the extended finger's two column edges carried down through the
+           fist, the ring/pinky separation, and the thumb's fold crease. These are what
+           still carry the gesture at favicon size. -->
+      <path d="M 79 121 C 78 140, 77 164, 74 194 C 72 212, 69 226, 68 234 M 125 121 C 124 140, 123 170, 120 200 C 118 218, 117 232, 116 238 M 152 138 C 153 157, 155 178, 156 199" stroke-width="5"/>
+      <path d="M 74 118 C 56 119, 41 123, 34 133 C 30 142, 29 151, 29 158" stroke-width="6"/>
     </g>
   </symbol>
 </svg>
@@ -677,14 +680,18 @@
    makeIcon()'s Path2D further down, so the nav mark, the hero crest, the footer
    mark and the PNG favicon/app icon can never drift apart.
 
-   Candidate D from tools/crest-variants.html: an anatomical hand rather than a
-   stylized glove. Built from landmarks — middle finger rising out of the notch
-   between the index and ring knuckles; four MCP bumps on a shallow arc descending
-   index -> ring -> pinky; three folded fingers as separate lobes; a thenar bulge
-   on the radial edge; and a wrist that tapers and runs off the bottom of the
-   viewBox (the frame cut is what stops it reading as a floating mitten).
+   Candidate F from tools/crest-variants.html: the gesture in Riley's reference photo,
+   redrawn original from measured landmarks (nothing traced or auto-vectorised).
+   The read, left to right: a thumb folded across the palm as a wedge on the radial
+   side, its squared nail at the tip and a fold crease running down to the web pinch;
+   the folded index below it; the extended middle finger rising centre-left, whose
+   *proximal column* keeps going down through the fist (its two edges are structural
+   strokes) and bottoms out in the pendant heel lobe at the frame's edge; then the
+   ring and pinky as two rolls on the ulnar side. The fist is widest low and to the
+   right, with a flat bottom shelf on the left — that asymmetry, plus the lobe
+   touching y=260, is what keeps it from reading as a floating mitten.
    Detail strokes live alongside it in the symbol and in makeIcon's stroke list. */
-const MARK_PATH="M 80 130 C 80 112, 82 88, 84 62 C 84 40, 89 26, 100 26 C 111 26, 116 40, 116 62 C 118 88, 120 112, 121 130 C 126 121, 132 117, 139 117 C 147 117, 152 126, 155 141 C 158 132, 164 128, 169 131 C 175 135, 179 143, 179 155 C 180 174, 178 191, 172 204 C 166 217, 157 222, 151 229 C 146 235, 144 246, 143 260 L 62 260 C 61 246, 60 234, 65 225 C 70 215, 56 212, 45 203 C 32 193, 26 187, 26 174 C 26 161, 29 152, 35 145 C 42 138, 45 132, 49 126 C 55 116, 61 110, 68 111 C 73 112, 78 119, 80 130 Z";
+const MARK_PATH="M 91 17 C 92 9, 100 3, 110 3 C 120 3, 128 9, 129 19 C 130 30, 129 40, 128 52 C 127 70, 126 90, 125 104 C 125 112, 125 117, 125 121 C 136 123, 145 129, 152 138 C 155 131, 161 128, 168 129 C 175 131, 181 138, 184 148 C 188 158, 190 170, 190 183 C 191 195, 190 206, 186 216 C 181 227, 172 235, 158 240 C 146 245, 134 247, 122 250 C 113 254, 104 257, 95 256 C 87 255, 79 249, 72 242 C 60 241, 48 240, 36 236 C 28 232, 24 224, 24 214 C 24 203, 26 192, 28 183 C 30 178, 30 172, 27 166 C 21 157, 16 146, 13 133 C 10 123, 8 114, 9 105 C 10 99, 16 95, 24 93 C 36 91, 49 91, 60 93 C 68 95, 74 99, 74 107 C 74 112, 73 117, 79 121 C 81 108, 83 95, 84 87 C 86 63, 88 40, 91 17 Z";
 document.querySelector("#mark path").setAttribute("d",MARK_PATH);
 
 /* ---------- hash router ----------
@@ -1522,19 +1529,20 @@ function makeIcon(size){
   x.fillStyle="#C8A24A";
   x.fill(new Path2D(MARK_PATH));            /* same silhouette as <symbol id="mark"> */
   x.strokeStyle="#0E2019"; x.lineCap="round"; x.lineJoin="round";
-  /* Same six strokes as <symbol id="mark">, same widths, same order: the first
-     four are the fine ones (nail, DIP pair, PIP pair, folded-finger PIP ridges),
-     the last two are structural (finger separations, thumb). */
+  /* Same seven strokes as <symbol id="mark">, same widths, same order: the first
+     five are the fine ones (nail, DIP creases, PIP eye, knuckle folds, thumbnail),
+     the last two are structural (finger column + ring/pinky split, thumb crease). */
   const details=[
-   ["M 92 30 C 90 41, 94 49, 100 49 C 106 49, 110 41, 108 30",5],
-   ["M 85 57 C 92 62, 110 62, 115 57 M 91 66 C 96 69, 106 69, 110 66",5],
-   ["M 84 85 C 91 90, 110 90, 117 85 M 90 94 C 95 97, 108 97, 112 94",5],
-   ["M 128 147 C 134 142, 145 142, 151 147 M 160 159 C 165 155, 171 156, 174 160",5],
-   ["M 80 133 C 80 137, 80 140, 79 143 M 122 133 C 124 146, 124 158, 123 170 M 156 143 C 158 153, 158 163, 156 173",6],
-   ["M 36 147 C 44 141, 53 138, 62 138 C 72 138, 78 145, 76 156",8]];
+   ["M 98 20 C 104 16, 117 16, 122 20 C 122 29, 119 46, 110 46 C 101 46, 98 29, 98 20 Z",5],
+   ["M 94 58 C 101 64, 116 64, 123 58 M 93 66 C 100 72, 115 72, 122 66 M 96 74 C 102 79, 114 79, 119 74",5],
+   ["M 88 128 C 95 120, 114 120, 120 126 M 88 132 C 95 140, 113 140, 119 132 M 92 141 C 98 148, 110 148, 115 141",5],
+   ["M 126 149 C 132 157, 140 158, 146 153 M 156 152 C 163 159, 173 160, 180 154 M 42 135 C 50 143, 60 144, 66 138 M 44 144 C 51 150, 59 151, 64 146",5],
+   ["M 47 100 C 52 97, 62 96, 67 98 C 71 102, 72 108, 71 113 C 65 115, 54 115, 49 113 C 46 110, 45 104, 47 100 Z",5],
+   ["M 79 121 C 78 140, 77 164, 74 194 C 72 212, 69 226, 68 234 M 125 121 C 124 140, 123 170, 120 200 C 118 218, 117 232, 116 238 M 152 138 C 153 157, 155 178, 156 199",5],
+   ["M 74 118 C 56 119, 41 123, 34 133 C 30 142, 29 151, 29 158",6]];
   /* Below 100px the nail and joint creases smear into noise; drop them and keep
-     only the finger separations and the thumb, which carry the gesture. */
-  (size<100 ? details.slice(4) : details)
+     only the finger column, the ring/pinky split and the thumb crease. */
+  (size<100 ? details.slice(5) : details)
     .forEach(([d,w])=>{ x.lineWidth=w; x.stroke(new Path2D(d)); });
   x.restore();
   return c.toDataURL("image/png");

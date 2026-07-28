@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>GFY crest — realistic hand (D / E) · previous round (A / B / C)</title>
+<title>GFY crest — F, from your reference · previous rounds (D / E · A / B / C)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -21,8 +21,8 @@
             border-top:1px solid #24402F;padding-top:18px}
   .secthead h2{font-family:var(--display);font-weight:400;font-size:1.25rem;margin:0}
   .secthead p{color:var(--sage);font-size:.78rem;margin:2px 0 0}
-  .cols{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;
-        max-width:1240px;margin:0 auto;padding:18px 24px 20px}
+  .cols{display:grid;grid-template-columns:1fr;gap:20px;
+        max-width:660px;margin:0 auto;padding:18px 24px 20px}
   .col{background:var(--pine-2);border:1px solid #24402F;padding:22px 18px 26px;text-align:center}
   .col.rec{border-color:var(--brass);box-shadow:0 0 0 1px rgba(200,162,74,.35)}
   .vname{font-family:var(--display);font-size:1.4rem;margin:0}
@@ -34,7 +34,7 @@
   .lab{font-size:.58rem;letter-spacing:.24em;text-transform:uppercase;color:var(--brass-dim);
        margin:16px 0 8px}
   .row{display:flex;gap:20px;align-items:flex-end;justify-content:center}
-  .fav{width:64px;height:64px;display:block}
+  .fav{display:block}
   .bare{height:110px;width:auto;display:block;color:var(--brass)}
   .navchip{display:flex;align-items:center;gap:9px;background:rgba(10,23,18,.9);
            border:1px solid #24402F;padding:7px 11px}
@@ -43,8 +43,8 @@
   .caption{font-size:.55rem;color:var(--brass-dim);letter-spacing:.14em;
            text-transform:uppercase;margin:6px 0 0}
   /* previous round — deliberately small, for reference only */
-  .prev{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;
-        max-width:720px;margin:0 auto;padding:6px 24px 30px}
+  .prev{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;
+        max-width:1100px;margin:0 auto;padding:6px 24px 30px}
   .pcol{background:var(--pine-2);border:1px solid #1D3327;padding:12px 10px 14px;text-align:center;
         opacity:.72}
   .pcol p{margin:0;font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage)}
@@ -56,24 +56,27 @@
 <body>
 
 <header>
-  <h1>GFY crest — realistic hand</h1>
+  <h1>GFY crest — drawn from your reference</h1>
   <p class="sub">200 × 260 viewBox · brass on pine · judge at 330px and at 64px</p>
 </header>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" id="symbols"></svg>
 
 <div class="secthead">
-  <h2>This round — D and E (the live choices)</h2>
-  <p>Anatomical build: wrist entering the frame, four MCP knuckle bumps on a shallow arc,
-     three folded fingers as separate columns with PIP ridges, thumb crossing over the folded
-     index with a thenar bulge, nail + paired dorsal joint creases on the extended finger.</p>
+  <h2>This round — F, from your reference</h2>
+  <p>Same pose and structure as the image you sent, redrawn original in the crest's own style
+     (brass fill, pine creases): middle finger rising centre-left with a rounded-trapezoid nail
+     and paired joint creases; its proximal column carried down through the fist; the thumb
+     folded across as a wedge on the left with a squared nail and a fold crease; ring and pinky
+     as two rolls on the right; broad fist with a flat bottom shelf and one pendant heel lobe.</p>
 </div>
 
 <div class="cols" id="cols"></div>
 
 <div class="secthead">
-  <h2>Previous round — A / B / C (stylized, superseded)</h2>
-  <p>Kept for reference only. Riley's verdict on C: “I like C but it's still not realistic enough.”</p>
+  <h2>Previous rounds — D / E (anatomical, rejected) · A / B / C (stylized, rejected)</h2>
+  <p>Kept for reference only. Round 1 verdict: “I like C but it's still not realistic enough.”
+     Round 2 (D / E) was rejected too — it drew the back of the hand, not this gesture.</p>
 </div>
 
 <div class="prev" id="prev"></div>
@@ -99,37 +102,44 @@
    same index. */
 const VARIANTS = [
   {
-    id:"D", name:"Candidate D", tag:"Recommended · neutral upright",
-    desc:"Anatomical, straight up. Wrist runs off the bottom edge; thenar bulge on the radial side; four knuckle bumps (index high, pinky low); thumb crosses over the folded index with its tip clearly on top of it; nail plus two paired dorsal joint creases on a gently tapering finger.",
-    fine:4,
-    path:"M 80 130 C 80 112, 82 88, 84 62 C 84 40, 89 26, 100 26 C 111 26, 116 40, 116 62 C 118 88, 120 112, 121 130 C 126 121, 132 117, 139 117 C 147 117, 152 126, 155 141 C 158 132, 164 128, 169 131 C 175 135, 179 143, 179 155 C 180 174, 178 191, 172 204 C 166 217, 157 222, 151 229 C 146 235, 144 246, 143 260 L 62 260 C 61 246, 60 234, 65 225 C 70 215, 56 212, 45 203 C 32 193, 26 187, 26 174 C 26 161, 29 152, 35 145 C 42 138, 45 132, 49 126 C 55 116, 61 110, 68 111 C 73 112, 78 119, 80 130 Z",
+    id:"F", name:"Candidate F", tag:"From your reference",
+    desc:"Palm-side gesture, drawn from the image you sent — same pose, same masses, original path. Middle finger rising centre-left with a rounded-trapezoid nail and three joint creases, its proximal column carried down through the fist; thumb folded across on the left as a wedge with a squared nail and a fold crease; ring and pinky as two rolls on the right; broad fist with a flat bottom shelf and one pendant heel lobe reaching the frame.",
+    fine:5,
+    path:"M 91 17 C 92 9, 100 3, 110 3 C 120 3, 128 9, 129 19 C 130 30, 129 40, 128 52 C 127 70, 126 90, 125 104 C 125 112, 125 117, 125 121 C 136 123, 145 129, 152 138 C 155 131, 161 128, 168 129 C 175 131, 181 138, 184 148 C 188 158, 190 170, 190 183 C 191 195, 190 206, 186 216 C 181 227, 172 235, 158 240 C 146 245, 134 247, 122 250 C 113 254, 104 257, 95 256 C 87 255, 79 249, 72 242 C 60 241, 48 240, 36 236 C 28 232, 24 224, 24 214 C 24 203, 26 192, 28 183 C 30 178, 30 172, 27 166 C 21 157, 16 146, 13 133 C 10 123, 8 114, 9 105 C 10 99, 16 95, 24 93 C 36 91, 49 91, 60 93 C 68 95, 74 99, 74 107 C 74 112, 73 117, 79 121 C 81 108, 83 95, 84 87 C 86 63, 88 40, 91 17 Z",
     details:[
-      ["M 92 30 C 90 41, 94 49, 100 49 C 106 49, 110 41, 108 30", 5],
-      ["M 85 57 C 92 62, 110 62, 115 57 M 91 66 C 96 69, 106 69, 110 66", 5],
-      ["M 84 85 C 91 90, 110 90, 117 85 M 90 94 C 95 97, 108 97, 112 94", 5],
-      ["M 128 147 C 134 142, 145 142, 151 147 M 160 159 C 165 155, 171 156, 174 160", 5],
-      ["M 80 133 C 80 137, 80 140, 79 143 M 122 133 C 124 146, 124 158, 123 170 M 156 143 C 158 153, 158 163, 156 173", 6],
-      ["M 36 147 C 44 141, 53 138, 62 138 C 72 138, 78 145, 76 156", 8]
-    ]
-  },
-  {
-    id:"E", name:"Candidate E", tag:"Ulnar tilt · more attitude",
-    desc:"Same anatomy, thrown. The finger leans ~9° toward the pinky side (ulnar deviation), the knuckle arc drops harder to the right, the wrist enters the frame at a slight angle and the whole fist sits a touch lower and heavier.",
-    fine:4,
-    path:"M 81 131 C 83 113, 88 88, 94 64 C 98 42, 106 27, 116 29 C 126 31, 129 46, 126 66 C 123 90, 122 112, 122 131 C 127 122, 133 118, 140 118 C 148 118, 153 127, 156 142 C 159 133, 165 129, 170 132 C 176 136, 180 144, 180 156 C 181 175, 178 192, 172 205 C 166 218, 157 223, 151 230 C 146 236, 143 247, 142 260 L 58 260 C 57 246, 56 233, 61 224 C 66 214, 52 211, 42 202 C 30 192, 23 186, 23 173 C 23 160, 26 151, 32 144 C 39 137, 43 131, 47 125 C 53 114, 59 108, 66 109 C 72 110, 77 117, 81 131 Z",
-    details:[
-      ["M 109 37 C 107 47, 111 55, 117 55 C 123 55, 126 46, 123 36", 5],
-      ["M 96 64 C 102 69, 118 69, 124 63 M 102 73 C 107 76, 116 76, 120 73", 5],
-      ["M 89 93 C 96 98, 114 98, 121 92 M 95 102 C 100 105, 112 105, 116 102", 5],
-      ["M 129 148 C 135 143, 146 143, 152 148 M 161 160 C 166 156, 172 157, 175 161", 5],
-      ["M 81 134 C 81 138, 81 141, 80 144 M 123 134 C 125 147, 125 159, 124 171 M 157 144 C 159 154, 159 164, 157 174", 6],
-      ["M 33 146 C 41 140, 51 137, 60 137 C 70 137, 76 144, 74 155", 8]
+      ["M 98 20 C 104 16, 117 16, 122 20 C 122 29, 119 46, 110 46 C 101 46, 98 29, 98 20 Z", 5],
+      ["M 94 58 C 101 64, 116 64, 123 58 M 93 66 C 100 72, 115 72, 122 66 M 96 74 C 102 79, 114 79, 119 74", 5],
+      ["M 88 128 C 95 120, 114 120, 120 126 M 88 132 C 95 140, 113 140, 119 132 M 92 141 C 98 148, 110 148, 115 141", 5],
+      ["M 126 149 C 132 157, 140 158, 146 153 M 156 152 C 163 159, 173 160, 180 154 M 42 135 C 50 143, 60 144, 66 138 M 44 144 C 51 150, 59 151, 64 146", 5],
+      ["M 47 100 C 52 97, 62 96, 67 98 C 71 102, 72 108, 71 113 C 65 115, 54 115, 49 113 C 46 110, 45 104, 47 100 Z", 5],
+      ["M 79 121 C 78 140, 77 164, 74 194 C 72 212, 69 226, 68 234 M 125 121 C 124 140, 123 170, 120 200 C 118 218, 117 232, 116 238 M 152 138 C 153 157, 155 178, 156 199", 5],
+      ["M 74 118 C 56 119, 41 123, 34 133 C 30 142, 29 151, 29 158", 6]
     ]
   }
 ];
 
 /* ---- previous round, for reference only --------------------------------- */
 const PREV = [
+  { id:"D", name:"D · round 2",
+    path:"M 80 130 C 80 112, 82 88, 84 62 C 84 40, 89 26, 100 26 C 111 26, 116 40, 116 62 C 118 88, 120 112, 121 130 C 126 121, 132 117, 139 117 C 147 117, 152 126, 155 141 C 158 132, 164 128, 169 131 C 175 135, 179 143, 179 155 C 180 174, 178 191, 172 204 C 166 217, 157 222, 151 229 C 146 235, 144 246, 143 260 L 62 260 C 61 246, 60 234, 65 225 C 70 215, 56 212, 45 203 C 32 193, 26 187, 26 174 C 26 161, 29 152, 35 145 C 42 138, 45 132, 49 126 C 55 116, 61 110, 68 111 C 73 112, 78 119, 80 130 Z",
+    details:[[
+      ["M 92 30 C 90 41, 94 49, 100 49 C 106 49, 110 41, 108 30", 5],
+      ["M 85 57 C 92 62, 110 62, 115 57 M 91 66 C 96 69, 106 69, 110 66", 5],
+      ["M 84 85 C 91 90, 110 90, 117 85 M 90 94 C 95 97, 108 97, 112 94", 5],
+      ["M 128 147 C 134 142, 145 142, 151 147 M 160 159 C 165 155, 171 156, 174 160", 5],
+      ["M 80 133 C 80 137, 80 140, 79 143 M 122 133 C 124 146, 124 158, 123 170 M 156 143 C 158 153, 158 163, 156 173", 6],
+      ["M 36 147 C 44 141, 53 138, 62 138 C 72 138, 78 145, 76 156", 8]
+    ]] },
+  { id:"E", name:"E · round 2",
+    path:"M 81 131 C 83 113, 88 88, 94 64 C 98 42, 106 27, 116 29 C 126 31, 129 46, 126 66 C 123 90, 122 112, 122 131 C 127 122, 133 118, 140 118 C 148 118, 153 127, 156 142 C 159 133, 165 129, 170 132 C 176 136, 180 144, 180 156 C 181 175, 178 192, 172 205 C 166 218, 157 223, 151 230 C 146 236, 143 247, 142 260 L 58 260 C 57 246, 56 233, 61 224 C 66 214, 52 211, 42 202 C 30 192, 23 186, 23 173 C 23 160, 26 151, 32 144 C 39 137, 43 131, 47 125 C 53 114, 59 108, 66 109 C 72 110, 77 117, 81 131 Z",
+    details:[[
+      ["M 109 37 C 107 47, 111 55, 117 55 C 123 55, 126 46, 123 36", 5],
+      ["M 96 64 C 102 69, 118 69, 124 63 M 102 73 C 107 76, 116 76, 120 73", 5],
+      ["M 89 93 C 96 98, 114 98, 121 92 M 95 102 C 100 105, 112 105, 116 102", 5],
+      ["M 129 148 C 135 143, 146 143, 152 148 M 161 160 C 166 156, 172 157, 175 161", 5],
+      ["M 81 134 C 81 138, 81 141, 80 144 M 123 134 C 125 147, 125 159, 124 171 M 157 144 C 159 154, 159 164, 157 174", 6],
+      ["M 33 146 C 41 140, 51 137, 60 137 C 70 137, 76 144, 74 155", 8]
+    ]] },
   { id:"A", name:"A · signet",
     path:"M 76 26 C 76 16, 84 12, 100 12 C 116 12, 124 16, 124 26 L 124 124 L 132 110 L 148 104 L 160 112 L 164 134 L 172 120 L 184 124 L 190 146 L 190 186 L 180 226 L 166 249 L 40 249 L 26 226 L 16 196 L 14 174 L 20 146 L 30 124 L 44 108 L 62 104 L 74 112 L 76 124 Z",
     details:[["M 86 36 L 114 36",6],["M 80 58 L 120 58",6],["M 80 86 L 120 86",6],
@@ -196,26 +206,35 @@ function crest(id){ return `
         font-family="Jost, sans-serif" font-size="13" letter-spacing="5">EST. 2019</text>
 </svg>`; }
 
-/* favicon mock — identical geometry to makeIcon(size): pine tile; the brass ring only
-   above 192px; mark uniformly scaled to 80% of the tile height and centred. Mirrors
-   index.html's makeIcon() exactly so the small-size judgment is the real one. */
+/* app-icon mock — identical to makeIcon(size) in index.html: pine tile; the brass ring
+   only above 192px; mark uniformly scaled to 80% of the tile height and centred; and,
+   below 100px, the leading `fine` detail strokes dropped. Drawn inline rather than via
+   <use> precisely so that last rule can be honoured — a <symbol> always carries every
+   stroke, which would make the 64px judgment a lie. */
 const MSCALE = (400*0.8)/260, MW = 200*MSCALE, MH = 260*MSCALE;
-function fav(id, size){ return `
-<svg class="fav" id="fav${size}-${id}" viewBox="0 0 400 400" width="${size}" height="${size}" aria-label="icon ${id} ${size}">
+function fav(v, size){ return `
+<svg class="fav" id="fav${size}-${v.id}" viewBox="0 0 400 400"
+     style="width:${size}px;height:${size}px" aria-label="icon ${v.id} ${size}">
   <rect width="400" height="400" fill="#0E2019"/>
   ${size>192?`<circle cx="200" cy="200" r="178" fill="none" stroke="#C8A24A" stroke-width="16"/>`:``}
-  <g color="#C8A24A"><use href="#mark-${id}" x="${(400-MW)/2}" y="${(400-MH)/2}" width="${MW}" height="${MH}"/></g>
+  <g transform="translate(${(400-MW)/2},${(400-MH)/2}) scale(${MSCALE})">
+    <path fill="#C8A24A" d="${v.path}"/>
+    <g fill="none" stroke="#0E2019" stroke-linecap="round" stroke-linejoin="round">
+      ${v.details.map(([d,w],i) => (size<100 && i<v.fine) ? "" : `<path d="${d}" stroke-width="${w}"/>`).join("")}
+    </g>
+  </g>
 </svg>`; }
 
 document.getElementById("cols").innerHTML = VARIANTS.map(v => `
-  <div class="col${v.id==="D"?" rec":""}">
+  <div class="col${v.id==="F"?" rec":""}">
     <p class="vname">${v.name}</p>
     <p class="vtag">${v.tag}</p>
     <p class="vdesc">${v.desc}</p>
     <div class="crestbox">${crest(v.id)}</div>
     <p class="lab">app icon 64 / 180px · bare mark · nav 19px</p>
     <div class="row">
-      <div>${fav(v.id,64)}<p class="caption">64px</p></div>
+      <div>${fav(v,64)}<p class="caption">64px</p></div>
+      <div>${fav(v,180)}<p class="caption">180px</p></div>
       <div><svg class="bare" id="bare-${v.id}" viewBox="0 0 200 260" height="110"><use href="#mark-${v.id}"/></svg><p class="caption">bare</p></div>
       <div class="navchip" id="nav-${v.id}"><svg viewBox="0 0 200 260"><use href="#mark-${v.id}"/></svg><span>GFY</span></div>
     </div>
