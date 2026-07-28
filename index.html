@@ -997,6 +997,7 @@ function renderLeaderboard(){
 function seniorityBadge(since,season){
   const sy=parseInt(since,10);
   if(!since||isNaN(sy)) return "";
+  if(sy>season){ flag('since "'+since+'" is after season '+season+' — badge suppressed'); return ""; }
   if(sy===season) return "ROOKIE";
   const yrs=season-sy+1;
   return yrs+ordSuffix(yrs)+" year";
@@ -1042,10 +1043,13 @@ function renderField(){
     const yearOf=v=>{ const n=parseInt(v,10); return isNaN(n)?Infinity:n; };
     const ordered=teams
       .map(([k,t],i)=>({k,t,i}))
+      // Fallback || relies on NaN being falsy (Infinity-Infinity=NaN); never change to ??
       .sort((a,b)=>(yearOf(a.t.since[a.t.captain])-yearOf(b.t.since[b.t.captain]))||(a.i-b.i));
 
     bodyHTML=ordered.map(({t})=>{
-      const members=[...t.members].sort((a,b)=>yearOf(t.since[a])-yearOf(t.since[b]));
+      const members=[...t.members];
+      const mi=new Map(members.map((m,i)=>[m,i]));
+      members.sort((a,b)=>(yearOf(t.since[a])-yearOf(t.since[b]))||(mi.get(a)-mi.get(b)));
       const names=[t.captain,...members];
       const rowsHTML=names.map(n=>{ const r=byPlayer[nkey(n)]; return r?rowHTML(r):""; }).join("");
       return `<div class="team-group">${rowsHTML}</div>`;
