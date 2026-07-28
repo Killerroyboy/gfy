@@ -39,6 +39,7 @@
          letter-spacing:.2em;text-transform:uppercase;font-weight:400;padding:4px 0;
          border-bottom:1px solid transparent;transition:color .2s,border-color .2s}
   .nav a:hover,.nav a:focus-visible{color:var(--brass);border-bottom-color:var(--brass)}
+  .view[hidden]{display:none}
 
   .hero{padding:52px 0 70px;text-align:center}
   .crest{width:min(330px,72vw);height:auto;display:block;margin:0 auto;color:var(--brass)}
@@ -315,21 +316,23 @@
     <svg class="nav-mark" aria-hidden="true"><use href="#mark"/></svg>
     <div class="nav-name">GFY</div>
     <div class="nav-links">
-      <a href="#leaderboard">Board</a>
+      <a href="#home">Home</a>
+      <a href="#board">Board</a>
       <a href="#field">Field</a>
       <a href="#pairings">Pairings</a>
       <a href="#calcutta">Calcutta</a>
       <a href="#money">Money</a>
-      <a href="#card">Card</a>
+      <a href="#schedule">Card</a>
       <a href="#rules">Rules</a>
       <a href="#champions">Champions</a>
       <a href="#shame">Shame</a>
       <a href="#photos">Photos</a>
+      <a href="#nextyear">Next Year</a>
     </div>
   </div>
 </nav>
 
-<header class="hero">
+<section class="hero view" data-view="home" id="home">
   <div class="wrap">
     <svg class="crest rise d1" viewBox="0 0 400 400" role="img"
          aria-label="GFY crest: a raised middle finger flanked by pine boughs">
@@ -392,10 +395,17 @@
       <div class="fact"><dt>Lodging</dt><dd data-info="lodging">Bear Creek Lodge</dd></div>
       <div class="fact"><dt>Format</dt><dd data-info="format">36 holes, stroke</dd></div>
     </dl>
-  </div>
-</header>
 
-<section class="band band-alt" id="leaderboard">
+    <div class="holder" id="homeBird">
+      <svg aria-hidden="true"><use href="#mark"/></svg>
+      <p><strong>The Bird</strong>Held for one year. Displayed somewhere visible. Returned to the first tee, cleaned, or the holder plays from the back tees.</p>
+    </div>
+
+    <div id="homeStatus"></div>
+  </div>
+</section>
+
+<section class="band band-alt view" data-view="board" id="leaderboard">
   <div class="wrap">
     <p class="eyebrow">Live from the course</p>
     <h2>Leaderboard</h2>
@@ -413,7 +423,7 @@
   </div>
 </section>
 
-<section class="band" id="field">
+<section class="band view" data-view="field" id="field">
   <div class="wrap">
     <p class="eyebrow">Who's in</p>
     <h2>The Field</h2>
@@ -428,7 +438,7 @@
   </div>
 </section>
 
-<section class="band band-alt" id="pairings">
+<section class="band band-alt view" data-view="pairings" id="pairings">
   <div class="wrap">
     <p class="eyebrow">Who you're stuck with</p>
     <h2>Pairings</h2>
@@ -448,7 +458,7 @@
   </div>
 </section>
 
-<section class="band" id="calcutta">
+<section class="band view" data-view="calcutta" id="calcutta">
   <div class="wrap">
     <p class="eyebrow">Bid Friday night, paid Sunday</p>
     <h2>The Calcutta</h2>
@@ -482,7 +492,7 @@
   </div>
 </section>
 
-<section class="band band-alt" id="money">
+<section class="band band-alt view" data-view="money" id="money">
   <div class="wrap">
     <p class="eyebrow">Settle up before anyone drives home</p>
     <h2>The Damage</h2>
@@ -502,7 +512,7 @@
   </div>
 </section>
 
-<section class="band" id="card">
+<section class="band view" data-view="schedule" id="card">
   <div class="wrap">
     <p class="eyebrow">The weekend</p>
     <h2>The Card</h2>
@@ -531,7 +541,7 @@
   </div>
 </section>
 
-<section class="band band-alt" id="grounds">
+<section class="band band-alt view" data-view="schedule" id="grounds">
   <div class="wrap">
     <p class="eyebrow">Where it happens</p>
     <h2>The Grounds</h2>
@@ -563,7 +573,7 @@
   </div>
 </section>
 
-<section class="band" id="rules">
+<section class="band view" data-view="rules" id="rules">
   <div class="wrap">
     <p class="eyebrow">Committee decisions, final</p>
     <h2>Local Rules</h2>
@@ -581,7 +591,7 @@
   </div>
 </section>
 
-<section class="band band-alt" id="champions">
+<section class="band band-alt view" data-view="champions" id="champions">
   <div class="wrap">
     <p class="eyebrow">The record</p>
     <h2>Champions</h2>
@@ -601,7 +611,7 @@
   </div>
 </section>
 
-<section class="band band-dark" id="shame">
+<section class="band band-dark view" data-view="shame" id="shame">
   <div class="wrap">
     <p class="eyebrow">The other record</p>
     <h2>Hall of Shame</h2>
@@ -621,7 +631,7 @@
   </div>
 </section>
 
-<section class="band" id="photos">
+<section class="band view" data-view="photos" id="photos">
   <div class="wrap">
     <p class="eyebrow">Evidence</p>
     <h2>The Album</h2>
@@ -635,11 +645,28 @@
   </div>
 </section>
 
+<section class="band view" data-view="nextyear" id="nextyear"><div class="wrap"><p class="eyebrow">Collections</p><h2>Next Year</h2><div id="nyBody"></div><p class="sync" id="nySync"></p></div></section>
+
 <footer>
   <svg aria-hidden="true"><use href="#mark"/></svg>
   <p class="foot-name">GFY</p>
   <p class="foot-note" id="footNote">McCall, Idaho · Est. 2019</p>
 </footer>
+
+<script>
+/* ---------- hash router ----------
+   Deliberately its own script, ahead of config.js: view switching must not
+   wait on the (parser-blocking) sheet config to load, and none of this
+   touches CONFIG/INFO/fetch — it only toggles which .view section shows. */
+const VIEWS=["home","board","field","pairings","calcutta","money","schedule","rules","champions","shame","photos","nextyear"];
+function showView(name){
+  const v=VIEWS.includes(name)?name:"home";
+  document.querySelectorAll(".view").forEach(s=>{ s.hidden=s.dataset.view!==v; });
+  document.querySelectorAll(".nav a").forEach(a=>a.classList.toggle("active",a.hash==="#"+v));
+}
+window.addEventListener("hashchange",()=>showView(location.hash.slice(1)));
+showView(location.hash.slice(1));
+</script>
 
 <script src="config.js"></script>
 <script>
@@ -1226,7 +1253,8 @@ function renderChampions(){
       <div class="entry"><div class="entry-year">2019</div><div class="entry-name blank">Add name</div><div class="entry-score">Inaugural</div></div>`;
     return;
   }
-  $("#champBody").innerHTML=rows.filter(r=>r.year).map(r=>{
+  const withYear=rows.filter(r=>r.year);
+  $("#champBody").innerHTML=withYear.map(r=>{
     const blank=!r.champion;
     return `<div class="entry">
       <div class="entry-year">${esc(r.year)}</div>
@@ -1234,6 +1262,13 @@ function renderChampions(){
       <div class="entry-score">${esc(r.score||"—")}</div>
     </div>`;
   }).join("");
+
+  const latest=withYear.reduce((a,b)=>(!a||parseInt(b.year,10)>parseInt(a.year,10))?b:a,null);
+  const bird=$("#homeBird");
+  if(bird&&latest){
+    const p=bird.querySelector("p");
+    if(p) p.innerHTML=`<strong>${esc(latest.champion||"Open")}</strong>Holding The Bird since ${esc(latest.year)}. Displayed somewhere visible. Returned to the first tee, cleaned, or the holder plays from the back tees.`;
+  }
 }
 
 function renderAll(){
@@ -1426,6 +1461,25 @@ function stampFor(tab,results){
   if(r.at) return "Saved copy from "+ago(r.at)+" — "+r.err;
   return "Offline"+(r.err?" — "+r.err:"");
 }
+/* Date-aware Home: pre-event shows the countdown as today; once we're
+   more than 3 days past first tee, the countdown gives way to a status
+   strip. The numbers come from Task 7's nextYearModel()/calcuttaModel();
+   until those exist this renders "—" placeholders (guarded, never throws). */
+function paintHome(){
+  const statusEl=$("#homeStatus");
+  if(!statusEl) return;
+  const tee=new Date(INFO.first_tee||CONFIG.FIRST_TEE);
+  const post=!isNaN(tee)&&Date.now()>tee.getTime()+3*86400000;
+  if(!post){ statusEl.innerHTML=""; return; }
+  const cd=$("#countdown"); if(cd) cd.innerHTML="";
+  const hasModels=typeof nextYearModel==="function"&&typeof calcuttaModel==="function";
+  const ny=hasModels?nextYearModel():null;
+  const cal=hasModels?calcuttaModel():null;
+  const paid=ny?ny.paid:"—", shown=ny?ny.shown:"—", next=ny?ny.next:"—";
+  const outstanding=cal?cal.outstanding:"—";
+  statusEl.innerHTML=`<a href="#nextyear">${paid} of ${shown} paid for ${esc(next)}</a> · `+
+    `<a href="#calcutta">$${outstanding} Calcutta outstanding</a>`;
+}
 function paint(data,results){
   HEALTH=[];
   STATE.data=data;
@@ -1438,6 +1492,7 @@ function paint(data,results){
   $("#calSync").textContent=stampFor("calcutta",results);
   const nyEl=$("#nySync"); if(nyEl) nyEl.textContent=stampFor("field",results);
   tick();
+  paintHome();
   renderHealth();
 }
 async function load(){
