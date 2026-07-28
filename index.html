@@ -287,10 +287,9 @@
     .lb-r1,.lb-r2,.lb-total{display:none}
     .mn-head,.mn-row{grid-template-columns:1fr 4rem 5rem}
     .mn-won{display:none}
-    .auc-head,.auc-row{grid-template-columns:1fr 1fr 4.6rem}
-    .auc-back{display:none}
-    .pay-head,.pay-row{grid-template-columns:3rem 1fr 4.8rem 4.8rem}
-    .pay-head div:nth-child(3),.pay-row .auc-owner{display:none}
+    .auc-head,.auc-row{grid-template-columns:1fr 1fr 2rem 4.6rem}
+    .pay-head,.pay-row{grid-template-columns:3rem 1fr 1fr 4.8rem}
+    .pay-row .pay-sub{display:none}
     .fld{grid-template-columns:1fr 5rem 4rem}
     .fld-hcp{display:none}
     .holes{gap:2px}
@@ -1099,20 +1098,24 @@ function renderPairings(){
     </div>`).join("");
 }
 
-function calcuttaModel(){
-  const rows=forYear(STATE.data.calcutta,STATE.year).filter(r=>(r.team||r.player));
-  const lots=rows.map(r=>({ key:nkey(r.team||r.player), team:(r.team||r.player),
-    owner:(r.owner||"").trim()||"—", price:num(r.price), collected:yes(r.collected)
-  })).sort((a,b)=>b.price-a.price);
+function calcuttaModel(year=STATE.year){
+  const rows=forYear(STATE.data.calcutta,year).filter(r=>(r.team||r.player));
+  const lots=rows.map(r=>{
+    const team=r.team||r.player, raw=num(r.price);
+    if(raw<0) flag('negative price on lot "'+team+'"');
+    return { key:nkey(team), team, owner:(r.owner||"").trim()||"—",
+      price: raw<0 ? 0 : Math.round(raw), collected:yes(r.collected) };
+  }).sort((a,b)=>b.price-a.price);
   const pot=lots.reduce((s,l)=>s+l.price,0);
-  const rakePct=num(INFO.calcutta_rake), rake=pot*rakePct/100;
+  const rakePct=num(INFO.calcutta_rake), rake=Math.round(pot*rakePct/100), payable=pot-rake;
   const owed={};
   lots.filter(l=>!l.collected).forEach(l=>{
+    if(l.owner==="—"){ flag('lot "'+l.team+'" has no owner'); return; }
     const k=nkey(l.owner);
     if(!owed[k]) owed[k]={owner:l.owner,total:0,lots:0};
     owed[k].total+=l.price; owed[k].lots++;
   });
-  return { lots, pot, rakePct, rake, payable:pot-rake,
+  return { lots, pot, rakePct, rake, payable,
            outstanding:Object.values(owed).sort((a,b)=>b.total-a.total) };
 }
 function nextYearModel(){
@@ -1131,7 +1134,10 @@ function nextYearModel(){
     if(yes(r.deposit)){ p.paid=true; p.date=(r.paid_date||"").trim(); }
   });
   const all=[...byKey.values()].filter(p=>!p.out);
-  const paid=all.filter(p=>p.paid).sort((a,b)=>(a.date||"9999")<(b.date||"9999")?-1:1);
+  const paid=all.filter(p=>p.paid).sort((a,b)=>{
+    const da=a.date||"9999", db=b.date||"9999";
+    return da<db?-1:(da>db?1:0);
+  });
   return {open:true,next,all,paid,owing:all.filter(p=>!p.paid)};
 }
 
@@ -1155,9 +1161,9 @@ function renderCalcutta(){
 
   const outTotal=outstanding.reduce((s,o)=>s+o.total,0);
   $("#calOut").innerHTML=outstanding.length
-    ? money(outTotal)+"<small>"+outstanding.map(o=>
-        esc(o.owner)+" "+money(o.total)+" · "+o.lots+" lot"+(o.lots===1?"":"s")).join(" · ")+"</small>"
-    : "$0<small>Nothing outstanding.</small>";
+    ? money(outTotal)+outstanding.map(o=>
+        "<small>"+esc(o.owner)+" "+money(o.total)+" · "+o.lots+" lot"+(o.lots===1?"":"s")+"</small>").join("")
+    : money(0)+"<small>Nothing outstanding.</small>";
 
   $("#aucBody").innerHTML=lots.map((l,i)=>`
     <div class="auc-row${i===0?" top":""}">
@@ -1184,7 +1190,11 @@ function renderCalcutta(){
     basis=(INFO.calcutta_basis||"gross").toLowerCase()==="net"?"net":"gross";
   }
   const ranked=rankedPlayers(basis).filter(p=>p.total!==null);
-  if(!ranked.length){ $("#calBasis").textContent="Bids locked. Payouts post once cards do."; return; }
+  if(!ranked.length){
+    $("#payBody").innerHTML='<div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>';
+    $("#calBasis").textContent="Bids locked. Payouts post once cards do.";
+    return;
+  }
 
   /* group ties, split the combined shares evenly */
   const rowsOut=[];
@@ -1195,21 +1205,34 @@ function renderCalcutta(){
     const each=spanned/tie.length;
     tie.forEach(p=>{
       const lot=lots.find(l=>l.key===p.key);
-      const amt=payable*each/100;
       rowsOut.push({
-        place:ranked[i].pos, tied:tie.length>1, team:p.name,
+        place:ranked[i].pos, tied:tie.length>1, key:p.key,
         detail:(basis==="net"?"net ":"")+(p.rel!==null?toPar(p.rel):p.total)+" · "+thruLabel(p),
         owner:lot?lot.owner:"—",
-        ownerCut: lot ? amt : 0
+        each, lot
       });
     });
     i+=tie.length;
   }
 
+  /* largest-remainder allocation of owner cuts, reconciled against payable
+     so the sum of rendered cuts always equals Math.round(payable*coveredShares/100) */
+  const covered=rowsOut.filter(r=>r.lot);
+  const raws=covered.map(r=>payable*r.each/100);
+  const floors=raws.map(v=>Math.floor(v));
+  const flooredSum=floors.reduce((a,b)=>a+b,0);
+  const coveredShares=covered.reduce((s,r)=>s+r.each,0);
+  let remainder=Math.round(payable*coveredShares/100)-flooredSum;
+  covered.map((r,idx)=>({idx,frac:raws[idx]-floors[idx]}))
+    .sort((a,b)=>b.frac-a.frac||a.idx-b.idx)
+    .forEach(o=>{ if(remainder>0){ floors[o.idx]+=1; remainder--; } });
+  covered.forEach((r,idx)=>{ r.ownerCut=floors[idx]; });
+  rowsOut.forEach(r=>{ if(!r.lot) r.ownerCut=0; });
+
   $("#payBody").innerHTML=rowsOut.map(r=>`
     <div class="pay-row">
       <div class="pay-place">${r.place+ordSuffix(r.place)}${r.tied?"*":""}</div>
-      <div>${esc(r.team)}<span class="pay-sub">${esc(r.detail)}</span></div>
+      <div>${teamLabel(r.key).html}<span class="pay-sub">${esc(r.detail)}</span></div>
       <div class="auc-owner">${esc(r.owner)}</div>
       <div class="pay-cut">${r.ownerCut?money(r.ownerCut):"—"}</div>
     </div>`).join("");
@@ -1237,9 +1260,10 @@ function renderNextYear(){
   const handleHTML=/^https?:\/\//i.test(handle)
     ? `<a href="${esc(handle)}">${esc(handle)}</a>`
     : esc(handle);
+  const handleSpan=`<span style="text-transform:none;letter-spacing:normal">${handleHTML}</span>`;
   nyBody.innerHTML=`<p class="eyebrow">${esc(ny.paid.length)} of ${esc(ny.all.length)} paid for ${esc(ny.next)}</p>`+
     paidHTML+owingHTML+
-    `<p class="basis">Deposit ${money(num(INFO.deposit_amount))} · ${handleHTML}</p>`;
+    `<p class="basis">Deposit ${money(num(INFO.deposit_amount))} · ${handleSpan}</p>`;
 }
 
 function renderMoney(){
@@ -1585,8 +1609,9 @@ function stampFor(tab,results){
 }
 /* Date-aware Home: pre-event shows the countdown as today; once we're
    more than 3 days past first tee, the countdown gives way to a status
-   strip. The numbers come from Task 7's nextYearModel()/calcuttaModel();
-   until those exist this renders "—" placeholders (guarded, never throws). */
+   strip. The numbers come from nextYearModel()/calcuttaModel(); calcuttaModel
+   is pinned to activeSeason() here so the Home strip never follows the
+   archive year picker (STATE.year). */
 function paintHome(){
   const statusEl=$("#homeStatus");
   if(!statusEl) return;
@@ -1594,7 +1619,7 @@ function paintHome(){
   const post=!isNaN(tee)&&Date.now()>tee.getTime()+3*86400000;
   if(!post){ statusEl.innerHTML=""; return; }
   const cd=$("#countdown"); if(cd) cd.innerHTML="";
-  const ny=nextYearModel(), cal=calcuttaModel();
+  const ny=nextYearModel(), cal=calcuttaModel(activeSeason());
   const paid=ny.open?ny.paid.length:0, shown=ny.open?ny.all.length:0;
   const outTotal=cal.outstanding.reduce((s,o)=>s+o.total,0);
   statusEl.innerHTML=`<a href="#nextyear">${esc(paid)} of ${esc(shown)} paid for ${esc(ny.next)}</a> · `+
