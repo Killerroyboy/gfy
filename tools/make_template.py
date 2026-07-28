@@ -6,6 +6,11 @@ Output: tools/gfy-template.xlsx  (upload to Google Drive, open as a Sheet)
 
 Each sheet gets its exact header row (row 1, bold, frozen) plus a few rows of
 sample data showing the expected shape. Replace the samples with real data.
+
+Field.deposit, Ledger.settled, and Calcutta.collected are checkbox columns on
+the site. xlsx has no Google Sheets checkbox type, so the samples below hold
+the literal strings TRUE/FALSE; the README documents the one-time conversion
+step (select the column > Insert > Checkbox) after "Save as Google Sheets".
 """
 from pathlib import Path
 
@@ -19,11 +24,13 @@ SHEETS = {
             ["dates", "Aug 14–16"],
             ["course", "Meadow Creek"],
             ["lodging", "Bear Creek Lodge"],
-            ["format", "36 holes, stroke"],
+            ["format", "2-day scramble"],
             ["first_tee", "2026-08-15T09:00:00-06:00"],
             ["est_year", "2019"],
             ["calcutta_rake", "10"],
             ["calcutta_basis", "gross"],
+            ["deposit_amount", "200"],
+            ["payment_handle", "Venmo @gfy-duck"],
         ],
     },
     "Course": {
@@ -35,20 +42,29 @@ SHEETS = {
         ],
     },
     "Field": {
-        "headers": ["year", "player", "handicap", "status", "deposit"],
+        # team = captain's name of the player's team; the captain's own row
+        # names himself (player == team). since = first GFY year (fill once).
+        "headers": ["year", "player", "team", "since", "handicap", "status", "deposit", "paid_date"],
         "rows": [
-            [2026, "Duck", 8, "In", "Paid"],
-            [2026, "Hammer", 12, "In", ""],
-            [2026, "Sully", 15, "Maybe", ""],
+            [2026, "Duck", "Duck", 2019, 8, "In", "TRUE", ""],       # captain
+            [2026, "Hammer", "Duck", 2019, 10, "In", "TRUE", ""],    # partner
+            [2026, "Sully", "Sully", 2021, 15, "In", "FALSE", ""],   # captain, deposit not in yet
+            [2026, "Tank", "Sully", 2026, 20, "In", "TRUE", ""],     # partner + rookie (since == this season)
+            [2026, "Tex", "Tex", 2019, 18, "In", "TRUE", ""],        # captain, third team
+            # A next-season payer: rooms go in the order people paid, so
+            # paid_date matters more than the row's position on the sheet.
+            [2027, "Duck", "", "", "", "", "TRUE", "2026-08-20"],
         ],
     },
     "Scores": {
-        "headers": ["year", "player", "round"] + [f"h{i}" for i in range(1, 19)],
+        # One row per TEAM per round, keyed by the captain's name (matches
+        # Field.team). Duplicate (team, round) rows merge their hole maps.
+        "headers": ["year", "team", "round"] + [f"h{i}" for i in range(1, 19)],
         "rows": [
             [2026, "Duck", 1, 4, 5, 3, 6, 4, 4, 3, 5, 5, 4, 5, 3, 4, 4, 4, 3, 6, 4],
-            [2026, "Hammer", 1, 5, 4, 4, 5, 4, 5, 3, 4, 5, 4, 6, 3, 5, 4, 4, 4, 5, 5],
+            [2026, "Sully", 1, 5, 4, 4, 5, 4, 5, 3, 4, 5, 4, 6, 3, 5, 4, 4, 4, 5, 5],
             # A round in progress: fill holes as they are played, leave the rest blank.
-            [2026, "Sully", 1, 5, 4, 3, 5, 4, 6, 4, 4, 5] + [""] * 9,
+            [2026, "Tex", 1, 5, 4, 3, 5, 4, 6, 4, 4, 5] + [""] * 9,
         ],
     },
     "Schedule": {
@@ -62,17 +78,19 @@ SHEETS = {
     "Pairings": {
         "headers": ["year", "round", "when", "time", "players"],
         "rows": [
-            [2026, "Round One", "Saturday · Shotgun", "9:00 am", "Duck · Hammer · Sully"],
-            [2026, "Round One", "Saturday · Shotgun", "9:00 am", "Moose · Tex"],
+            [2026, "Round One", "Saturday · Shotgun", "9:00 am", "Duck · Hammer"],
+            [2026, "Round One", "Saturday · Shotgun", "9:00 am", "Sully · Tank"],
             [2026, "Round Two", "Sunday · Tee times", "8:30 am", "Leaders out last"],
         ],
     },
     "Calcutta": {
-        "headers": ["year", "player", "owner", "price", "buyback"],
+        # One row per team lot. No buyback in team mode — owners pay full
+        # price to the pot; winnings pay the owner.
+        "headers": ["year", "team", "owner", "price", "collected"],
         "rows": [
-            [2026, "Duck", "Tex", 120, 50],
-            [2026, "Hammer", "Sully", 100, ""],
-            [2026, "Moose", "Duck", 80, 25],
+            [2026, "Duck", "Tex", 120, "TRUE"],
+            [2026, "Sully", "Duck", 100, "FALSE"],
+            [2026, "Tex", "Sully", 90, "TRUE"],
         ],
     },
     "Payout": {
@@ -86,9 +104,9 @@ SHEETS = {
     "Ledger": {
         "headers": ["year", "player", "buyin", "won", "settled"],
         "rows": [
-            [2026, "Duck", 100, 180, "yes"],
-            [2026, "Hammer", 100, 40, ""],
-            [2026, "Sully", 100, 0, ""],
+            [2026, "Duck", 100, 180, "TRUE"],
+            [2026, "Hammer", 100, 40, "FALSE"],
+            [2026, "Sully", 100, 0, "FALSE"],
         ],
     },
     "Champions": {
