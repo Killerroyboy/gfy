@@ -1110,9 +1110,10 @@ function calcuttaModel(year=STATE.year){
   const rakePct=num(INFO.calcutta_rake), rake=Math.round(pot*rakePct/100), payable=pot-rake;
   const owed={};
   lots.filter(l=>!l.collected).forEach(l=>{
-    if(l.owner==="—"){ flag('lot "'+l.team+'" has no owner'); return; }
-    const k=nkey(l.owner);
-    if(!owed[k]) owed[k]={owner:l.owner,total:0,lots:0};
+    if(l.owner==="—"){ flag('lot "'+l.team+'" has no owner — counted under Unassigned'); }
+    const owner = l.owner==="—" ? "Unassigned" : l.owner;
+    const k=nkey(owner);
+    if(!owed[k]) owed[k]={owner:owner,total:0,lots:0};
     owed[k].total+=l.price; owed[k].lots++;
   });
   return { lots, pot, rakePct, rake, payable,
