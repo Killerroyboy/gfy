@@ -7,7 +7,7 @@
  */
 const FIELD_STATUS = ["In","wd","out","declined"];   // E-VOCAB — mirrors the site parser exactly
 const INVITES_STATUS = ["declined","out"];           // F-DECLINED
-const CHECKBOX_COLS = { "Field": ["deposit"], "Calcutta": ["collected"], "Invites": ["invited","responded"] }; // CLOSED list
+const CHECKBOX_COLS = { "Field": ["deposit"], "Calcutta": ["collected"], "Invites": ["invited","responded"], "Ledger": ["settled"] }; // CLOSED list
 const DROPDOWNS = { "Field": { "status": FIELD_STATUS }, "Invites": { "status": INVITES_STATUS } };
 const COURSE_DATA = [ [1,4,319],[2,5,469],[3,4,407],[4,3,124],[5,4,357],[6,4,348],[7,4,391],[8,3,180],[9,5,499],
   [10,4,286],[11,4,354],[12,4,344],[13,3,148],[14,4,406],[15,5,433],[16,4,352],[17,3,151],[18,5,533] ];
