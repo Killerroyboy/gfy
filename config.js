@@ -12,7 +12,7 @@ window.CONFIG = {
   // PUB_ID is the long token between "/d/e/" and "/pub". It always starts
   // with "2PACX-". If yours doesn't, you copied the wrong URL.
   // Example: PUB_ID: "2PACX-1vR3xAmPlELongTokenGoesHere",
-  PUB_ID: "",
+  PUB_ID: "2PACX-1vQo-x_uyBNdEg1MVuYMAUQuygploM4USXLC9Tv4_2XwXc9OjCA8Nzf2MRWWj3MaSkdQvsEt8RK4MQQr",
 
   // One gid per tab. Find each gid in the NORMAL editing URL: click the
   // tab at the bottom of the sheet, then copy the number after "#gid=" in
@@ -20,24 +20,24 @@ window.CONFIG = {
   // Example: GID: { info:"0", course:"1837552901", field:"482915637", ... },
   GID: {
     info: "0",
-    course: "",
-    field: "",
-    scores: "",
-    schedule: "",
-    pairings: "",
-    calcutta: "",
-    payout: "",
-    ledger: "",
-    champions: "",
-    shame: "",
-    invites: "",
-    rooms: ""
+    course: "518861921",
+    field: "943851924",
+    scores: "2048642783",
+    schedule: "1013082114",
+    pairings: "277862431",
+    calcutta: "1980084359",
+    payout: "1443171064",
+    ledger: "61201478",
+    champions: "595874277",
+    shame: "559876960",
+    invites: "1201085989",
+    rooms: "85901482"
   },
 
   // The normal EDITING url of the sheet — powers the "Enter scores" button
   // in the hero. Leave "" to hide the button.
   // Example: SHEET_EDIT_URL: "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKl/edit",
-  SHEET_EDIT_URL: "",
+  SHEET_EDIT_URL: "https://docs.google.com/spreadsheets/d/16Co2b3_uaBhg1tzFw56aGJVsicgPx_xeQr_mCgHPNBw/edit",
 
   // Google Drive photo folder id — the token after "/folders/" in the
   // folder's URL. The folder must be shared "Anyone with the link: Viewer"
