@@ -1708,7 +1708,12 @@ dom.window.close();
     && p.querySelectorAll(".sg-p-row").length === d.querySelectorAll("#sgTable tr.sg-teamrow").length,
     p.textContent.slice(0, 160));
   check("N2: map locator pin positioned from PINS",
-    p.querySelector(".sg-pin") && p.querySelector(".sg-pin").getAttribute("style").includes("27"));
+    p.querySelector(".sg-pin") && p.querySelector(".sg-pin").getAttribute("style").includes("27")
+    && p.querySelector(".sg-p-crop") && p.querySelector(".sg-p-crop-inner")
+    && p.querySelector(".sg-p-crop-inner img.sg-p-crop-img") && p.querySelector(".sg-p-crop-inner .sg-pin")
+    && p.querySelector("img.sg-p-crop-img").getAttribute("data-pin-x") === "27"
+    && p.querySelector("img.sg-p-crop-img").getAttribute("data-pin-y") === "27"
+    && !!p.querySelector(".sg-p-map"));
   check("N3: hole photo uses the assets convention with error-hide",
     p.querySelector("img.sg-p-photo") && p.querySelector("img.sg-p-photo").getAttribute("src") === "assets/holes/hole-3.jpg");
   d.querySelector('#sgTable th.sg-h[data-hole="3"]').click();

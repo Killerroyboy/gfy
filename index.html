@@ -162,7 +162,10 @@
   /* v2.3 hole panel (G-PANEL): tapping a hole header opens per-hole detail */
   .sg-panel{padding:16px;margin-top:10px}
   .sg-p-head{font-family:var(--display);color:var(--brass);margin-bottom:10px}
-  .sg-p-map{position:relative;max-width:280px;margin:10px 0}
+  .sg-p-crop{position:relative;overflow:hidden;max-width:300px;height:210px;border:1px solid rgba(200,162,74,.25);margin:10px 0}
+  .sg-p-crop-inner{position:relative;width:350%}
+  .sg-p-crop-inner img{width:100%;display:block}
+  .sg-p-map{position:relative;max-width:160px;margin:10px 0;opacity:.85}
   .sg-p-map img{max-width:100%;display:block;opacity:.92}
   .sg-pin{position:absolute;width:14px;height:14px;border-radius:50%;
     border:2px solid var(--brass);background:rgba(200,162,74,.35);transform:translate(-50%,-50%)}
@@ -1318,11 +1321,19 @@ function renderHolePanel(h){
   const pin=PINS[h];
   panel.innerHTML=
     `<div class="sg-p-head">Hole ${h} · Par ${pars[h]}${yds?` · ${yds[h]} yds`:""}</div>`+
+    `<div class="sg-p-crop"><div class="sg-p-crop-inner">`+
+      `<img class="sg-p-crop-img" src="assets/course-map.png" data-pin-x="${Math.round(pin.x)}" data-pin-y="${Math.round(pin.y)}" alt="Hole ${h} on the course map">`+
+      `<span class="sg-pin" style="left:${pin.x}%;top:${pin.y}%"></span>`+
+    `</div></div>`+
     `<div class="sg-p-map"><img src="assets/course-map.png" alt="Course layout, hole ${h} marked">`+
       `<span class="sg-pin" style="left:${pin.x}%;top:${pin.y}%"></span></div>`+
     `<img class="sg-p-photo" src="assets/holes/hole-${h}.jpg" alt="Hole ${h}" onerror="this.hidden=true">`+
     scores.map(s=>`<div class="sg-p-row${s.v!==undefined&&s.v===best?" best":""}"><span>${s.name}</span><span>${s.v??"—"}</span></div>`).join("");
   panel.hidden=false;
+  const wrap=panel.querySelector(".sg-p-crop"), inner=panel.querySelector(".sg-p-crop-inner");
+  if(wrap&&inner){ const c=()=>{ wrap.scrollLeft=Math.max(0,pin.x/100*inner.clientWidth-wrap.clientWidth/2);
+    wrap.scrollTop=Math.max(0,pin.y/100*inner.clientHeight-wrap.clientHeight/2); };
+    const img=inner.querySelector("img"); (img.complete)?c():img.addEventListener("load",c,{once:true}); }
 }
 
 function seniorityBadge(since,season){
