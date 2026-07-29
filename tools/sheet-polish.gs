@@ -76,21 +76,28 @@ function colorField_(sh){
   if (dep) rules.push(SpreadsheetApp.newConditionalFormatRule()
     .whenFormulaSatisfied(`=AND($A2<>"",${colLetter_(dep)}2=FALSE)`)
     .setBackground("#3d2323")
-    .setRanges([sh.getRange(2, 1, sh.getMaxRows() - 1, sh.getLastColumn())]).build());
+    .setRanges([sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))]).build());
   if (since) rules.push(SpreadsheetApp.newConditionalFormatRule()
     .whenFormulaSatisfied(`=AND($A2<>"",${colLetter_(since)}2=$A2)`)     // rookie: since == row's season
     .setBackground("#33321f")
-    .setRanges([sh.getRange(2, 1, sh.getMaxRows() - 1, sh.getLastColumn())]).build());
+    .setRanges([sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))]).build());
+  if (sh.getConditionalFormatRules().length > rules.length)
+    Logger.log(sh.getName() + ": replacing ALL conditional formatting — hand-added rules are erased (polish owns CF on this sheet)");
   sh.setConditionalFormatRules(rules);                  // E-IDEM: rules replaced wholesale each run
   // NOTE: blank `team` is NEVER colored — teams are drafted Friday night (E-TEAM).
 }
 function colorRooms_(sh){
   const player = headerIndex_(sh, "player"); if (!player) return;
   const c = colLetter_(player);
-  sh.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=AND(${c}2<>"",LEFT(${c}2,6)<>"guest:",ISNA(MATCH(${c}2,INDIRECT("Field!B:B"),0)))`)
+  const field = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Field");
+  const pcol = field ? colLetter_(headerIndex_(field, "player") || 2) : "B";
+  const rules = [SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied(`=AND(${c}2<>"",LEFT(${c}2,6)<>"guest:",ISNA(MATCH(${c}2,INDIRECT("Field!" + pcol + ":" + pcol),0)))`)
     .setBackground("#3d3223")
-    .setRanges([sh.getRange(2, 1, sh.getMaxRows() - 1, sh.getLastColumn())]).build()]);
+    .setRanges([sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))]).build()];
+  if (sh.getConditionalFormatRules().length > rules.length)
+    Logger.log(sh.getName() + ": replacing ALL conditional formatting — hand-added rules are erased (polish owns CF on this sheet)");
+  sh.setConditionalFormatRules(rules);
 }
 function autofillCourse_(sh){
   const last = sh.getLastRow();
