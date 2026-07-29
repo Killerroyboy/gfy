@@ -29,7 +29,8 @@ window.CONFIG = {
     payout: "",
     ledger: "",
     champions: "",
-    shame: ""
+    shame: "",
+    invites: ""
   },
 
   // The normal EDITING url of the sheet — powers the "Enter scores" button

@@ -7,10 +7,14 @@ Output: tools/gfy-template.xlsx  (upload to Google Drive, open as a Sheet)
 Each sheet gets its exact header row (row 1, bold, frozen) plus a few rows of
 sample data showing the expected shape. Replace the samples with real data.
 
-Field.deposit, Ledger.settled, and Calcutta.collected are checkbox columns on
-the site. xlsx has no Google Sheets checkbox type, so the samples below hold
-the literal strings TRUE/FALSE; the README documents the one-time conversion
-step (select the column > Insert > Checkbox) after "Save as Google Sheets".
+Field.deposit, Ledger.settled, Calcutta.collected, and Invites.invited /
+Invites.responded are checkbox columns on the site. xlsx has no Google
+Sheets checkbox type, so the samples below hold the literal strings
+TRUE/FALSE; the README documents the one-time conversion step (select the
+column > Insert > Checkbox) after "Save as Google Sheets".
+
+Invites.email is for mail-merge only — the site never renders it (see the
+README's "The invite list" section).
 """
 from pathlib import Path
 
@@ -122,6 +126,18 @@ SHEETS = {
         "rows": [
             [2026, "Cart incident", "Moose", "Found the one tree on the 7th."],
             [2026, "Most balls lost", "Sully", "Eleven. The creek ate nine of them."],
+        ],
+    },
+    "Invites": {
+        # Next-season outreach tracking — separate from who's actually paid
+        # (that's Field, above). status=out means "not returning" and
+        # suppresses the person from the Next Year board, same convention
+        # as Field.status. email is mail-merge only; it never renders.
+        "headers": ["year", "player", "email", "invited", "responded", "status"],
+        "rows": [
+            [2027, "Sully", "sully@example.com", "TRUE", "TRUE", ""],   # invited + responded
+            [2027, "Tex", "tex@example.com", "TRUE", "FALSE", ""],      # invited, no reply yet
+            [2027, "Bear", "bear@example.com", "FALSE", "FALSE", "out"],# not returning
         ],
     },
 }

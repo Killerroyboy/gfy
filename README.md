@@ -27,12 +27,14 @@ or text someone straight to a section.
 3. **Turn the sample TRUE/FALSE cells into real checkboxes** (one-time, and
    only possible now that you're in a Google Sheet — an xlsx file can't hold
    a Sheets checkbox, so the template ships the text values instead). Select
-   the `deposit` column on Field, the `settled` column on Ledger, and the
-   `collected` column on Calcutta, one at a time: **Insert > Checkbox**.
-   Sheets converts the existing TRUE/FALSE values into checked/unchecked
-   boxes in place — nothing else to redo.
-4. The sheet has 11 tabs along the bottom (Info, Course, Field, Scores, …).
-   Each has a bold header row and a few sample rows showing the shape.
+   the `deposit` column on Field, the `settled` column on Ledger, the
+   `collected` column on Calcutta, and the `invited`/`responded` columns on
+   Invites, one at a time: **Insert > Checkbox**. Sheets converts the
+   existing TRUE/FALSE values into checked/unchecked boxes in place —
+   nothing else to redo.
+4. The sheet has 12 tabs along the bottom (Info, Course, Field, Scores, …,
+   Invites). Each has a bold header row and a few sample rows showing the
+   shape.
    **Keep the header rows exactly as they are.** Replace the sample rows
    with real data.
 5. **Teams, captains, and the `team` column.** Each row's `team` cell holds
@@ -76,7 +78,7 @@ If your PUB_ID doesn't start with `2PACX-`, you copied the wrong one.
 2. Look at the browser address bar. It ends with `#gid=` followed by a
    number, e.g. `…/edit#gid=1837552901`.
 3. That number is the gid for the tab you have selected. Click each of the
-   11 tabs in turn and write down each number. The first tab is usually `0`.
+   12 tabs in turn and write down each number. The first tab is usually `0`.
 
 ### 5. Share the photo folder (optional)
 
@@ -126,7 +128,7 @@ https://<your-pages-url>/?debug=1
 
 A panel appears listing every tab as `OK` (with a row count), `EMPTY`, or
 `FAILED` with the reason, plus the same health warnings as the strip above.
-Eleven `OK` lines means the plumbing is done. Remove `?debug=1` and hand out
+Twelve `OK` lines means the plumbing is done. Remove `?debug=1` and hand out
 the link.
 
 **Phones:** open the link in Safari/Chrome, then *Share > Add to Home
@@ -172,6 +174,50 @@ amount and payment handle (Info tab) right there to tap.
 If someone isn't coming back, set their current-season `status` to `out` —
 they drop off the Next Year board without deleting any history.
 
+## The invite list
+
+The Invites tab tracks next season's *outreach* — who was emailed, who
+wrote back, who still needs a nudge — separate from who's actually paid
+(that's the Field tab, above). Its columns: `year, player, email, invited,
+responded, status`.
+
+The workflow:
+
+1. Add everyone you might invite back to Invites, with **next year** in
+   `year` and their email address in `email`.
+2. Send your invite email (mail-merge off the `email` column, or just BCC
+   everyone — the sheet doesn't send anything itself).
+3. Tick `invited` for everyone you emailed.
+4. Tick `responded` as replies land.
+
+The Next Year board turns this into a funnel — paid, responded, invited,
+still needs an invite — so you can see at a glance who's stuck and where.
+Someone who's already paid always shows as paid, even if you also ticked
+`invited`/`responded` for them; paid is the highest stage. If someone isn't
+coming back, set their `status` to `out` on either their Field row or their
+Invites row — same convention as Field, and it suppresses them from the
+board either way.
+
+**Privacy: the `email` column never appears on the site.** It exists only so
+you can mail-merge from the sheet — no code path in `index.html` ever reads
+it into a rendered page. If you leave the Invites tab unconfigured or empty,
+the Next Year board just runs the plain paid/owing view with no funnel
+line — nothing else changes.
+
+### Adding the Invites tab to a sheet you already built
+
+If your GFY sheet predates this feature (it only has the original 11 tabs),
+add the 12th tab yourself — no need to rebuild from the template:
+
+1. In the Google Sheet, click **+** at the bottom to add a sheet, and name
+   it exactly **Invites**.
+2. Paste the header row into row 1: `year, player, email, invited,
+   responded, status`.
+3. Select the `invited` and `responded` columns, one at a time: **Insert >
+   Checkbox** (same one-time step as Field.deposit).
+4. Click the new tab, copy its gid from the address bar (`#gid=…`, same as
+   step 4 above), and paste it into `config.js` as `GID.invites`.
+
 ## When something looks wrong
 
 | Symptom | Likely cause |
@@ -189,7 +235,7 @@ they drop off the Next Year board without deleting any history.
 index.html          the whole app (HTML + CSS + JS, no build step)
 config.js           the only file you edit routinely
 tools/make_template.py   regenerates tools/gfy-template.xlsx
-fixtures/           sample CSVs mirroring the 11 tabs, incl. edge cases
+fixtures/           sample CSVs mirroring the 12 tabs, incl. edge cases
 test/smoke.mjs      headless render test against the fixtures
 ```
 

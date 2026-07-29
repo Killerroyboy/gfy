@@ -730,7 +730,7 @@ if (typeof CONFIG === "undefined") {
 const $ = s => document.querySelector(s);
 const CACHE_KEY = "gfy-cache-v2";
 const TABS = ["info","course","field","scores","schedule","pairings",
-              "calcutta","payout","ledger","champions","shame"];
+              "calcutta","payout","ledger","champions","shame","invites"];
 let INFO = {};
 const HOLES = Array.from({length:18},(_,i)=>i+1);
 let STATE = { data:{}, year:null, open:null };
@@ -756,7 +756,7 @@ function toObjects(rows){
 }
 const FPRINT={info:["key"],course:["hole"],field:["player"],scores:["h1","r1"],
   schedule:["event"],pairings:["players"],calcutta:["price"],payout:["share"],
-  ledger:["buyin"],champions:["champion"],shame:["award"]};
+  ledger:["buyin"],champions:["champion"],shame:["award"],invites:["invited"]};
 const BACKOFF={};      // tab -> next-allowed epoch ms
 const BACKOFF_N={};    // tab -> consecutive-failure count (drives the curve)
 const LAST_ERR={};     // tab -> last REAL error message (never the backoff sentinel)
@@ -1218,7 +1218,46 @@ function nextYearModel(){
     const da=a.date||"9999", db=b.date||"9999";
     return da<db?-1:(da>db?1:0);
   });
-  return {open:true,next,all,paid,owing:all.filter(p=>!p.paid)};
+
+  /* ---- invites funnel (v2.1) ----
+     Universe = union of current-season Field players, NEXT-season Field
+     rows, and NEXT-season Invites rows; minus anyone flagged status=out in
+     either NEXT-season source. Per-person stage (highest wins): paid (NEXT
+     Field deposit) > responded (invites.responded) > invited
+     (invites.invited) > needsInvite. Canonical-key (nkey) matching
+     throughout, same as everything above.
+     PRIVACY: Invites rows carry an `email` column for mail-merge only — it
+     is read nowhere in this codebase and must never reach the DOM. */
+  const invitesRows=STATE.data.invites;
+  const hasInvites=Array.isArray(invitesRows)&&invitesRows.length>0;
+  const funnel=new Map();
+  const touch=player=>{
+    const k=nkey(player);
+    if(!funnel.has(k)) funnel.set(k,{name:player,out:false,invited:false,responded:false});
+    return funnel.get(k);
+  };
+  field.filter(r=>r.year===season&&r.player).forEach(r=>touch(r.player));
+  nxt.forEach(r=>{
+    const p=touch(r.player);
+    if(String(r.status||"").trim().toLowerCase()==="out") p.out=true;
+  });
+  (invitesRows||[]).filter(r=>r.year===next&&r.player).forEach(r=>{
+    const p=touch(r.player);
+    if(String(r.status||"").trim().toLowerCase()==="out") p.out=true;
+    if(yes(r.invited)) p.invited=true;
+    if(yes(r.responded)) p.responded=true;
+  });
+  const paidKeys=new Set(paid.map(p=>nkey(p.name)));
+  const stages={paid:[],responded:[],invited:[],needs:[]};
+  funnel.forEach((p,k)=>{
+    if(p.out) return;
+    if(paidKeys.has(k)) stages.paid.push({name:p.name});
+    else if(p.responded) stages.responded.push({name:p.name});
+    else if(p.invited) stages.invited.push({name:p.name});
+    else stages.needs.push({name:p.name});
+  });
+
+  return {open:true,next,all,paid,owing:all.filter(p=>!p.paid),stages,hasInvites};
 }
 
 function renderCalcutta(){
@@ -1342,8 +1381,20 @@ function renderNextYear(){
     ? `<a href="${esc(handle)}">${esc(handle)}</a>`
     : esc(handle);
   const handleSpan=`<span style="text-transform:none;letter-spacing:normal">${handleHTML}</span>`;
+  /* Invites funnel line + Needs-an-invite block: only when the Invites tab
+     is actually configured and has rows. Absent/empty tab -> hasInvites is
+     false -> both stay empty strings -> exactly the pre-invites v2 layout. */
+  const funnelHTML=ny.hasInvites
+    ? `<p>${esc(ny.stages.paid.length)} paid · ${esc(ny.stages.responded.length)} responded · `
+      +`${esc(ny.stages.invited.length)} invited · ${esc(ny.stages.needs.length)} need an invite</p>`
+    : "";
+  const needsHTML=ny.hasInvites&&ny.stages.needs.length
+    ? `<h3 class="subhead">Needs an invite</h3><div class="mn-net down">${ny.stages.needs.map(p=>esc(p.name)).join(", ")}</div>`
+    : "";
   nyBody.innerHTML=`<p class="eyebrow">${esc(ny.paid.length)} of ${esc(ny.all.length)} paid for ${esc(ny.next)}</p>`+
+    funnelHTML+
     paidHTML+owingHTML+
+    needsHTML+
     `<p class="basis">Deposit ${money(num(INFO.deposit_amount))} · ${handleSpan}</p>`;
 }
 
@@ -1741,7 +1792,10 @@ function paintHome(){
     ? `<a href="#nextyear">${esc(ny.paid.length)} of ${esc(ny.all.length)} paid for ${esc(ny.next)}</a>`
     : `<a href="#nextyear">Collection for ${esc(ny.next)} not open yet</a>`;
   const calHTML=cal.lots.length>0 ? ` · <a href="#calcutta">${esc(money(outTotal))} Calcutta outstanding</a>` : "";
-  statusEl.innerHTML=nyHTML+calHTML;
+  const needHTML=(ny.open&&ny.hasInvites&&ny.stages.needs.length)
+    ? ` · <a href="#nextyear">${esc(ny.stages.needs.length)} need an invite</a>`
+    : "";
+  statusEl.innerHTML=nyHTML+calHTML+needHTML;
 }
 function paint(data,results){
   HEALTH=[];

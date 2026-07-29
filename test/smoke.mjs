@@ -7,6 +7,9 @@
 // expected to go mostly RED at commit time — tasks 3-8 turn it green group
 // by group (A-C @ task 3, D @ task 4, E @ task 5, F @ task 6, G/H @ task 7,
 // I @ task 8). Do not "fix" the app here; that is later tasks' job.
+//
+// Group W (v2.1 "Invites") added at task 12 — the next-year funnel that
+// tracks outreach (invited/responded) ahead of who's actually paid.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,15 +20,23 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const html = readFileSync(path.join(ROOT, "index.html"), "utf8");
 
 const TABS = ["info","course","field","scores","schedule","pairings",
-              "calcutta","payout","ledger","champions","shame"];
+              "calcutta","payout","ledger","champions","shame","invites"];
 const GIDS = {};
 TABS.forEach((t, i) => GIDS[t] = String(101 + i));
 const FIXTURES = {};
 TABS.forEach(t => FIXTURES[t] = readFileSync(path.join(ROOT, "fixtures", t + ".csv"), "utf8"));
 
-const testConfig = `window.CONFIG = { PUB_ID:"TESTPUB", GID:${JSON.stringify(GIDS)},
+// `buildTestConfig` defaults to the standard GIDS map so every existing call
+// site (`testConfig`) behaves exactly as in v2. Group W's "invites tab
+// absent" variant (W6) overrides just GID.invites to "" to simulate an
+// unconfigured 12th tab without touching any other tab's gid.
+function buildTestConfig(gidOverrides = {}) {
+  const gid = Object.assign({}, GIDS, gidOverrides);
+  return `window.CONFIG = { PUB_ID:"TESTPUB", GID:${JSON.stringify(gid)},
   SHEET_EDIT_URL:"", DRIVE_FOLDER_ID:"", FIRST_TEE:"2026-08-15T09:00:00-06:00",
   CURRENCY:"$", REFRESH_MS:3600000 };`;
+}
+const testConfig = buildTestConfig();
 
 function fakeFetch(url) {
   const gid = new URL(url).searchParams.get("gid");
@@ -38,8 +49,11 @@ const envNoise = /not implemented|could not parse css/i;
 // `fetchImpl` defaults to the standard fixture stub (fakeFetch) so every
 // existing call site (`makeDom("")`, `makeDom("?debug=1")`) behaves exactly
 // as in v1. Variant doms (B2, D1, D2, E2, E3) pass a wrapped stub that
-// overrides one tab's response — see `withOverride` below.
-function makeDom(query, fetchImpl = fakeFetch) {
+// overrides one tab's response — see `withOverride` below. `configText`
+// defaults to the standard `testConfig` so every pre-invites call site is
+// unaffected; W6 passes a `buildTestConfig({invites:""})` variant to
+// simulate the Invites tab being unconfigured.
+function makeDom(query, fetchImpl = fakeFetch, configText = testConfig) {
   const errors = [];
   const vc = new VirtualConsole();
   vc.on("jsdomError", e => { if (!envNoise.test(e.message)) errors.push(e.message + (e.cause ? " :: " + e.cause : "")); });
@@ -49,7 +63,7 @@ function makeDom(query, fetchImpl = fakeFetch) {
     beforeParse(window) { window.fetch = fetchImpl; },
     resources: { interceptors: [requestInterceptor((request) => {
       if (request.url.endsWith("/config.js"))
-        return new Response(testConfig, { headers: { "Content-Type": "application/javascript" } });
+        return new Response(configText, { headers: { "Content-Type": "application/javascript" } });
       return new Response("", { headers: { "Content-Type": "text/css" } });
     })] },
   });
@@ -263,8 +277,8 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
   const okCount = (dbgText.match(/\bOK\b/g) || []).length;
   const hasFailed = /FAILED/i.test(dbgText);
   domD5.window.close();
-  check("D5: debug happy path — 11 tabs OK",
-    okCount === 11 && !hasFailed,
+  check("D5: debug happy path — 12 tabs OK",
+    okCount === 12 && !hasFailed,
     "okCount=" + okCount + " hasFailed=" + hasFailed + " | " + dbgText.slice(0, 300));
 }
 
@@ -482,6 +496,66 @@ check("H5: deposit amount and payment handle rendered",
 }
 
 /* ---------------------------------------------------------------------
+   GROUP W — invites funnel (v2.1 Invites tab, Task 12)
+   Fixture (fixtures/invites.csv, year 2027): Duck paid-overlap (already
+   paid via Field 2027); "Johnson, Wade" responded; Moose invited only;
+   Sock invited+responded but status=out on his Field 2027 row (must be
+   suppressed — the out-cross-source rule); Blade brand-new with nothing
+   ticked (needs). Hand-derived funnel: paid = Duck, Tank, Crash (all via
+   Field 2027 deposit); responded = Johnson, Wade; invited = Moose;
+   needs = Hammer, Sully, Tex, Bear, Blade. 3 paid · 1 responded ·
+   1 invited · 5 need an invite.
+   --------------------------------------------------------------------- */
+check("W1: funnel line reads exact hand-derived counts — 3 paid · 1 responded · 1 invited · 5 need an invite",
+  nyBodyText.includes("3 paid · 1 responded · 1 invited · 5 need an invite"),
+  nyBodyText.slice(0, 260));
+
+{
+  const needsIdx = nyBodyText.indexOf("Needs an invite");
+  const needsBlockText = needsIdx === -1 ? "" : nyBodyText.slice(needsIdx);
+  check("W2: Needs-an-invite block lists Blade and Hammer",
+    needsBlockText.includes("Blade") && needsBlockText.includes("Hammer"),
+    needsBlockText.slice(0, 160));
+}
+
+check("W3: Sock appears nowhere on the Next Year board (out on his Field row suppresses him despite invited+responded on his Invites row)",
+  nyBodyText.trim().length > 0 && !nyBodyText.includes("Sock"),
+  nyBodyText.slice(0, 300));
+
+{
+  const fullHTML = doc.documentElement.outerHTML;
+  const fixtureEmails = ["duck@example.com", "wade@example.com", "moose@example.com", "sock@example.com", "blade@example.com"];
+  const leaked = fixtureEmails.filter(e => fullHTML.includes(e));
+  check("W4: no fixture email address appears anywhere in the rendered document (privacy rule — email is mail-merge only)",
+    leaked.length === 0, "leaked=" + JSON.stringify(leaked));
+}
+
+{
+  const infoPastW5 = FIXTURES.info.replace("2026-08-15T09:00:00-06:00", "2020-08-15T09:00:00-06:00");
+  const pastFetchW5 = withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoPastW5 }),
+  });
+  const domW5 = makeDom("", pastFetchW5);
+  await settle();
+  const homeStatusW5 = domW5.window.document.querySelector("#homeStatus")?.textContent || "";
+  check("W5: Home strip contains '5 need an invite' linking #nextyear",
+    homeStatusW5.includes("5 need an invite"), homeStatusW5);
+  domW5.window.close();
+}
+
+{
+  const domW6 = makeDom("", fakeFetch, buildTestConfig({ invites: "" }));
+  await until(() => domW6.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const nyBodyTextW6 = domW6.window.document.querySelector("#nyBody")?.textContent || "";
+  check("W6: invites tab stubbed absent (rows null) — board renders exactly the v2 baseline, no funnel line, no needs block",
+    nyBodyTextW6.includes("3 of 9 paid")
+      && !/\d+\s*paid\s*·\s*\d+\s*responded/.test(nyBodyTextW6)
+      && !nyBodyTextW6.includes("Needs an invite"),
+    nyBodyTextW6.slice(0, 260));
+  domW6.window.close();
+}
+
+/* ---------------------------------------------------------------------
    GROUP Z — guardrails (Z0) + unconfigured deploy (Z1-Z4, final review)
    --------------------------------------------------------------------- */
 check("Z0: zero page errors in plain mode", dom.pageErrors.length === 0,
@@ -550,7 +624,7 @@ dom.window.close();
    --------------------------------------------------------------------- */
 const groupTally = {};
 results.forEach(([name, ok]) => {
-  const m = name.match(/^([A-IZ])\d+:/);
+  const m = name.match(/^([A-IWZ])\d+:/);
   if (!m) return;
   const g = m[1];
   groupTally[g] = groupTally[g] || { pass: 0, total: 0 };
@@ -559,7 +633,7 @@ results.forEach(([name, ok]) => {
 });
 
 console.log("");
-["A", "B", "C", "D", "E", "F", "G", "H", "I", "Z"].forEach(g => {
+["A", "B", "C", "D", "E", "F", "G", "H", "I", "W", "Z"].forEach(g => {
   if (groupTally[g]) console.log(`TALLY ${g} ${groupTally[g].pass}/${groupTally[g].total}`);
 });
 const failed = results.filter(r => !r[1]).length;
