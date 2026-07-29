@@ -1746,13 +1746,17 @@ dom.window.close();
   const pyCourseBlock = (py.match(/"Course":\s*\{([\s\S]*?)\n\s{4}"Field":/) || [])[1] || "";
   const pyCourse = [...pyCourseBlock.matchAll(/\[(\d+),\s*(\d+),\s*(\d+)\]/g)]
     .map(m => [Number(m[1]), Number(m[2]), Number(m[3])]);
-  check("P5: COURSE_DATA passes C-REAL checksums (both the .gs and tools/make_template.py copies)",
+  check("P5: COURSE_DATA passes C-REAL checksums (both the .gs and tools/make_template.py copies), including the 36/36 front/back par split so a within-course par swap across nines can't pass",
     !!course && course.length === 18
     && course.reduce((s, r) => s + r[1], 0) === 72
+    && course.slice(0,9).reduce((s, r) => s + r[1], 0) === 36
+    && course.slice(9).reduce((s, r) => s + r[1], 0) === 36
     && course.slice(0,9).reduce((s, r) => s + r[2], 0) === 3094
     && course.slice(9).reduce((s, r) => s + r[2], 0) === 3007
     && pyCourse.length === 18
     && pyCourse.reduce((s, r) => s + r[1], 0) === 72
+    && pyCourse.slice(0,9).reduce((s, r) => s + r[1], 0) === 36
+    && pyCourse.slice(9).reduce((s, r) => s + r[1], 0) === 36
     && pyCourse.slice(0,9).reduce((s, r) => s + r[2], 0) === 3094
     && pyCourse.slice(9).reduce((s, r) => s + r[2], 0) === 3007,
     "pyCourse=" + JSON.stringify(pyCourse));
@@ -1775,30 +1779,46 @@ dom.window.close();
       { player: "Duck", email: "d@example.com", do_not_invite: "FALSE" },
       { player: "Sully", email: "s@example.com", do_not_invite: "FALSE" },
       { player: "Tank", email: "t@example.com", do_not_invite: "TRUE", reason: "sample" },
-      // Bear: DNI, paired with an out-status Invites row — correctly
-      // suppressed, must be SILENT (not a violation, not unpaired).
+      // Bear: DNI, paired with an out-status Invites row, no ticks —
+      // correctly suppressed, must be SILENT (not a violation, not unpaired).
       { player: "Bear", email: "b@example.com", do_not_invite: "TRUE", reason: "paired" },
       // Ghost: DNI with NO Invites-NEXT row at all — the dangerous unpaired
       // state (the site's funnel would resurface them).
       { player: "Ghost", email: "g@example.com", do_not_invite: "TRUE", reason: "unpaired" },
+      // Wolf: DNI, Invites-NEXT row has NO ticks and a BLANK status —
+      // isolates the STATUS leg alone: must still be a violation even though
+      // the ticks leg has nothing to fire on.
+      { player: "Wolf", email: "w@example.com", do_not_invite: "TRUE", reason: "status-leg-only" },
+      // Fox: DNI, Invites-NEXT row is `declined` with no ticks — must be
+      // SILENT, proving "declined" (not just "out") is honored as a dead
+      // status by the status leg.
+      { player: "Fox", email: "f@example.com", do_not_invite: "TRUE", reason: "declined-silent" },
     ];
     const invites = [
       { year: "2027", player: "Duck" },
-      { year: "2027", player: "Tank", invited: "TRUE" },   // DNI + invited ticked -> VIOLATION
+      // Tank: ticks fired but status is already a clean "out" — isolates the
+      // TICKS leg alone: must still be a violation even though the status
+      // leg would call this row clean.
+      { year: "2027", player: "Tank", invited: "TRUE", status: "out" },
       { year: "2027", player: "Hammer" },
-      { year: "2027", player: "Bear", status: "out" },     // DNI + out -> paired/silent
+      { year: "2027", player: "Bear", status: "out" },      // DNI + out, no ticks -> paired/silent
+      { year: "2027", player: "Wolf" },                     // DNI, no ticks, blank status -> status-leg violation
+      { year: "2027", player: "Fox", status: "declined" },  // DNI + declined, no ticks -> paired/silent
     ];
     const d = mod.diffVault(contacts, invites);
-    check("Q3: diff both directions + DNI three-state (violation/unpaired/paired-silent)",
+    const violationNames = d.dniViolations.map(c => c.player).sort();
+    const unpairedNames = d.dniUnpaired.map(c => c.player).sort();
+    check("Q3: diff both directions + DNI three-state, BOTH violation legs gated INDEPENDENTLY (Tank = ticks-leg-only, status already clean 'out'; Wolf = status-leg-only, no ticks at all; Fox proves 'declined' is honored as a dead status same as 'out')",
       d.neverInvited.length === 1 && d.neverInvited[0].player === "Sully"
       && d.missingFromVault.length === 1 && d.missingFromVault[0] === "Hammer"
-      // Tank: invited-ticked Invites row -> VIOLATION.
-      && d.dniViolations.length === 1 && d.dniViolations[0].player === "Tank"
-      // Bear: paired with an out-status row -> NOT a violation, NOT unpaired (silent/OK).
+      // exact violation set, pinned by name: Tank (ticks leg alone) + Wolf (status leg alone).
+      && JSON.stringify(violationNames) === JSON.stringify(["Tank", "Wolf"])
+      // exact unpaired set, pinned by name: Ghost only (no Invites-NEXT row at all).
+      && JSON.stringify(unpairedNames) === JSON.stringify(["Ghost"])
+      // Bear (out) and Fox (declined) are paired/silent -> absent from BOTH sets.
       && !d.dniViolations.some(c => c.player === "Bear") && !d.dniUnpaired.some(c => c.player === "Bear")
-      // Ghost: no Invites row at all -> unpaired warning, not a violation.
-      && d.dniUnpaired.length === 1 && d.dniUnpaired[0].player === "Ghost"
-      && !d.dniViolations.some(c => c.player === "Ghost"), JSON.stringify(d));
+      && !d.dniViolations.some(c => c.player === "Fox") && !d.dniUnpaired.some(c => c.player === "Fox"),
+      JSON.stringify(d));
     // IMPORTANT-6 dedup proof: header "player,email,,," has three unnamed
     // trailing columns; pre-fix they all collapsed onto one "" key (last
     // value wins) and silently swallowed an address planted in an earlier

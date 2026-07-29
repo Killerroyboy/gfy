@@ -156,8 +156,10 @@ Email addresses live in ONE place: the **GFY Admin** sheet (its template:
 1. Admin sheet → Contacts tab → File → Download → **CSV**. Save it OUTSIDE
    this repo folder (e.g. Downloads — the checker refuses in-repo paths).
 2. `npm run presend -- ~/Downloads/<the file>.csv --vault-url <admin sheet URL>`
-3. Fix anything it lists (do-not-invite violations block; "missing from
-   vault" means collect that address first). Log each send in SendLog.
+3. Fix anything it lists (do-not-invite violations block. Unpaired
+   do-not-invite names block too — give them their `out` row on Invites
+   first so the site suppresses them; "missing from vault" means collect
+   that address first). Log each send in SendLog.
 
 Skipped the checker? Then at minimum re-read the do_not_invite column
 before sending. That list exists because someone once had a reason.
@@ -421,7 +423,8 @@ site still quietly counts them as needing an invite; Invites-only means
 next year's operator has an exclusion with no memory of why.
 
 **Before sending invites**, cross-check the two sheets against each other
-by hand: everyone marked DNI in GFY Admin should be `out` in Invites, and
+— `npm run presend` does this for you (see "Before every send round"
+above): everyone marked DNI in GFY Admin should be `out` in Invites, and
 nobody about to get an invite email should be sitting on the DNI list.
 The pre-send checker automates this cross-check — see "Before every send
 round" above; it flags DNI names with active invite rows AND unpaired DNI

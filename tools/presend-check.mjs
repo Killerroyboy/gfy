@@ -193,6 +193,7 @@ async function main(){
   console.log(`\n== GFY pre-send check (next season detected: ${d.nextYear || "?"}) ==`);
   console.log(`\nDO-NOT-INVITE VIOLATIONS (${d.dniViolations.length}):` +
     (d.dniViolations.length ? "\n  " + d.dniViolations.map(c => `${c.player} — ${c.reason || "no reason recorded"}`).join("\n  ") : " none"));
+  if (d.dniViolations.length) console.log("  → fix: set their Invites status to `out` (and untick invited/responded), or drop them from this send.");
   console.log(`\nUNPAIRED DO-NOT-INVITE (${d.dniUnpaired.length}):` +
     (d.dniUnpaired.length
       ? "\n  " + d.dniUnpaired.map(c => `${c.player} — unpaired do-not-invite — add an Invites row with status \`out\` so the site suppresses them`).join("\n  ")
