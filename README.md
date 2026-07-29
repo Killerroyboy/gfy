@@ -31,7 +31,10 @@ tab has its own deep link (`yoursite.com/#calcutta`, `#nextyear`, `#rooms`,
    `collected` column on Calcutta, and the `invited`/`responded` columns on
    Invites, one at a time: **Insert > Checkbox**. Sheets converts the
    existing TRUE/FALSE values into checked/unchecked boxes in place —
-   nothing else to redo. (Rooms has no checkbox columns — skip it here.)
+   nothing else to redo. (Rooms has no checkbox columns — skip it here.
+   **NOT `handicap`** either — that column is a typed number, not a
+   checkbox; the polish script repairs it if a broad column-conversion
+   swept it up by mistake.)
 4. The sheet has 13 tabs along the bottom (Info, Course, Field, Scores, …,
    Invites, Rooms). Each has a bold header row and a few sample rows showing
    the shape.
@@ -128,13 +131,76 @@ https://<your-pages-url>/?debug=1
 
 A panel appears listing every tab as `OK` (with a row count), `EMPTY`, or
 `FAILED` with the reason, plus the same health warnings as the strip above.
-Twelve `OK` lines means the plumbing is done. Remove `?debug=1` and hand out
+Thirteen `OK` lines means the plumbing is done. Remove `?debug=1` and hand out
 the link.
 
 **Phones:** open the link in Safari/Chrome, then *Share > Add to Home
 Screen*. It installs like an app, icon and all.
 
 ---
+
+## The Admin vault (emails)
+
+Email addresses live in ONE place: the **GFY Admin** sheet (its template:
+`tools/gfy-admin-template.xlsx` → Drive → Open as Google Sheet). Three rules:
+
+1. **Never** click File → Share → Publish to web on the Admin sheet. Doing so
+   makes every address and do-not-invite reason public.
+2. Keep it a **separate file** — never a tab of the public GFY sheet. The
+   public sheet publishes "Entire document", so any new tab auto-publishes.
+3. The public Invites tab tracks *who/when/status* — names only, never an
+   email address in any cell (the checker below watches for this).
+
+### Before every send round
+
+1. Admin sheet → Contacts tab → File → Download → **CSV**. Save it OUTSIDE
+   this repo folder (e.g. Downloads — the checker refuses in-repo paths).
+2. `npm run presend -- ~/Downloads/<the file>.csv --vault-url <admin sheet URL>`
+3. Fix anything it lists (do-not-invite violations block; "missing from
+   vault" means collect that address first). Log each send in SendLog.
+
+Skipped the checker? Then at minimum re-read the do_not_invite column
+before sending. That list exists because someone once had a reason.
+
+### Replies (Gmail loop)
+
+When invite replies come in: authenticate Gmail once via `/mcp` in a Claude
+session, then ask for a reply scan. You get a review list (name, address,
+snippet — in the conversation only, never written to a file); you approve;
+`responded` gets ticked on the Invites tab. If the scan errors with an auth
+failure, re-run `/mcp` — a failed scan never means "no replies".
+
+### Rooms fill in paid order
+
+The Next-Year room queue orders people by `paid_date` (real dates — ISO like
+2026-08-20 preferred). Blank or unparseable dates sort last. Ties on the
+same day keep sheet order.
+
+### Sheet sharing (the "Enter scores" button)
+
+The site's Enter-scores button opens the sheet's edit URL. Today the sheet
+is restricted (anonymous visitors get a login wall — verified). If you ever
+switch sharing to "anyone with the link can edit" so the guys can score
+without Google accounts, know what that trades: the button is on a public
+site, so anyone who finds the page could edit the sheet. Restricted +
+named editors is the safe default.
+
+### Polish script (run after big sheet edits)
+
+`tools/sheet-polish.gs` → Extensions → Apps Script on the LIVE sheet →
+paste → run `polish()`. Safe to re-run any time (it never changes cell
+values). First run also repairs the handicap column (checkbox → typed
+number) and fills the Course tab with the real MeadowCreek 18. To verify
+idempotence after an Apps Script edit: run `polish()` twice in a row and
+confirm no cell value changed between runs (File → Version history).
+
+The polish script also OWNS conditional formatting on Field and Rooms — it
+replaces all conditional-format rules on those two tabs each run. Don't
+hand-add your own coloring there; it will be erased.
+
+Sheet edits reach the site in roughly 1–6 minutes (Google republishes ~every
+5 minutes; the site refreshes every 60 seconds). During a round, that's fast
+enough to keep the board honest — just don't panic-refresh.
 
 ## Year to year
 

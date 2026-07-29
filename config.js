@@ -19,7 +19,7 @@ window.CONFIG = {
   // the browser address bar. The first tab is usually 0.
   // Example: GID: { info:"0", course:"1837552901", field:"482915637", ... },
   GID: {
-    info: "0",
+    info: "346870487",
     course: "518861921",
     field: "943851924",
     scores: "2048642783",
