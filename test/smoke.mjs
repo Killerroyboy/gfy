@@ -1713,6 +1713,30 @@ dom.window.close();
   domN.window.close();
 }
 
+/* ---------- P: sheet-polish.gs parity (v2.3 §13 E-VOCAB, C-REAL) ---------- */
+{
+  const gsPath = path.join(ROOT, "tools", "sheet-polish.gs");
+  let gs = ""; try { gs = readFileSync(gsPath, "utf8"); } catch {}
+  const grab = name => { const m = gs.match(new RegExp("const " + name + "\\s*=\\s*(\\[[^;]*\\]);", "s")); return m ? JSON.parse(m[1].replace(/'/g, '"')) : null; };
+  const fieldStatus = grab("FIELD_STATUS"), invStatus = grab("INVITES_STATUS"), course = grab("COURSE_DATA");
+  check("P1: FIELD_STATUS matches site vocabulary In/wd/out/declined",
+    JSON.stringify(fieldStatus) === JSON.stringify(["In","wd","out","declined"]), String(fieldStatus));
+  check("P2: INVITES_STATUS matches F-DECLINED vocabulary",
+    JSON.stringify(invStatus) === JSON.stringify(["declined","out"]), String(invStatus));
+  check("P3: site actually parses that vocabulary (parity's other leg)",
+    html.includes('statusLower==="out"||statusLower==="declined"') && html.includes('/^in$/i') && html.includes('"wd"'));
+  check("P4: checkbox columns are the closed list",
+    gs.includes('const CHECKBOX_COLS') && ["deposit","collected","invited","responded"].every(c => gs.includes(`"${c}"`))
+    && !/CHECKBOX_COLS[^;]*handicap/s.test(gs));
+  check("P5: COURSE_DATA passes C-REAL checksums",
+    !!course && course.length === 18
+    && course.reduce((s, r) => s + r[1], 0) === 72
+    && course.slice(0,9).reduce((s, r) => s + r[2], 0) === 3094
+    && course.slice(9).reduce((s, r) => s + r[2], 0) === 3007);
+  check("P6: script embeds no sheet ids/urls (safe for public repo)",
+    gs.length > 0 && !/docs\.google\.com|spreadsheets\/d\//.test(gs));
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
