@@ -1220,10 +1220,20 @@ function renderScoreGrid(players){
   if(!players.length){ wrap.hidden=true; return; }
   wrap.hidden=false;
   const pars=courseMap(), yds=courseYards();
-  if(!pars){ note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return; }
+  if(!pars){
+    note.textContent="Hole-by-hole view needs all 18 holes on the Course tab.";
+    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return;
+  }
   note.hidden=true; scroll.hidden=false;
-  const rounds=[...new Set(players.flatMap(p=>Object.keys(p.rounds)))].sort();
-  if(!rounds.length){ note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return; }
+  // G-ROUND: only rounds with an actual hole-by-hole card count toward the
+  // grid/toggle. A round that exists solely as a {total} entry (no .holes)
+  // must not be selectable — there's no hole-by-hole card to show for it —
+  // and must never become the unswitchable default round either.
+  const rounds=[...new Set(players.flatMap(p=>Object.keys(p.rounds).filter(r=>p.rounds[r].holes)))].sort();
+  if(!rounds.length){
+    note.textContent="No hole-by-hole cards yet — totals only so far.";
+    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return;
+  }
   const rd=(STATE.gridRound&&rounds.includes(STATE.gridRound))?STATE.gridRound:rounds[0];
   const prevRd=table.dataset.round;   // captured before this render's mutations, for G-FOCUS's same-round guard
   table.dataset.round=rd;

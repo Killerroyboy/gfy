@@ -1662,6 +1662,34 @@ dom.window.close();
     domL3.window.document.querySelector("#sgRounds").hidden === true);
   domL3.window.close();
 }
+{
+  // G-ROUND (spec): a round with ONLY totals data (no hole map) must not
+  // count toward the toggle, and must never become the unswitchable
+  // DEFAULT round either. Duck has a real round-1 hole card; Bear's row
+  // has a blank "round" column and only r1/r2 totals, which the parser
+  // (index.html ~1044-1054) turns into rounds["1"]={total} AND
+  // rounds["2"]={total} — two totals-only round keys, no hole data at all.
+  // Pre-fix, rounds=["1","2"] (raw key union) → toggle shown for a round 2
+  // nobody has hole data for. Post-fix, rounds must derive from hole-data
+  // only → rounds=["1"] → toggle hidden, and Duck's 18-cell round-1 card
+  // plus Bear's honest totals row both render under round 1.
+  const domL4 = makeDom("", withOverride({ scores: () => Promise.resolve({ ok: true, status: 200,
+    text: async () => "year,team,round,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12,h13,h14,h15,h16,h17,h18,r1,r2\n"
+      + "2026,Duck,1,4,4,4,5,4,4,4,4,5,4,5,3,4,4,4,3,5,4,,\n"
+      + "2026,Bear,,,,,,,,,,,,,,,,,,,,76,76\n" }) }));
+  await until(() => domL4.window.document.querySelectorAll("#sgTable tr.sg-teamrow").length > 0);
+  const d4 = domL4.window.document;
+  const duckRow4 = [...d4.querySelectorAll("#sgTable tr.sg-teamrow")].find(r => r.textContent.includes("Duck"));
+  const bearRow4 = [...d4.querySelectorAll("#sgTable tr.sg-teamrow")].find(r => r.textContent.includes("Bear"));
+  check("L4: totals-only second round shows no toggle (G-ROUND hole-data gate)",
+    d4.querySelector("#sgRounds").hidden === true
+    && !!duckRow4 && duckRow4.querySelectorAll("td[data-hole]").length === 18
+    && !!bearRow4 && bearRow4.textContent.includes("round total 76"),
+    "roundsHidden=" + d4.querySelector("#sgRounds").hidden
+      + " duckCells=" + (duckRow4 ? duckRow4.querySelectorAll("td[data-hole]").length : "no Duck row")
+      + " bear=" + (bearRow4 ? bearRow4.textContent : "no Bear row"));
+  domL4.window.close();
+}
 
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
