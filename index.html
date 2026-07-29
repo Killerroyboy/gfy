@@ -2305,6 +2305,10 @@ const YEAR_DEFAULT_TABS=["field","scores","calcutta","schedule","pairings","ledg
 const NEXT_SEASON_TABS=["invites","rooms"];
 function normalizeYears(data){
   const next=nextSeason();
+  // Identity field map: rows with blank identity cells are skipped entirely (e.g., checkbox-range noise)
+  const identityFields={"field":"player","ledger":"player","invites":"player","scores":"team",
+    "calcutta":"team","rooms":"property","schedule":"event","pairings":"players","shame":"award"};
+
   Object.keys(data).forEach(tab=>{
     const rows=data[tab];
     if(!rows||!rows.length||!("year" in rows[0])) return;
@@ -2328,6 +2332,11 @@ function normalizeYears(data){
       if(nums.length) roomsOwnMax=String(Math.max(...nums));
     }
     rows.forEach(r=>{
+      // Skip rows with blank identity cells entirely (checkbox-range noise)
+      const fields=identityFields[tab]||[];
+      const checkFields=Array.isArray(fields)?fields:[fields];
+      if(checkFields.length>0&&checkFields.every(f=>!r[f]||!String(r[f]).trim())) return;
+
       const raw=r.year;
       if(!raw||!String(raw).trim()){
         if(!doDefault) return;

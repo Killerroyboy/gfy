@@ -45,6 +45,13 @@ function buildTestConfig(gidOverrides = {}) {
 }
 const testConfig = buildTestConfig();
 
+// Z group: empty config for unconfigured deploy (empty PUB_ID/GID)
+const emptyGids = {};
+TABS.forEach(t => emptyGids[t] = "");
+const emptyConfig = `window.CONFIG = { PUB_ID:"", GID:${JSON.stringify(emptyGids)},
+  SHEET_EDIT_URL:"", DRIVE_FOLDER_ID:"", FIRST_TEE:"2026-08-15T09:00:00-06:00",
+  CURRENCY:"$", REFRESH_MS:3600000 };`;
+
 function fakeFetch(url) {
   const gid = new URL(url).searchParams.get("gid");
   const tab = TABS.find(t => GIDS[t] === gid);
@@ -1479,11 +1486,10 @@ check("Z0: zero page errors in plain mode", dom.pageErrors.length === 0,
 
 dom.window.close();
 
-// Z1-Z4 — the state of live main: real config.js (empty PUB_ID/GID), every
-// fetch rejecting. No fabricated warnings, no fabricated stamps — just the
+// Z1-Z4 — the state of live main: synthesized empty config (empty PUB_ID/GID),
+// every fetch rejecting. No fabricated warnings, no fabricated stamps — just the
 // printed-card fallback content and a running countdown.
 {
-  const realConfigJS = readFileSync(path.join(ROOT, "config.js"), "utf8");
   const rejectAllFetch = () => Promise.reject(new Error("network unavailable in test"));
   const errorsZ = [];
   const vcZ = new VirtualConsole();
@@ -1494,7 +1500,7 @@ dom.window.close();
     beforeParse(window) { window.fetch = rejectAllFetch; },
     resources: { interceptors: [requestInterceptor((request) => {
       if (request.url.endsWith("/config.js"))
-        return new Response(realConfigJS, { headers: { "Content-Type": "application/javascript" } });
+        return new Response(emptyConfig, { headers: { "Content-Type": "application/javascript" } });
       return new Response("", { headers: { "Content-Type": "text/css" } });
     })] },
   });
@@ -1522,6 +1528,27 @@ dom.window.close();
     stampsZ.every(s => s === ""), JSON.stringify(stampsZ));
 
   domZ.window.close();
+}
+
+{
+  // Identity-less rows (checkbox-range noise) are skipped entirely, producing
+  // NO health flag and NO funnel count change. Append a blank-player Invites
+  // row to the default fixture and verify both stay stable vs baseline.
+  const invitesWithBlank = FIXTURES.invites + "2027,,TRUE,FALSE,\n";
+  const blankPlayerFetch = withOverride({
+    invites: () => Promise.resolve({ ok: true, status: 200, text: async () => invitesWithBlank }),
+  });
+  const domZ5 = makeDom("", blankPlayerFetch);
+  await until(() => domZ5.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const z5doc = domZ5.window.document;
+  const healthTextZ5 = z5doc.querySelector("#healthStrip")?.textContent || "";
+  const warnMatchZ5 = healthTextZ5.match(/(\d+)\s*(data )?warning/i);
+  const warnCountZ5 = warnMatchZ5 ? parseInt(warnMatchZ5[1], 10) : -1;
+  const nyBodyTextZ5 = z5doc.querySelector("#nyBody")?.textContent || "";
+  check("Z5: checkbox-range noise — identity-less Invites row (blank player, has invited/responded ticks) produces NO new health flag and NO funnel change (still '3 paid · 1 responded · 1 invited · 4 need an invite')",
+    warnCountZ5 === 7 && nyBodyTextZ5.includes("3 paid · 1 responded · 1 invited · 4 need an invite"),
+    "warnCount=" + warnCountZ5 + " ny=" + nyBodyTextZ5.slice(0, 200));
+  domZ5.window.close();
 }
 
 /* ---------------------------------------------------------------------
