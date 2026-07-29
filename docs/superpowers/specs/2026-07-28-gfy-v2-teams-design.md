@@ -225,3 +225,44 @@ green before the next (same discipline as v1's mission).
 - Riley: crest pick from the variants page (recommendation provided).
 - Held in reserve, not built: buyback-as-debt-line model (if the rule ever
   returns), lodging tab, ledger↔calcutta derivation.
+
+---
+
+## §12 — v2.2 addendum: ops round (pressure-tested 2026-07-28 evening)
+
+Two adversarial reviews (31 + 14 findings) + owner decisions. Binding rules; supersedes §5.5 where they conflict. The v2.1 invites commit (7611624) predates these — the v2.2 wave transforms it.
+
+### Data / anchors
+- **A-NEXT2**: Invites and Rooms are NEXT-season surfaces: anchor = max(year in own tab) with floor S-NEXT; picker-independent. normalizeYears defaults their blank years to NEXT (flagged).
+- **A-SANE**: activeSeason ignores Scores years > (first_tee year + 1), flagged. All year cells parseInt-normalized at ingest ("2,027"/"2027.0" ok; NaN flagged).
+- **A-DATE**: paid_date parsed as real date (ISO preferred, tolerate M/D/YY); unparseable → flagged + sorts after parsed; same-day tie = sheet order, stated on the queue.
+
+### Funnel (Invites tab: year, player, invited, responded, status — NO email column, ever)
+- **F-OPEN**: open when Invites-NEXT ∪ Field-NEXT nonempty.
+- **F-UNIV**: universe = Field(trailing 3 seasons) ∪ Field-NEXT ∪ Invites-NEXT, minus out.
+- **F-STAGE**: one derived stage per person (paid > responded > invited > needs); buckets exclusive, displayed summing to M.
+- **F-NAMES (Riley)**: public board = counts only + paid/owing lists as today; invited/needs-invite/declined NAMES render only under ?admin=1 (social gating; documented as non-cryptographic).
+- **F-DECLINED (Riley)**: status vocabulary: `declined` (benign, this season; shows under ?admin=1 as "declined"; excluded from owing/nag lists; REAPPEARS next season) vs `out` (excluded; silent suppress). Seniority is `since`-anchored and unaffected by declined/skipped seasons — tested invariant. Paid-then-out/declined renders "paid — refund owed" (admin view), never silent money deletion.
+- **F-FRESH**: funnel block carries its own caption: "invite states are ticked by hand and may lag" — the fetch stamp never vouches for checkboxes.
+- **F-OUT-HOME**: authoritative out/declined location = Invites-NEXT; status values elsewhere for NEXT season are flagged as ignored.
+
+### Rooms (tab: year, property, room, player)
+- **R-DERIVE**: sheet stores assignments only. Queue = paid-order (A-DATE) minus assigned. Health flags: player in two rooms; assigned-but-not-paid; unknown name without `guest:` prefix.
+- **R-PUBLIC (Riley)**: names public on the Rooms view (find-your-bed). ?admin=1 lens adds per-player PRIOR-year room ("had: <property·room> <year-1>") beside current assignment.
+- **R-FILTER**: client-side name filter box on the view.
+
+### Would-pay
+- **W-ONE**: derived from the payout table's exact rowsOut/ownerCut computation — never a second formula. Label "Wins if it ended now", carries the Projected/Final state; distinct texts: out-of-money "—", no cards "waiting on cards", unsold lot "unsold". Copy line on the board: "You owe the price regardless."
+- **W-WD**: Field status `wd` = withdrawn: excluded from the done-check with a health flag + board annotation (deleting rows not required to reach Final).
+- **W-RAKE0**: calcutta_rake parsing to 0 from a non-blank/non-zero cell → flagged.
+
+### Privacy / hygiene
+- **P-VAULT**: admin vault = separate never-published sheet (do-not-invite reasons, ALL email addresses, multi-address per person). Operator pre-send checker diffs public Invites vs vault both directions + schema watchdog (published headers vs expected; alarm on extras).
+- **P-GMAIL**: response scanning outputs a human-review list (name + matched address + snippet); auto-replies/OOO dropped; applied artifact = names only; declines handled manually.
+- **P-INDEX**: <meta name="robots" content="noindex"> on the site.
+
+### Structure
+- **S-VIEWS**: VIEWS derived from [data-view] DOM — no triple-entry.
+- **S-NAV**: seasonal nav order (off-season: Home·NextYear·Rooms·Field first; event window: Board·Pairings·Calcutta first) + right-edge fade affordance.
+- **S-STALE**: renderLeaderboard's `if(!players.length) return` early-return replaced with explicit empty state + regression fixture (LIVE BUG, ships with this wave).
+- Money tab off-season empty state points to Next Year; owing list rendered as a list, not a comma blob.
