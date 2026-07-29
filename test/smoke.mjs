@@ -1568,9 +1568,13 @@ dom.window.close();
   await until(() => domK2.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   const d = domK2.window.document;
   const table = d.querySelector("#sgTable");
+  const sgCss = [...d.querySelectorAll("style")].map(s => s.textContent).join("");
+  const parSize = parseFloat((sgCss.match(/\.sg-t tr\.sg-par[^{]*\{[^}]*font-size:\s*([\d.]+)rem/) || [])[1] || 0);
+  const ydsSize = parseFloat((sgCss.match(/\.sg-t tr\.sg-yds[^{]*\{[^}]*font-size:\s*([\d.]+)rem/) || [])[1] || 0);
   check("K2: grid renders one row per team + par/yds header rows",
     !!table && table.querySelectorAll("tr.sg-teamrow").length === d.querySelectorAll("#lbBody .lb-row").length
-    && !!table.querySelector("tr.sg-par") && !!table.querySelector("tr.sg-yds"));
+    && !!table.querySelector("tr.sg-par") && !!table.querySelector("tr.sg-yds")
+    && parSize >= 0.78 && ydsSize >= 0.68);
   // Default round is "1". Duck r1: h1 4 vs par 4 → neutral; h3 4 vs par 3 → bogey.
   // Moose r1: h7 7 vs par 3 → blowup.
   const row = name => table && [...table.querySelectorAll("tr.sg-teamrow")].find(r => r.textContent.includes(name));
