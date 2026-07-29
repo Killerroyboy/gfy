@@ -1628,6 +1628,41 @@ dom.window.close();
   domK7.window.close();
 }
 
+/* ---------- L: grid focus + round toggle (v2.3 §13) ---------- */
+{
+  const domL = makeDom("");
+  await until(() => domL.window.document.querySelectorAll("#sgTable tr.sg-teamrow").length > 0);
+  const d = domL.window.document;
+  check("L1: toggle visible with two rounds, round 1 active, no live hole (r1 complete)",
+    d.querySelector("#sgRounds").hidden === false
+    && d.querySelectorAll("#sgRounds button").length === 2
+    && d.querySelector("#sgRounds button.on").dataset.rd === "1"
+    && d.querySelector("#sgTable").dataset.liveHole === undefined,
+    "liveHole=" + d.querySelector("#sgTable").dataset.liveHole);
+  d.querySelectorAll("#sgRounds button")[1].click();
+  await until(() => d.querySelector("#sgTable").dataset.round === "2");
+  const row = name => [...d.querySelectorAll("#sgTable tr.sg-teamrow")].find(r => r.textContent.includes(name));
+  const duckCells = row("Duck").querySelectorAll("td[data-hole]");
+  const texCells = row("Tex").querySelectorAll("td[data-hole]");
+  check("L2: toggling renders round 2 — live hole 1 (Tex h1=0 dropped), under coloring, blank unplayed",
+    d.querySelector("#sgTable").dataset.liveHole === "1"
+    && duckCells[4].className.includes("under")     // duck r2 h5: 3 vs par 4
+    && texCells[0].textContent.trim() === ""        // 0 is not a score
+    && texCells[17].textContent.trim() === "",      // unplayed stays blank, never 0
+    "liveHole=" + d.querySelector("#sgTable").dataset.liveHole + " duckH5=" + duckCells[4].outerHTML);
+  domL.window.close();
+}
+{
+  // Single-round override → toggle hidden (G-ROUND)
+  const domL3 = makeDom("", withOverride({ scores: () => Promise.resolve({ ok: true, status: 200,
+    text: async () => "year,team,round,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12,h13,h14,h15,h16,h17,h18,r1,r2\n"
+      + "2026,Duck,1,4,4,4,5,4,4,4,4,5,4,5,3,4,4,4,3,5,4,,\n" }) }));
+  await until(() => domL3.window.document.querySelectorAll("#sgTable tr.sg-teamrow").length > 0);
+  check("L3: round toggle hidden with a single round",
+    domL3.window.document.querySelector("#sgRounds").hidden === true);
+  domL3.window.close();
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */

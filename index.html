@@ -1225,6 +1225,7 @@ function renderScoreGrid(players){
   const rounds=[...new Set(players.flatMap(p=>Object.keys(p.rounds)))].sort();
   if(!rounds.length){ note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return; }
   const rd=(STATE.gridRound&&rounds.includes(STATE.gridRound))?STATE.gridRound:rounds[0];
+  const prevRd=table.dataset.round;   // captured before this render's mutations, for G-FOCUS's same-round guard
   table.dataset.round=rd;
   const head=
     `<tr><th class="sg-team">Team</th>${HOLES.map(h=>`<th class="sg-h" data-hole="${h}">${h}</th>`).join("")}</tr>`+
@@ -1246,6 +1247,29 @@ function renderScoreGrid(players){
   const sx=scroll.scrollLeft;
   table.innerHTML=head+body;
   scroll.scrollLeft=sx;
+
+  // G-ROUND toggle
+  const ctr=$("#sgRounds");
+  if(rounds.length>1){
+    ctr.hidden=false;
+    ctr.innerHTML=rounds.map(r=>`<button type="button" class="year-btn${r===rd?" on":""}" data-rd="${esc(r)}" aria-pressed="${r===rd}">Round ${esc(r)}</button>`).join("");
+  } else { ctr.hidden=true; ctr.innerHTML=""; }
+
+  // G-FOCUS: first hole not every team has finished (only rows with hole maps count).
+  // The attribute is always set/deleted regardless of prevRd; only the actual
+  // scroll-into-view is suppressed on a same-round repaint (60s refresh) so
+  // it doesn't yank the user's scroll position back to the live hole while
+  // they're mid-scroll reading someone else's card. offsetLeft is 0 in jsdom
+  // (no layout), so the scroll call is naturally inert under test.
+  delete table.dataset.liveHole;
+  const live=HOLES.find(h=>players.some(p=>{const r=p.rounds[rd];return r&&r.holes&&r.holes[h]===undefined;}));
+  if(live!==undefined){
+    table.dataset.liveHole=String(live);
+    if(prevRd!==rd){
+      const cell=table.querySelector(`th[data-hole="${live}"]`);
+      if(cell&&cell.offsetLeft) scroll.scrollLeft=Math.max(0,cell.offsetLeft-scroll.clientWidth/2);
+    }
+  }
 }
 
 function seniorityBadge(since,season){
@@ -2221,6 +2245,14 @@ $("#icsBtn").addEventListener("click",()=>{
   const url=URL.createObjectURL(new Blob([ics],{type:"text/calendar"}));
   const a=document.createElement("a"); a.href=url; a.download="gfy.ics"; a.click();
   URL.revokeObjectURL(url);
+});
+
+/* ---------- score grid round toggle (G-ROUND) ---------- */
+$("#sgRounds").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-rd]");
+  if(!b) return;
+  STATE.gridRound=b.dataset.rd;
+  renderScoreGrid(rankedPlayers("gross"));
 });
 
 /* ---------- installable app ---------- */
