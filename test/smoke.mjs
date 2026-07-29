@@ -661,6 +661,31 @@ check("V7: W-ONE — the Calcutta board states the copy line 'You owe the price 
   domV8.window.close();
 }
 
+{
+  // V9: all-withdrawn payout guard — mark all teams (Duck, Sully, Moose, Tex,
+  // Bear) as wd so rowsOut is empty: lots exist, cards exist (ranked has many
+  // rows), but all eligible teams are withdrawn. Payout table must show
+  // explicit empty state ("No eligible teams — withdrawals") instead of
+  // rendering an empty rowsOut.map().
+  const fieldAllWD = FIXTURES.field
+    .replace("2026,Duck,Duck,2019,8,In,TRUE,", "2026,Duck,Duck,2019,8,wd,TRUE,")
+    .replace("2026,Sully,Sully,2021,15,In,TRUE,", "2026,Sully,Sully,2021,15,wd,TRUE,")
+    .replace("2026,Moose,Moose,2019,9,In,TRUE,", "2026,Moose,Moose,2019,9,wd,TRUE,")
+    .replace("2026,Tex,Tex,2019,18,In,TRUE,", "2026,Tex,Tex,2019,18,wd,TRUE,")
+    .replace("2026,Bear,Bear,2023,11,In,TRUE,", "2026,Bear,Bear,2023,11,wd,TRUE,");
+  const allWdFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldAllWD }),
+  });
+  const domV9 = makeDom("", allWdFetch);
+  await until(() => domV9.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const v9doc = domV9.window.document;
+  const payBodyText = v9doc.querySelector("#payBody")?.textContent || "";
+  check("V9: all-withdrawn payout guard — when all top paying teams are wd, payout body shows 'No eligible teams — withdrawals' (not empty)",
+    payBodyText.includes("No eligible teams — withdrawals"),
+    "payBody=" + payBodyText.slice(0, 100));
+  domV9.window.close();
+}
+
 /* ---------------------------------------------------------------------
    GROUP H — next year (Task 7)
    --------------------------------------------------------------------- */

@@ -1143,16 +1143,19 @@ function renderLeaderboard(){
     STATE.open=null;
     return;
   }
+  const wdKeys=wdKeySet();
   $("#lbBody").innerHTML=players.map(p=>{
     const pos=p.pos;
     const lead=(pos===1)?" lead":"";
     const id=esc(p.key).replace(/ /g,"-");
     const open=STATE.open===p.key;
+    const thru=thruLabel(p);
+    const wdMarker=wdKeys.has(p.key)?" WD":"";
     return `<button class="lb-row${lead}" type="button" data-player="${esc(p.key)}"
               aria-expanded="${open}" aria-controls="card-${id}">
         <span class="lb-pos">${pos??"—"}</span>
         <span class="lb-name">${teamLabel(p.key, p.name).html}</span>
-        <span class="lb-thru">${thruLabel(p)}</span>
+        <span class="lb-thru">${thru}${wdMarker}</span>
         <span class="lb-num lb-r1">${p.roundTotals["1"]??"—"}</span>
         <span class="lb-num lb-r2">${p.roundTotals["2"]??"—"}</span>
         <span class="lb-tot lb-total">${p.total??"—"}</span>
@@ -1565,6 +1568,35 @@ function roomsModel(){
   return {open:true,anchor,priorYear,props,queue};
 }
 
+/* W-WD helper: compute the set of withdrawn team keys for the current year.
+   Shared by renderCalcutta (payout logic) and renderLeaderboard (row annotation).
+   Flags each withdrawn team once. */
+function wdKeySet(){
+  const roster=rosterMap();
+  const fieldStatusByKey={};
+  (STATE.data.field||[]).filter(r=>r.player&&r.year===STATE.year).forEach(r=>{
+    fieldStatusByKey[nkey(r.player)]=String(r.status||"").trim().toLowerCase();
+  });
+  const wdKeys=new Set();
+  if(roster.size){
+    roster.forEach((t,k)=>{
+      const names=[t.captain,...t.members].filter(Boolean);
+      if(names.some(n=>fieldStatusByKey[nkey(n)]==="wd")){
+        wdKeys.add(k);
+        flag('Team "'+(t.captain||k)+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
+      }
+    });
+  } else {
+    Object.keys(fieldStatusByKey).forEach(k=>{
+      if(fieldStatusByKey[k]==="wd"){
+        wdKeys.add(k);
+        flag('"'+k+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
+      }
+    });
+  }
+  return wdKeys;
+}
+
 function renderCalcutta(){
   const cal=calcuttaModel();
   const {lots,pot,rakePct,rake,payable,outstanding}=cal;
@@ -1617,27 +1649,7 @@ function renderCalcutta(){
   // row); nothing about the team's row is deleted or hidden. Computed
   // BEFORE payout places are assigned below, so a wd team can't collect
   // (PAY-WD, controller default rule: a withdrawn team cannot collect).
-  const fieldStatusByKey={};
-  (STATE.data.field||[]).filter(r=>r.player&&r.year===STATE.year).forEach(r=>{
-    fieldStatusByKey[nkey(r.player)]=String(r.status||"").trim().toLowerCase();
-  });
-  const wdKeys=new Set();
-  if(roster.size){
-    roster.forEach((t,k)=>{
-      const names=[t.captain,...t.members].filter(Boolean);
-      if(names.some(n=>fieldStatusByKey[nkey(n)]==="wd")){
-        wdKeys.add(k);
-        flag('Team "'+(t.captain||k)+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
-      }
-    });
-  } else {
-    Object.keys(fieldStatusByKey).forEach(k=>{
-      if(fieldStatusByKey[k]==="wd"){
-        wdKeys.add(k);
-        flag('"'+k+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
-      }
-    });
-  }
+  const wdKeys=wdKeySet();
   const done=ranked.filter(p=>!wdKeys.has(p.key)).every(p=>p.played>=36);
 
   // PAY-WD: a withdrawn team cannot collect, so it is excluded from the
@@ -1727,6 +1739,15 @@ function renderCalcutta(){
   if(!ranked.length){
     $("#payBody").innerHTML='<div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>';
     $("#calBasis").textContent="Bids locked. Payouts post once cards do.";
+    return;
+  }
+
+  if(!rowsOut.length && ranked.length && lots.length){
+    // All-withdrawn payout guard: lots exist, cards exist, but all paying
+    // teams are withdrawn (rowsOut is empty). Show explicit empty state
+    // instead of blank payout area.
+    $("#payBody").innerHTML='<div class="mn-empty">No eligible teams — withdrawals</div>';
+    $("#calBasis").textContent=(done?"Final":"Projected")+" · paid on "+basis;
     return;
   }
 

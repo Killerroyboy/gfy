@@ -267,7 +267,10 @@ type; that's a browser-side convenience, it never touches the sheet.
 — but never older than the current season, so Rooms can serve the event
 that's about to happen (unlike Next Year/Invites, which are always about
 next year specifically). Add rows for next year's lodging whenever you like
-and the anchor follows them forward, same as Invites can run ahead.
+and the anchor follows them forward, same as Invites can run ahead. The
+Rooms header displays the anchor year (e.g., "Rooms — 2026") so you see at
+a glance which year's assignments you're looking at; blank-year rows default
+to the tab's own maximum year and render alongside other rows for that year.
 
 **Health flags** (site-side, automatic, on the same health strip as
 everything else):
