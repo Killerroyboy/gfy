@@ -214,7 +214,7 @@ async function main(){
   let vProbeFailed = false;
   if (vaultUrl){
     const id = (vaultUrl.match(/\/d\/([\w-]+)/) || [])[1];
-    if (!id) console.log("\nV-PROBE: could not parse a sheet id from --vault-url");
+    if (!id) { console.log("\nV-PROBE: could not parse a sheet id from --vault-url — NOT proven safe"); vProbeFailed = true; }
     else {
       try {
         const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/export?format=csv`, { redirect: "follow" });
