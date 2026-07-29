@@ -313,3 +313,23 @@ Brainstormed with Riley 2026-07-29; all four approaches Riley-selected, design a
 ### Sequencing note
 - Work lands on `v2.1-invites` (or its successor branch) — reversible preview work. Yesterday's `v2.1-invites → main` push gate is untouched by this addendum and remains Riley's.
 - Cheap insurance as commits accumulate: push the BRANCH to origin periodically (a branch push is not the fence; main is). Content check 2026-07-29: the branch holds no secrets — `SHEET_EDIT_URL` in config.js is public by design and the sheet answers 401 anonymously (restricted). README documents the trade-off should sharing ever widen to link-editing: the public "Enter scores" button would then be world-editable.
+
+## §14 — v2.4 addendum: sheet ease-of-use + grid legibility (2026-07-29)
+
+Riley-scoped same day v2.3 deployed: all three ease items + grid legibility + per-hole crops (Riley picked crop-in-panel over scorecard bands). Binding rules; inherits §12–§13.
+
+### Site
+- **G-BIGPAR**: the grid's par and yards rows become first-class legible — par at score-cell scale (or within 15%), yards one step down but readable on a phone at arm's length; both keep tabular-nums and the Out/In divider. The "subtle metadata" styling is retired (Riley ruling).
+- **G-CROP**: the hole panel's primary visual becomes a pin-centered ZOOMED crop of the existing assets/course-map.png (~3.5× via CSS background sizing/positioning driven by PINS percents; pin ring overlaid; positions clamped near map edges so border holes stay framed). The full map renders smaller beneath it; the real hole photo (3, 12) stays. NO new image files — one map, CSS does the cropping.
+
+### Sheet ops (new `tools/sheet-triggers.gs`; polish.gs stays one-shot formatting)
+- **F-FORM**: live scoring moves to a Google Form (4 questions: Team — dropdown; Round — 1/2; Hole — 1–18; Team score — number). Riley creates the form + links responses to the live sheet (README walkthrough with exact question setup). The auto-created responses tab publishes with the document (entire-doc mode) — acceptable BY DESIGN: it contains team/round/hole/score only, never names-beyond-teams, never contact data.
+- **F-DROPDOWN (Riley trade-off, ratified)**: the form's Team list is maintained by hand at draft night. No FormApp scope; the trigger script keeps @OnlyCurrentDoc.
+- **F-WRITE**: installable onFormSubmit trigger validates (team matches a Field roster team, case-insensitive; round ∈ {1,2}; hole ∈ 1..18; score = positive int) and writes the Scores grid: the (team, round) row's hN column, creating the row with the active season's year and the roster's canonical team casing if absent. The response row is marked `applied` (audit trail) — or `rejected: <reason>`, never silently dropped. Corrections = resubmit; last write wins and the site's existing conflict-flag covers mid-air edits. The writer touches the Scores tab ONLY.
+- **F-STAMP**: installable onEdit trigger on Field's deposit column: tick TRUE + blank paid_date → stamp today (YYYY-MM-DD). Unticking never erases a date (refunds are admin judgment, not automation).
+- **F-START**: polish() gains buildStartHere(): a first tab "START HERE" — season-aware to-do list, color legend, HYPERLINK jumps to key tabs, presend reminder, a cell for the scoring form's URL (Riley pastes once). Plus seasonal tab reorder: event window (first_tee ±3 days) puts START HERE + Scores first; off-season puts START HERE + Next Year/Invites first. Idempotent rebuild each run.
+- **F-TRIG**: `setup()` installs both triggers idempotently (removes this project's prior triggers for the same handlers first); `teardown()` removes them. One-time authorization step documented in README (a step above the run-once script; scope stays this-spreadsheet-only).
+
+### Testing / battery
+- Smoke P-group extensions read the new .gs source: validation vocabulary (round/hole/score bounds), Scores-only write discipline (no other sheet-name literals in the writer), stamp column names, idempotent-setup shape.
+- E2E battery: one real form submission after setup() → response marked applied → Scores cell populated → site shows the score after republish+refresh. Riley phone-width eyeball carried from v2.3 into this round's battery.
