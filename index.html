@@ -193,6 +193,10 @@
   .auc-owner{color:var(--sage);font-size:.95rem}
   .auc-back{text-align:right;font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
   .auc-price{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
+  /* W-ONE: "wins if it ended now" — a second line inside the team cell,
+     same on every viewport (mobile grid stays untouched by design). */
+  .auc-would{display:block;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;
+             color:var(--sage);margin-top:3px;font-variant-numeric:tabular-nums}
   .pay-head,.pay-row{display:grid;grid-template-columns:3.4rem 1fr 1fr 5.5rem;gap:10px;
                      align-items:baseline;padding:13px 6px}
   .pot dd small{display:block;font-family:var(--ui);font-size:.62rem;letter-spacing:.04em;
@@ -205,6 +209,22 @@
   .pay-cut{text-align:right;font-variant-numeric:tabular-nums;color:var(--bone)}
   .pay-cut.dim{color:var(--sage)}
   .basis{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--brass-dim);margin:16px 0 0}
+
+  /* rooms */
+  .room-filter{display:block;width:100%;max-width:320px;margin:0 0 26px;font-family:var(--ui);
+    font-size:.9rem;color:var(--bone);background:rgba(0,0,0,.2);
+    border:1px solid rgba(200,162,74,.3);padding:10px 14px}
+  .room-filter::placeholder{color:var(--sage)}
+  .room-group{margin:0 0 30px}
+  .room-group[hidden]{display:none}
+  .room-prop{font-family:var(--display);font-size:1.3rem;margin:0 0 10px}
+  .room-block{margin:0 0 16px;padding:0 0 0 4px;border-left:2px solid rgba(200,162,74,.3)}
+  .room-block[hidden]{display:none}
+  .room-label{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--brass);margin:0 0 6px 10px}
+  .room-players{list-style:none;padding:0;margin:0}
+  .room-player{padding:6px 6px 6px 10px;font-size:.95rem;border-bottom:1px solid rgba(200,162,74,.1)}
+  .room-player[hidden]{display:none}
+  .room-had{display:block;font-size:.6rem;letter-spacing:.1em;text-transform:none;color:var(--sage);margin-top:2px}
 
   /* shame */
   .shame{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;
@@ -356,6 +376,7 @@
       <a href="#shame">Shame</a>
       <a href="#photos">Photos</a>
       <a href="#nextyear">Next Year</a>
+      <a href="#rooms">Rooms</a>
     </div>
   </div>
 </nav>
@@ -498,7 +519,7 @@
       <div><dt>Top lot</dt><dd id="calTop">—</dd></div>
       <div><dt>Outstanding</dt><dd id="calOut">—</dd></div>
     </dl>
-    <p class="basis">Owners pay the winning bid to the pot. Winnings pay the owner in full.</p>
+    <p class="basis">Owners pay the winning bid to the pot. Winnings pay the owner in full. You owe the price regardless.</p>
 
     <h3 class="subhead">The Board</h3>
     <div class="auc-head">
@@ -677,6 +698,18 @@
 
 <section class="band view" data-view="nextyear" id="nextyear"><div class="wrap"><p class="eyebrow">Collections</p><h2>Next Year</h2><div id="nyBody"></div><p class="sync" id="nySync"></p></div></section>
 
+<section class="band band-alt view" data-view="rooms" id="rooms">
+  <div class="wrap">
+    <p class="eyebrow">Find your bed</p>
+    <h2>Rooms</h2>
+    <p class="lede">Assignments by property and room. Paid and not placed yet? You're in the queue below.</p>
+    <input type="search" id="roomsFilter" class="room-filter" placeholder="Find a name…" aria-label="Filter rooms by name">
+    <div id="roomsBody"></div>
+    <h3 class="subhead">Paid, not yet assigned</h3>
+    <div id="roomsQueue"></div>
+  </div>
+</section>
+
 <footer>
   <svg aria-hidden="true"><use href="#mark"/></svg>
   <p class="foot-name">GFY</p>
@@ -738,7 +771,7 @@ if (typeof CONFIG === "undefined") {
 const $ = s => document.querySelector(s);
 const CACHE_KEY = "gfy-cache-v2";
 const TABS = ["info","course","field","scores","schedule","pairings",
-              "calcutta","payout","ledger","champions","shame","invites"];
+              "calcutta","payout","ledger","champions","shame","invites","rooms"];
 let INFO = {};
 const HOLES = Array.from({length:18},(_,i)=>i+1);
 let STATE = { data:{}, year:null, open:null };
@@ -764,7 +797,8 @@ function toObjects(rows){
 }
 const FPRINT={info:["key"],course:["hole"],field:["player"],scores:["h1","r1"],
   schedule:["event"],pairings:["players"],calcutta:["price"],payout:["share"],
-  ledger:["buyin"],champions:["champion"],shame:["award"],invites:["invited"]};
+  ledger:["buyin"],champions:["champion"],shame:["award"],invites:["invited"],
+  rooms:["property"]};
 const BACKOFF={};      // tab -> next-allowed epoch ms
 const BACKOFF_N={};    // tab -> consecutive-failure count (drives the curve)
 const LAST_ERR={};     // tab -> last REAL error message (never the backoff sentinel)
@@ -894,6 +928,12 @@ function activeSeason(){
   if(ys.length) return String(Math.max(...ys));
   return String(teeYear===null?new Date().getFullYear():teeYear);
 }
+// A5 (I4+I5+M7): ONE nextSeason() helper — S-NEXT = activeSeason()+1 — used
+// everywhere "next year" is computed (nextYearModel, normalizeYears,
+// renderMoney). Previously each call site recomputed
+// `String(parseInt(activeSeason(),10)+1)` independently; three copies of the
+// same arithmetic is how they'd silently drift.
+function nextSeason(){ return String(parseInt(activeSeason(),10)+1); }
 function rosterMap(){
   const m=new Map();
   (STATE.data.field||[]).filter(r=>r.player&&r.team&&r.year===STATE.year).forEach(r=>{
@@ -1276,8 +1316,35 @@ function calcuttaModel(year=STATE.year){
   return { lots, pot, rakePct, rake, payable,
            outstanding:Object.values(owed).sort((a,b)=>b.total-a.total) };
 }
+// A3: duplicate NEXT-season rows for the same person (double submits, two
+// phones racing a republish) MERGE instead of letting whichever row is
+// processed last clobber the others — mirrors S-MERGE's pattern. A blank
+// cell on a later duplicate never overwrites a non-blank value already
+// recorded; two DIFFERENT non-blank values is a real conflict — the later
+// row wins and it's flagged. `ordinal` is the row's position at first
+// appearance: A2's sheet-order tie-break anchors on this, not on whatever
+// order people happen to get touched in elsewhere in the model.
+function mergeNextRows(rows,fields){
+  const merged=new Map();
+  rows.forEach((r,idx)=>{
+    const k=nkey(r.player);
+    if(!merged.has(k)) merged.set(k,{player:r.player,ordinal:idx,raw:{}});
+    const m=merged.get(k);
+    fields.forEach(f=>{
+      const incoming=String(r[f]||"").trim();
+      if(!incoming) return;                      // blank never overwrites
+      const existing=m.raw[f];
+      if(!existing){ m.raw[f]=incoming; return; } // no prior value yet
+      if(existing!==incoming)
+        flag('conflicting '+f+' for '+r.player+' NEXT rows ("'+existing+'" vs "'+incoming+'") — using "'+incoming+'" (later wins)');
+      m.raw[f]=incoming;                          // later wins (equal or conflicting)
+    });
+  });
+  return [...merged.values()];
+}
+
 function nextYearModel(){
-  const season=activeSeason(), seasonNum=parseInt(season,10), next=String(seasonNum+1);
+  const season=activeSeason(), seasonNum=parseInt(season,10), next=nextSeason();
   const field=STATE.data.field||[];
   const invitesAll=STATE.data.invites||[];
   const hasInvites=Array.isArray(STATE.data.invites)&&STATE.data.invites.length>0;
@@ -1288,6 +1355,12 @@ function nextYearModel(){
   // all). Picker-independent, same as everything else on this board.
   const invitesYears=invitesAll.map(r=>parseInt(r.year,10)).filter(n=>n>0);
   const invitesNext=String(Math.max(seasonNum+1, invitesYears.length?Math.max(...invitesYears):0));
+  // A5: when Invites already runs ahead of S-NEXT, flag it — otherwise the
+  // funnel counts below are silently about a DIFFERENT season than the paid
+  // header (which stays pinned to S-NEXT).
+  const invitesAhead=invitesNext!==next;
+  if(invitesAhead)
+    flag('Invites tab already has rows for '+invitesNext+' (ahead of '+next+') — using '+invitesNext+' as the Invites season');
 
   const fieldNextRows=field.filter(r=>r.year===next&&r.player);
   const invitesNextRows=invitesAll.filter(r=>r.year===invitesNext&&r.player);
@@ -1304,24 +1377,40 @@ function nextYearModel(){
   const people=new Map();
   const touch=name=>{
     const k=nkey(name);
-    if(!people.has(k)) people.set(k,{name,paid:false,date:"",invited:false,responded:false,status:""});
+    if(!people.has(k)) people.set(k,{name,paid:false,date:"",invited:false,responded:false,status:"",committed:false,nextOrdinal:Infinity});
     return people.get(k);
   };
   field.filter(r=>r.player&&trailing.has(r.year)).forEach(r=>touch(r.player));
-  fieldNextRows.forEach(r=>{
-    const p=touch(r.player);
-    if(yes(r.deposit)){ p.paid=true; p.date=(r.paid_date||"").trim(); }
-    // F-OUT-HOME: Field is NOT the authoritative out/declined source for the
-    // NEXT season anymore — Invites is. A status value here used to
-    // silently suppress a player; now it's ignored, loudly.
-    if(String(r.status||"").trim())
-      flag('Field '+next+' status "'+r.status+'" for '+r.player+' ignored — Invites is authoritative for out/declined');
+
+  // A4 (F-OUT-HOME, conditioned): Field's own NEXT-season status column only
+  // becomes non-authoritative when Invites-NEXT rows actually exist for this
+  // season (tab-level, same "either source" framing as F-OPEN) — if Invites
+  // is absent/unconfigured, Field's own out/declined is honored, restoring
+  // the pre-Invites workflow. Only out/declined values are ever flagged as
+  // ignored; benign values (in, yes, blank) are never flagged either way.
+  const invitesIsAuthoritative=invitesNextRows.length>0;
+  const fieldNextMerged=mergeNextRows(fieldNextRows,["deposit","paid_date","status"]);
+  fieldNextMerged.forEach(m=>{
+    const p=touch(m.player);
+    p.committed=true;                                  // A1: has a NEXT-season Field row
+    p.nextOrdinal=Math.min(p.nextOrdinal,m.ordinal);    // A2: true Field-NEXT sheet order
+    if(yes(m.raw.deposit)){ p.paid=true; p.date=(m.raw.paid_date||"").trim(); }
+    const statusRaw=String(m.raw.status||"").trim(), statusLower=statusRaw.toLowerCase();
+    const isDeadStatus=statusLower==="out"||statusLower==="declined";
+    if(invitesIsAuthoritative){
+      if(isDeadStatus)
+        flag('Field '+next+' status "'+statusRaw+'" for '+m.player+' ignored — Invites is authoritative for out/declined');
+    } else if(isDeadStatus){
+      p.status=statusLower;
+    }
   });
-  invitesNextRows.forEach(r=>{
-    const p=touch(r.player);
-    if(yes(r.invited)) p.invited=true;
-    if(yes(r.responded)) p.responded=true;
-    p.status=String(r.status||"").trim().toLowerCase();
+
+  const invitesNextMerged=mergeNextRows(invitesNextRows,["invited","responded","status"]);
+  invitesNextMerged.forEach(m=>{
+    const p=touch(m.player);
+    if(yes(m.raw.invited)) p.invited=true;
+    if(yes(m.raw.responded)) p.responded=true;
+    p.status=String(m.raw.status||"").trim().toLowerCase();
   });
 
   // F-STAGE + F-DECLINED: paid AND out/declined => money was already
@@ -1337,27 +1426,135 @@ function nextYearModel(){
     if(p.paid&&dead){ refunds.push({name:p.name,date:p.date,status:p.status}); return; }
     if(p.status==="out") return;
     if(p.status==="declined"){ declined.push({name:p.name}); return; }
-    if(p.paid) stages.paid.push({name:p.name,date:p.date});
-    else if(p.responded) stages.responded.push({name:p.name});
-    else if(p.invited) stages.invited.push({name:p.name});
-    else stages.needs.push({name:p.name});
+    if(p.paid) stages.paid.push({name:p.name,date:p.date,nextOrdinal:p.nextOrdinal});
+    else if(p.responded) stages.responded.push({name:p.name,committed:p.committed});
+    else if(p.invited) stages.invited.push({name:p.name,committed:p.committed});
+    else stages.needs.push({name:p.name,committed:p.committed});
   });
 
-  // A-DATE: paid queue orders by real date, not string lexical order.
-  // Unparseable dates are flagged and sort after every dated row; same-day
-  // (or same-unparsed) ties keep sheet order (stable sort on insertion index).
-  const paid=stages.paid.map((p,i)=>{
+  // A-DATE + A2 (I1): paid queue orders by real date, not string lexical
+  // order. Unparseable dates are flagged and sort after every dated row;
+  // same-day (or same-unparsed) ties keep TRUE Field-NEXT sheet order — the
+  // ordinal recorded at ingest above, not incidental Map-insertion order
+  // (which can diverge, e.g. someone already inside the trailing Field
+  // window gets touched before a brand-new NEXT payer regardless of their
+  // relative row order within the NEXT block itself).
+  const paid=stages.paid.map(p=>{
     const d=parseDate(p.date);
     if(p.date&&!d) flag('paid_date "'+p.date+'" for '+p.name+' is unparseable — sorted after dated rows');
     const iso=ambiguousISO(p.date,d);
     if(iso) p.dateISO=iso;
-    return {p,i,t:d?d.getTime():Infinity};
+    return {p,i:p.nextOrdinal,t:d?d.getTime():Infinity};
   }).sort((a,b)=>a.t-b.t||a.i-b.i).map(o=>o.p);
 
-  const all=[...stages.paid,...stages.responded,...stages.invited,...stages.needs];
-  const owing=[...stages.responded,...stages.invited,...stages.needs];
+  // A1 (C2, Riley ruled "committed only"): the PUBLIC owing list is only
+  // people who already have a NEXT-season Field row (they've committed by
+  // filling one in) and haven't paid — not the whole responded/invited/
+  // needs funnel. Those three stages' NAMES move entirely behind ?admin=1.
+  const owing=[...stages.responded,...stages.invited,...stages.needs]
+    .filter(p=>p.committed).map(p=>({name:p.name}));
 
-  return {open:true,next,invitesNext,all,paid,owing,stages,hasInvites,declined,refunds};
+  const all=[...stages.paid,...stages.responded,...stages.invited,...stages.needs];
+
+  return {open:true,next,invitesNext,invitesAhead,all,paid,owing,stages,hasInvites,declined,refunds};
+}
+
+// Shared by Next Year AND Rooms: "who has paid, in what order" for a given
+// YEAR (not pinned to S-NEXT the way nextYearModel's own paid queue is —
+// Rooms' anchor floors at nextSeason()-1, i.e. it can be THIS season, not
+// next). Same A-DATE rule both boards use: real date first, unparseable
+// flagged + sorts last, same-day ties keep true Field sheet order (A3's
+// merge, A2's ordinal) — one rule, not two copies that could drift apart.
+function roomsPaidOrder(year){
+  const rows=(STATE.data.field||[]).filter(r=>r.player&&r.year===year);
+  const merged=mergeNextRows(rows,["deposit","paid_date"]);
+  return merged.filter(m=>yes(m.raw.deposit)).map(m=>{
+    const dateStr=(m.raw.paid_date||"").trim();
+    const d=parseDate(dateStr);
+    if(dateStr&&!d) flag('paid_date "'+dateStr+'" for '+m.player+' is unparseable — sorted after dated rows');
+    return {name:m.player,ordinal:m.ordinal,t:d?d.getTime():Infinity};
+  }).sort((a,b)=>a.t-b.t||a.ordinal-b.ordinal);
+}
+
+// R-DERIVE / R-PUBLIC / R-FILTER / A-NEXT2: the Rooms sheet stores
+// assignments only — everything else (the unassigned queue, the health
+// flags, the admin memory lens) is derived here.
+function roomsModel(){
+  const rows=(STATE.data.rooms||[]).filter(r=>r.player&&r.property&&r.room);
+  if(!rows.length) return {open:false};
+
+  // A-NEXT2: Rooms is a NEXT-season-style surface too, but its anchor FLOORS
+  // at nextSeason()-1 (not nextSeason() itself) — rooms can serve the
+  // current/imminent event, not only next year's — and can still run ahead
+  // the same way Invites can, if the tab is already prepped past that.
+  const years=rows.map(r=>parseInt(r.year,10)).filter(n=>n>0);
+  const floorNum=parseInt(nextSeason(),10)-1;
+  const anchorNum=years.length?Math.max(floorNum,Math.max(...years)):floorNum;
+  const anchor=String(anchorNum);
+  const anchorRows=rows.filter(r=>r.year===anchor);
+  if(!anchorRows.length) return {open:false,anchor};
+
+  const isGuest=n=>/^guest:/i.test(String(n||"").trim());
+  const displayName=n=>String(n||"").trim().replace(/^guest:\s*/i,"");
+
+  // "Known" = has a Field row within the trailing 3 seasons FROM THE ROOMS
+  // ANCHOR (parallels F-UNIV's trailing-from-activeSeason, parameterized by
+  // Rooms' own anchor — Rooms can run ahead of activeSeason exactly like
+  // Invites can, so "known" has to be judged against ITS season window, not
+  // always the current one).
+  const trailing=new Set([anchorNum,anchorNum-1,anchorNum-2].map(String));
+  const knownKeys=new Set((STATE.data.field||[]).filter(r=>r.player&&trailing.has(r.year)).map(r=>nkey(r.player)));
+
+  const paidOrder=roomsPaidOrder(anchor);
+  const paidKeys=new Set(paidOrder.map(p=>nkey(p.name)));
+
+  // Prior-year memory lens (?admin=1 only): each assigned player's PRIOR
+  // year's property·room, if any.
+  const priorYear=String(anchorNum-1);
+  const priorByKey=new Map();
+  rows.filter(r=>r.year===priorYear).forEach(r=>{
+    const k=nkey(displayName(r.player));
+    if(!priorByKey.has(k)) priorByKey.set(k,r.property+" · "+r.room);
+  });
+
+  // R-DERIVE health flags: same player in two DIFFERENT rooms; assigned
+  // player not on the paid list; unknown name (no Field history) without a
+  // `guest:` prefix. Guests are exempt from the unknown/unpaid checks
+  // entirely — they're not tournament players who owe money.
+  const roomsByKey=new Map();      // nkey -> {name, set of "property · room"}
+  const flaggedUnknown=new Set(), flaggedUnpaid=new Set();
+  anchorRows.forEach(r=>{
+    const guest=isGuest(r.player), name=displayName(r.player), k=nkey(name);
+    if(!roomsByKey.has(k)) roomsByKey.set(k,{name,set:new Set()});
+    roomsByKey.get(k).set.add(r.property+" · "+r.room);
+    if(!guest && !knownKeys.has(k) && !flaggedUnknown.has(k)){
+      flaggedUnknown.add(k);
+      flag('"'+name+'" is assigned a room for '+anchor+' with no Field history — unknown name (prefix with "guest:" if intentional)');
+    }
+    if(!guest && knownKeys.has(k) && !paidKeys.has(k) && !flaggedUnpaid.has(k)){
+      flaggedUnpaid.add(k);
+      flag('"'+name+'" is assigned a room for '+anchor+' but is not on the paid list — assigned but not paid');
+    }
+  });
+  roomsByKey.forEach(({name,set})=>{
+    if(set.size>1) flag('"'+name+'" is assigned to two rooms for '+anchor+' — '+[...set].join(" and "));
+  });
+
+  // Grouped property -> room -> players, sheet order preserved within each.
+  const props=[];
+  anchorRows.forEach(r=>{
+    let p=props.find(x=>x.property===r.property);
+    if(!p){ p={property:r.property,rooms:[]}; props.push(p); }
+    let room=p.rooms.find(x=>x.room===r.room);
+    if(!room){ room={room:r.room,players:[]}; p.rooms.push(room); }
+    const guest=isGuest(r.player), name=displayName(r.player), k=nkey(name);
+    room.players.push({name,guest,had:priorByKey.get(k)||null});
+  });
+
+  const assignedKeys=new Set(roomsByKey.keys());
+  const queue=paidOrder.filter(p=>!assignedKeys.has(nkey(p.name)));
+
+  return {open:true,anchor,priorYear,props,queue};
 }
 
 function renderCalcutta(){
@@ -1384,15 +1581,10 @@ function renderCalcutta(){
         "<small>"+esc(o.owner)+" "+money(o.total)+" · "+o.lots+" lot"+(o.lots===1?"":"s")+"</small>").join("")
     : money(0)+"<small>Nothing outstanding.</small>";
 
-  $("#aucBody").innerHTML=lots.map((l,i)=>`
-    <div class="auc-row${i===0?" top":""}">
-      <div>${teamLabel(l.key,l.team).html}</div>
-      <div class="auc-owner">${esc(l.owner==="—"?"Unassigned":l.owner)}</div>
-      <div class="auc-back">${l.collected?"✓":"—"}</div>
-      <div class="auc-price">${money(l.price)}</div>
-    </div>`).join("");
-
-  /* payout schedule */
+  /* payout schedule — computed BEFORE the auction board renders (W-ONE):
+     the per-lot "wins if it ended now" value on the board below must come
+     from this SAME rowsOut/ownerCut computation the payout table uses,
+     never a second formula, so it's built once and shared. */
   let sched=forYear(STATE.data.payout,STATE.year)
     .map(r=>({place:parseInt(r.place,10),share:num(r.share)}))
     .filter(r=>r.place>0).sort((a,b)=>a.place-b.place);
@@ -1409,29 +1601,26 @@ function renderCalcutta(){
     basis=(INFO.calcutta_basis||"gross").toLowerCase()==="net"?"net":"gross";
   }
   const ranked=rankedPlayers(basis).filter(p=>p.total!==null);
-  if(!ranked.length){
-    $("#payBody").innerHTML='<div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>';
-    $("#calBasis").textContent="Bids locked. Payouts post once cards do.";
-    return;
-  }
 
   /* group ties, split the combined shares evenly */
   const rowsOut=[];
-  let i=0;
-  while(i<ranked.length && ranked[i].pos<=places){
-    const tie=ranked.filter(p=>p.pos===ranked[i].pos);
-    const spanned=tie.map((_,k)=>shareAt(ranked[i].pos+k)).reduce((a,b)=>a+b,0);
-    const each=spanned/tie.length;
-    tie.forEach(p=>{
-      const lot=lots.find(l=>l.key===p.key);
-      rowsOut.push({
-        place:ranked[i].pos, tied:tie.length>1, key:p.key, name:p.name,
-        detail:(basis==="net"?"net ":"")+(p.rel!==null?toPar(p.rel):p.total)+" · "+thruLabel(p),
-        owner:lot?lot.owner:"—",
-        each, lot
+  {
+    let i=0;
+    while(i<ranked.length && ranked[i].pos<=places){
+      const tie=ranked.filter(p=>p.pos===ranked[i].pos);
+      const spanned=tie.map((_,k)=>shareAt(ranked[i].pos+k)).reduce((a,b)=>a+b,0);
+      const each=spanned/tie.length;
+      tie.forEach(p=>{
+        const lot=lots.find(l=>l.key===p.key);
+        rowsOut.push({
+          place:ranked[i].pos, tied:tie.length>1, key:p.key, name:p.name,
+          detail:(basis==="net"?"net ":"")+(p.rel!==null?toPar(p.rel):p.total)+" · "+thruLabel(p),
+          owner:lot?lot.owner:"—",
+          each, lot
+        });
       });
-    });
-    i+=tie.length;
+      i+=tie.length;
+    }
   }
 
   /* largest-remainder allocation of owner cuts, reconciled against payable
@@ -1447,6 +1636,67 @@ function renderCalcutta(){
     .forEach(o=>{ if(remainder>0){ floors[o.idx]+=1; remainder--; } });
   covered.forEach((r,idx)=>{ r.ownerCut=floors[idx]; });
   rowsOut.forEach(r=>{ if(!r.lot) r.ownerCut=0; });
+  const rowsOutByKey=new Map(rowsOut.map(r=>[r.key,r]));
+
+  // W-WD: Field status "wd" (withdrawn) excludes a team from the Final/
+  // Projected completeness check — a withdrawn team's incomplete round
+  // count must never be the reason the rest of the field stays "Projected"
+  // forever. Health flag + a board annotation (WD badge on the auction
+  // row); nothing about the team's row is deleted or hidden.
+  const fieldStatusByKey={};
+  (STATE.data.field||[]).filter(r=>r.player&&r.year===STATE.year).forEach(r=>{
+    fieldStatusByKey[nkey(r.player)]=String(r.status||"").trim().toLowerCase();
+  });
+  const wdKeys=new Set();
+  if(roster.size){
+    roster.forEach((t,k)=>{
+      const names=[t.captain,...t.members].filter(Boolean);
+      if(names.some(n=>fieldStatusByKey[nkey(n)]==="wd")){
+        wdKeys.add(k);
+        flag('Team "'+(t.captain||k)+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
+      }
+    });
+  } else {
+    Object.keys(fieldStatusByKey).forEach(k=>{
+      if(fieldStatusByKey[k]==="wd"){
+        wdKeys.add(k);
+        flag('"'+k+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
+      }
+    });
+  }
+  const done=ranked.filter(p=>!wdKeys.has(p.key)).every(p=>p.played>=36);
+
+  // W-ONE: per-lot "wins if it ended now" (or "Won" once Final) — sourced
+  // ONLY from rowsOut/ownerCut above, never recomputed. Distinct texts for
+  // the three non-numeric states: no owner at all ("unsold"), owner exists
+  // but the team hasn't posted a card yet ("waiting on cards"), team has
+  // posted but placed outside the paying spots ("—").
+  $("#aucBody").innerHTML=lots.map((l,i)=>{
+    let wouldText;
+    if(l.owner==="—") wouldText="unsold";
+    else{
+      const rp=ranked.find(p=>p.key===l.key);
+      if(!rp) wouldText="waiting on cards";
+      else{
+        const ro=rowsOutByKey.get(l.key);
+        wouldText=ro ? (done?"Won":"Wins if it ended now")+": "+money(ro.ownerCut) : "—";
+      }
+    }
+    const wdTag=wdKeys.has(l.key)?' <span class="badge">WD</span>':"";
+    return `
+    <div class="auc-row${i===0?" top":""}">
+      <div>${teamLabel(l.key,l.team).html}${wdTag}<span class="auc-would">${esc(wouldText)}</span></div>
+      <div class="auc-owner">${esc(l.owner==="—"?"Unassigned":l.owner)}</div>
+      <div class="auc-back">${l.collected?"✓":"—"}</div>
+      <div class="auc-price">${money(l.price)}</div>
+    </div>`;
+  }).join("");
+
+  if(!ranked.length){
+    $("#payBody").innerHTML='<div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>';
+    $("#calBasis").textContent="Bids locked. Payouts post once cards do.";
+    return;
+  }
 
   $("#payBody").innerHTML=rowsOut.map(r=>`
     <div class="pay-row">
@@ -1456,7 +1706,6 @@ function renderCalcutta(){
       <div class="pay-cut">${r.ownerCut?money(r.ownerCut):"—"}</div>
     </div>`).join("");
 
-  const done=ranked.every(p=>p.played>=36);
   $("#calBasis").textContent=(done?"Final":"Projected")+" · paid on "+basis+
     (rowsOut.some(r=>r.tied)?" · asterisk marks a tie, shares split":"")+
     (rowsOut.some(r=>!r.lot)?" · unsold lots' shares stay in the pot":"");
@@ -1487,19 +1736,27 @@ function renderNextYear(){
   const handleSpan=`<span style="text-transform:none;letter-spacing:normal">${handleHTML}</span>`;
   /* F-NAMES: public board = counts only. The funnel summary line (and its
      F-FRESH caption) render whenever the Invites tab is configured; only
-     when hasInvites is false does this stay empty (pre-invites v2 layout). */
+     when hasInvites is false does this stay empty (pre-invites v2 layout).
+     A5: when Invites already runs ahead of S-NEXT (ny.invitesAhead), the
+     funnel counts are about a DIFFERENT season than the paid header above —
+     label it explicitly rather than let that read as one season's numbers. */
+  const funnelLabel=ny.invitesAhead ? "Invites — "+esc(ny.invitesNext)+": " : "";
   const funnelHTML=ny.hasInvites
-    ? `<p>${esc(ny.stages.paid.length)} paid · ${esc(ny.stages.responded.length)} responded · `
+    ? `<p>${funnelLabel}${esc(ny.stages.paid.length)} paid · ${esc(ny.stages.responded.length)} responded · `
       +`${esc(ny.stages.invited.length)} invited · ${esc(ny.stages.needs.length)} need an invite</p>`
       +`<p class="basis">Invite states are ticked by hand and may lag.</p>`
     : "";
-  /* F-NAMES: invited / needs-invite / declined / paid-refund-owed NAMES are
-     social-gated behind ?admin=1 — a courtesy screen against a casually
-     forwarded link, documented here as non-cryptographic, not a security
-     boundary. The public paid/owing lists above are unaffected — those
-     render "as today" per spec. */
+  /* F-NAMES: responded / invited / needs-invite / declined / paid-refund-owed
+     NAMES are social-gated behind ?admin=1 — a courtesy screen against a
+     casually forwarded link, documented here as non-cryptographic, not a
+     security boundary. A1: the public owing list above is now the
+     "committed-only" (has-a-NEXT-Field-row) subset — everyone else in these
+     stage buckets, including "responded" (which never had a name list at
+     all before this wave), moves entirely behind this gate. */
   let adminHTML="";
   if(ADMIN){
+    const respondedHTML=ny.stages.responded.length
+      ? `<h3 class="subhead">Responded</h3>`+nameListHTML(ny.stages.responded,"mn-net") : "";
     const invitedHTML=ny.stages.invited.length
       ? `<h3 class="subhead">Invited</h3>`+nameListHTML(ny.stages.invited,"mn-net") : "";
     const needsHTML=ny.stages.needs.length
@@ -1510,9 +1767,9 @@ function renderNextYear(){
       ? `<h3 class="subhead">Paid — refund owed</h3><ul class="mn-net down">`+
         ny.refunds.map(r=>`<li>${esc(r.name)} — paid, ${esc(r.status)} — refund owed</li>`).join("")+`</ul>`
       : "";
-    if(invitedHTML||needsHTML||declinedHTML||refundHTML){
+    if(respondedHTML||invitedHTML||needsHTML||declinedHTML||refundHTML){
       adminHTML=`<p class="basis">Admin view (?admin=1) — social gating only, not a security boundary.</p>`+
-        invitedHTML+needsHTML+declinedHTML+refundHTML;
+        respondedHTML+invitedHTML+needsHTML+declinedHTML+refundHTML;
     }
   }
   nyBody.innerHTML=`<p class="eyebrow">${esc(ny.paid.length)} of ${esc(ny.all.length)} paid for ${esc(ny.next)}</p>`+
@@ -1520,6 +1777,63 @@ function renderNextYear(){
     paidHTML+owingHTML+
     adminHTML+
     `<p class="basis">Deposit ${money(num(INFO.deposit_amount))} · ${handleSpan}</p>`;
+}
+
+// R-PUBLIC: names are public on Rooms (find-your-bed) — no gating. The
+// admin (?admin=1) lens only ADDS the prior-year "had:" memory line beside
+// an already-public name; it never hides anything Rooms shows by default.
+function renderRooms(){
+  const body=$("#roomsBody"), queueEl=$("#roomsQueue");
+  if(!body) return;
+  const rm=roomsModel();
+  if(!rm.open){
+    body.innerHTML='<div class="lb-empty">Add a Rooms tab and assignments fill in here.</div>';
+    if(queueEl) queueEl.innerHTML="";
+    applyRoomsFilter();
+    return;
+  }
+  body.innerHTML=rm.props.map(p=>`
+    <div class="room-group">
+      <p class="room-prop">${esc(p.property)}</p>
+      ${p.rooms.map(r=>`
+        <div class="room-block">
+          <p class="room-label">Room ${esc(r.room)}</p>
+          <ul class="room-players">
+            ${r.players.map(pl=>`<li class="room-player">${esc(pl.name)}`
+              +(pl.guest?` <span class="badge">guest</span>`:``)
+              +((ADMIN&&pl.had)?`<span class="room-had">had: ${esc(pl.had)} (${esc(rm.priorYear)})</span>`:``)
+              +`</li>`).join("")}
+          </ul>
+        </div>`).join("")}
+    </div>`).join("");
+
+  queueEl.innerHTML = rm.queue.length
+    ? "<ul class=\"mn-net down\">"+rm.queue.map(p=>`<li>${esc(p.name)}</li>`).join("")+"</ul>"
+      +'<p class="basis">Paid order; same-day ties keep sheet order.</p>'
+    : '<p class="basis">Nobody paid and unplaced right now.</p>';
+  applyRoomsFilter();
+}
+
+// R-FILTER: client-side name filter — no re-fetch, just show/hide already-
+// rendered rows. Re-applied at the end of every renderRooms() so a live
+// refresh doesn't clear whatever the person already typed.
+function applyRoomsFilter(){
+  const input=$("#roomsFilter");
+  if(!input) return;
+  const q=nkey(input.value);
+  document.querySelectorAll("#roomsBody .room-player").forEach(li=>{
+    li.hidden = !!q && !nkey(li.textContent).includes(q);
+  });
+  document.querySelectorAll("#roomsBody .room-block").forEach(block=>{
+    block.hidden = ![...block.querySelectorAll(".room-player")].some(li=>!li.hidden);
+  });
+  document.querySelectorAll("#roomsBody .room-group").forEach(group=>{
+    group.hidden = ![...group.querySelectorAll(".room-player")].some(li=>!li.hidden);
+  });
+}
+{
+  const roomsFilterEl=$("#roomsFilter");
+  if(roomsFilterEl) roomsFilterEl.addEventListener("input",applyRoomsFilter);
 }
 
 function renderMoney(){
@@ -1533,7 +1847,7 @@ function renderMoney(){
     // tab keeps the original setup-prompt copy.
     $("#mnBody").innerHTML=(Array.isArray(allRows)&&allRows.length)
       ? `<div class="mn-empty">Nothing to settle for ${esc(STATE.year)}. See <a href="#nextyear">Next Year</a> `
-        +`for the ${esc(String(parseInt(activeSeason(),10)+1))} collection.</div>`
+        +`for the ${esc(nextSeason())} collection.</div>`
       : '<div class="mn-empty">Add a Ledger tab and the settle-up math runs itself.</div>';
     return;
   }
@@ -1693,7 +2007,7 @@ function renderChampions(){
 
 function renderAll(){
   renderYears(); renderLeaderboard(); renderField(); renderPairings();
-  renderCalcutta(); renderNextYear(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
+  renderCalcutta(); renderNextYear(); renderRooms(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
 }
 
 function renderHealth(){
@@ -1716,8 +2030,8 @@ function renderHealth(){
    window paintHome/tick use for pre/post-event), it flips to what matters
    on the ground: Board, Pairings, Calcutta. Computed once per paint, not
    live-recomputed on scroll/click — it does not need to be. */
-const NAV_OFF_PRIORITY=["home","nextyear","field"];
-const NAV_EVENT_PRIORITY=["board","pairings","calcutta"];
+const NAV_OFF_PRIORITY=["home","nextyear","field","rooms"];
+const NAV_EVENT_PRIORITY=["board","pairings","calcutta","rooms"];
 function seasonPhase(){
   const tee=new Date(INFO.first_tee||CONFIG.FIRST_TEE);
   if(isNaN(tee.getTime())) return "off";
@@ -1925,22 +2239,24 @@ async function loadDebug(){
 // at ingest ("2,027" / "2027.0" are fine; genuinely unparseable text is
 // flagged and the row is left out of year filtering rather than guessed at).
 // Blank-year DEFAULTING stays scoped the way it always was — most tabs
-// default to activeSeason(); Invites is a NEXT-season surface (A-NEXT2) and
-// defaults blank years to NEXT instead, so a half-filled-in invite row still
-// lands on next year's board rather than vanishing into the archive.
+// default to activeSeason(); Invites and Rooms are NEXT-season surfaces
+// (A-NEXT2) and default blank years to NEXT instead (via the shared
+// nextSeason() helper, A5), so a half-filled-in row still lands on next
+// year's board rather than vanishing into the archive.
 const YEAR_DEFAULT_TABS=["field","scores","calcutta","schedule","pairings","ledger","shame"];
+const NEXT_SEASON_TABS=["invites","rooms"];
 function normalizeYears(data){
-  const next=String(parseInt(activeSeason(),10)+1);
+  const next=nextSeason();
   Object.keys(data).forEach(tab=>{
     const rows=data[tab];
     if(!rows||!rows.length||!("year" in rows[0])) return;
-    const isInvites=tab==="invites";
-    const doDefault=isInvites||YEAR_DEFAULT_TABS.includes(tab);
+    const isNextSeason=NEXT_SEASON_TABS.includes(tab);
+    const doDefault=isNextSeason||YEAR_DEFAULT_TABS.includes(tab);
     rows.forEach(r=>{
       const raw=r.year;
       if(!raw||!String(raw).trim()){
         if(!doDefault) return;
-        if(isInvites){ r.year=next; flag("invites row with blank year defaulted to "+next+" (NEXT season)"); }
+        if(isNextSeason){ r.year=next; flag(tab+" row with blank year defaulted to "+next+" (NEXT season)"); }
         else { r.year=activeSeason(); flag("row with blank year defaulted to "+r.year+" ("+tab+")"); }
         return;
       }

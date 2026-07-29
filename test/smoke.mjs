@@ -27,7 +27,7 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const html = readFileSync(path.join(ROOT, "index.html"), "utf8");
 
 const TABS = ["info","course","field","scores","schedule","pairings",
-              "calcutta","payout","ledger","champions","shame","invites"];
+              "calcutta","payout","ledger","champions","shame","invites","rooms"];
 const GIDS = {};
 TABS.forEach((t, i) => GIDS[t] = String(101 + i));
 const FIXTURES = {};
@@ -312,18 +312,21 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
 }
 
 {
-  // v2.2 Wave 1 recompute (D3 semantics — the count legitimately changes
-  // when fixtures/behavior change): F-OUT-HOME makes Field's own NEXT-season
-  // status column non-authoritative, and Sock's Field 2027 row still carries
-  // status=out — that's now a 4th flag ("ignored") on top of the original
-  // three (Hamer unmatched, Sully h9 merge conflict, Moose blank-year
-  // default). Exact new set documented in the task-13 report.
+  // v2.2 Wave 2 recompute (D3 semantics — the count legitimately changes
+  // when fixtures/behavior change): the original 4 (Hamer unmatched, Sully
+  // h9 merge conflict, Moose blank-year default, Sock's Field-2027 status
+  // ignored) plus 3 new Rooms flags from fixtures/rooms.csv's deliberately
+  // planted cases (Hammer assigned-but-not-paid, Zeke unknown-name, Duck
+  // double-booked across Lodge·1 and Cabin·A) = 7. Exact new set documented
+  // in the task-14 report.
   const healthMainText = doc.querySelector("#healthStrip")?.textContent || "";
   const warnMatch = healthMainText.match(/(\d+)\s*(data )?warning/i);
   const warnCount = warnMatch ? parseInt(warnMatch[1], 10) : -1;
-  check("D3: health strip shows exactly the 4 expected flags (Hamer unmatched, Sully h9 merge conflict, Moose blank-year default, Sock's Field-2027 status ignored)",
-    warnCount === 4 && /Hamer/i.test(healthMainText) && /h9/i.test(healthMainText)
-      && /(blank|defaulted)/i.test(healthMainText) && /ignored/i.test(healthMainText) && /Sock/.test(healthMainText),
+  check("D3: health strip shows exactly the 7 expected flags (4 original + 3 new Rooms flags: Hammer unpaid, Zeke unknown, Duck double-booked)",
+    warnCount === 7 && /Hamer/i.test(healthMainText) && /h9/i.test(healthMainText)
+      && /(blank|defaulted)/i.test(healthMainText) && /ignored/i.test(healthMainText) && /Sock/.test(healthMainText)
+      && /not on the paid list/i.test(healthMainText) && /Zeke/.test(healthMainText)
+      && /assigned to two rooms/i.test(healthMainText) && /Duck/.test(healthMainText),
     healthMainText);
 }
 
@@ -343,8 +346,8 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
   const okCount = (dbgText.match(/\bOK\b/g) || []).length;
   const hasFailed = /FAILED/i.test(dbgText);
   domD5.window.close();
-  check("D5: debug happy path — 12 tabs OK",
-    okCount === 12 && !hasFailed,
+  check("D5: debug happy path — 13 tabs OK",
+    okCount === 13 && !hasFailed,
     "okCount=" + okCount + " hasFailed=" + hasFailed + " | " + dbgText.slice(0, 300));
 }
 
@@ -511,6 +514,122 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
 }
 
 /* ---------------------------------------------------------------------
+   GROUP V — Would-pay (§12 W-ONE, W-WD)
+
+   Derivation (default fixture, 2026, reusing G4's already-established
+   rowsOut/ownerCut): rowsOut = { duck: $144 (1st*, owner Tex), sully: $144
+   (1st*, owner Tex), tex: $72 (3rd, owner Bear) } — Moose (pos 4) and Bear
+   (pos 5) are ranked but OUTSIDE the 3 paying places -> "—". done=false
+   (Tex has played only 25/36 holes, thru "R2 · 7") -> Projected -> label
+   "Wins if it ended now".
+   --------------------------------------------------------------------- */
+function findAucRow(dom, team) {
+  // Match against innerHTML with a ">NAME<" anchor, not textContent — the
+  // team cell's name span sits directly against the .auc-would sub-line
+  // with no separating whitespace (e.g. "Bear" immediately followed by
+  // "waiting on cards"), which defeats a plain \bNAME\b textContent regex.
+  const rows = [...dom.querySelectorAll("#aucBody .auc-row")];
+  return rows.find(r => (r.children[0]?.innerHTML || "").includes(">" + team + "<"));
+}
+function wouldTextFor(dom, team) {
+  return findAucRow(dom, team)?.querySelector(".auc-would")?.textContent || "";
+}
+
+{
+  const duckWould = wouldTextFor(doc, "Duck");
+  const duckPayRow = [...doc.querySelectorAll("#payBody .pay-row")].find(r => /Duck/.test(r.children[1]?.textContent || ""));
+  const duckPayCut = duckPayRow?.children[3]?.textContent || "";
+  check("V1: W-ONE — Duck's 'wins if it ended now' value on the auction board equals the payout table's number for the SAME lot ($144, same-source proof — refactored to compute rowsOut once, never a second formula)",
+    duckWould === "Wins if it ended now: $144" && duckPayCut === "$144",
+    "duckWould=" + duckWould + " duckPayCut=" + duckPayCut);
+}
+
+{
+  const mooseWould = wouldTextFor(doc, "Moose");
+  const bearWould = wouldTextFor(doc, "Bear");
+  check("V2: W-ONE — out-of-money lots (Moose pos 4, Bear pos 5 — ranked but outside the 3 paying places) show a plain '—', not a fabricated $0",
+    mooseWould === "—" && bearWould === "—",
+    "mooseWould=" + mooseWould + " bearWould=" + bearWould);
+}
+
+{
+  // No cards posted yet for this specific lot's team (Bear) — distinct text
+  // from the generic out-of-money dash.
+  const scoresNoBear = FIXTURES.scores.split(/\r?\n/).filter(l => !l.startsWith("2026,Bear,")).join("\n");
+  const noBearFetch = withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresNoBear }),
+  });
+  const domV3 = makeDom("", noBearFetch);
+  await until(() => domV3.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const bearWouldV3 = wouldTextFor(domV3.window.document, "Bear");
+  check("V3: W-ONE — a lot whose team hasn't posted any card yet shows 'waiting on cards' (Bear's scores removed)",
+    bearWouldV3 === "waiting on cards",
+    "bearWouldV3=" + bearWouldV3);
+  domV3.window.close();
+}
+
+{
+  // A lot with no owner at all — "unsold", regardless of the team's rank.
+  const calcuttaNoOwner = FIXTURES.calcutta.replace("2026,Moose,Sock,80,", "2026,Moose,,80,");
+  const noOwnerFetch = withOverride({
+    calcutta: () => Promise.resolve({ ok: true, status: 200, text: async () => calcuttaNoOwner }),
+  });
+  const domV4 = makeDom("", noOwnerFetch);
+  await until(() => domV4.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const mooseWouldV4 = wouldTextFor(domV4.window.document, "Moose");
+  check("V4: W-ONE — an unsold lot (no owner) shows 'unsold'",
+    mooseWouldV4 === "unsold",
+    "mooseWouldV4=" + mooseWouldV4);
+  domV4.window.close();
+}
+
+{
+  // Fill in Tex's remaining round-2 holes (was 7 of 18) so every ranked
+  // team reaches 36 holes played -> done flips true -> Final/"Won", same
+  // $144 value for Duck's lot (only the LABEL changes, not the number,
+  // because it's still the same rowsOut computation).
+  const scoresTexDone = FIXTURES.scores.replace(
+    "2026,Tex,2,0,4,3,5,4,4,3,4,,,,,,,,,,,,",
+    "2026,Tex,2,4,4,3,5,4,4,3,4,5,4,5,3,4,4,4,3,5,4,,"
+  );
+  const texDoneFetch = withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresTexDone }),
+  });
+  const domV5 = makeDom("", texDoneFetch);
+  await until(() => domV5.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const duckWouldV5 = wouldTextFor(domV5.window.document, "Duck");
+  const calBasisV5 = domV5.window.document.querySelector("#calBasis")?.textContent || "";
+  check("V5: W-ONE — Projected/Final label flip via variant: once every team reaches 36 holes, Duck's lot flips from 'Wins if it ended now: $144' to 'Won: $144' (same value, label only) and calBasis reads Final",
+    duckWouldV5 === "Won: $144" && /^Final/.test(calBasisV5),
+    "duckWouldV5=" + duckWouldV5 + " calBasis=" + calBasisV5);
+  domV5.window.close();
+}
+
+{
+  // W-WD: mark Tex (the only incomplete team, "R2 · 7") wd — every OTHER
+  // ranked team is already at 36 holes in the default fixture, so if the
+  // exclusion works, done flips true purely because Tex no longer blocks
+  // it (not because Tex finished — Tex's card is untouched here).
+  const fieldTexWD = FIXTURES.field.replace("2026,Tex,Tex,2019,18,In,TRUE,", "2026,Tex,Tex,2019,18,wd,TRUE,");
+  const texWdFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldTexWD }),
+  });
+  const domV6 = makeDom("", texWdFetch);
+  await until(() => domV6.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const healthTextV6 = domV6.window.document.querySelector("#healthStrip")?.textContent || "";
+  const texAucHTML = findAucRow(domV6.window.document, "Tex")?.children[0]?.innerHTML || "";
+  const calBasisV6 = domV6.window.document.querySelector("#calBasis")?.textContent || "";
+  check("V6: W-WD — Field status wd (Tex, still incomplete) is flagged, gets a WD board annotation, and is excluded from the done-check: the rest of the field is already at 36 holes, so calBasis reaches Final purely via the exclusion (Tex's card itself is untouched)",
+    /Tex/.test(healthTextV6) && /wd/i.test(healthTextV6) && /withdrawn/i.test(healthTextV6)
+      && /badge">WD</.test(texAucHTML) && /^Final/.test(calBasisV6),
+    "health=" + healthTextV6.slice(0, 240) + " texAucHTML=" + texAucHTML + " calBasis=" + calBasisV6);
+  domV6.window.close();
+}
+
+check("V7: W-ONE — the Calcutta board states the copy line 'You owe the price regardless.'",
+  /You owe the price regardless\./.test(doc.body?.textContent || ""), "");
+
+/* ---------------------------------------------------------------------
    GROUP H — next year (Task 7)
    --------------------------------------------------------------------- */
 const nyBodyText = doc.querySelector("#nyBody")?.textContent || "";
@@ -548,15 +667,15 @@ check("H5: deposit amount and payment handle rendered",
 }
 
 {
-  // S-structure (v2.2 Wave 1): owing renders as real <ul><li> items, not a
-  // comma-joined blob. Owing = responded+invited+needs = "Johnson, Wade",
-  // Moose, Hammer, Tex, Bear, Blade — 6 people (see task-13 report
-  // derivation). Note "Johnson, Wade" legitimately contains a comma in her
-  // own name; the assertion is on <li> COUNT, not on comma-absence.
+  // A1 (C2, Riley ruled "committed only"): owing is no longer
+  // responded+invited+needs — it's ONLY people with a NEXT-season Field row
+  // who haven't paid. Hammer (2027,Hammer,,,,,, — blank deposit) is the sole
+  // such person in the default fixture; still rendered as a real <ul><li>
+  // list, not a comma-joined blob (S-structure carries forward).
   const owingListEl = doc.querySelector("#nyBody ul.mn-net.down");
   const owingItems = owingListEl ? [...owingListEl.querySelectorAll("li")].map(li => li.textContent) : [];
-  check("H7: owing list renders as 6 separate <ul><li> items, not one comma-joined blob",
-    !!owingListEl && owingItems.length === 6,
+  check("H7: A1 — committed-only owing list renders as a real <ul><li> (1 item: Hammer), not a comma-joined blob",
+    !!owingListEl && owingItems.length === 1 && owingItems[0] === "Hammer",
     "owingItems=" + JSON.stringify(owingItems));
 }
 
@@ -646,10 +765,22 @@ check("W1: funnel line reads the hand-derived counts — 3 paid · 1 responded �
   nyBodyText.includes("3 paid · 1 responded · 1 invited · 4 need an invite"),
   nyBodyText.slice(0, 260));
 
-check("W2: public board's owing list (money, unchanged 'as today') still names Hammer/Tex/Bear/Blade, but carries no funnel-stage headings (Invited/Needs an invite/Declined) or refund note — F-NAMES gate",
-  /Hammer/.test(nyBodyText) && /Tex/.test(nyBodyText) && /Bear/.test(nyBodyText) && /Blade/.test(nyBodyText)
+/* A1 (C2, Riley ruled "committed only"): the public owing list is now ONLY
+   people who have a NEXT-season Field row and haven't paid — Hammer is the
+   sole such person in the default fixture (2027,Hammer,,,,,, — a Field-2027
+   row with a blank deposit). Everyone who used to appear in the old
+   "responded+invited+needs" owing list purely via Invites/trailing-Field —
+   Tex, Bear, Blade (needs), Moose (invited), "Johnson, Wade" (responded) —
+   has NO Field-2027 row at all, so they move entirely behind ?admin=1. */
+check("W2: public board's committed-only owing list (A1) names Hammer (has a NEXT Field row, unpaid) and carries no funnel-stage headings (Invited/Needs an invite/Declined) or refund note",
+  /Hammer/.test(nyBodyText)
     && !nyBodyText.includes("Needs an invite") && !nyBodyText.includes("Invited")
     && !nyBodyText.includes("Declined") && !/refund owed/i.test(nyBodyText),
+  nyBodyText.slice(0, 500));
+
+check("W34: A1 — Tex/Bear/Blade/Moose/'Johnson, Wade' (responded/invited/needs, no Field-NEXT row) are ABSENT from the default (public) dom entirely",
+  !/\bTex\b/.test(nyBodyText) && !/\bBear\b/.test(nyBodyText) && !/\bBlade\b/.test(nyBodyText)
+    && !/\bMoose\b/.test(nyBodyText) && !/Johnson, Wade/.test(nyBodyText),
   nyBodyText.slice(0, 500));
 
 check("W3: Sully (declined) and Ghost (paid+declined) are absent from the public board entirely — no owing nag, no silent money loss shown publicly (F-DECLINED)",
@@ -678,16 +809,19 @@ check("W4: no email column anywhere — Invites schema is year/player/invited/re
 }
 
 {
-  // F-OUT-HOME consequence: without an Invites tab, Field's own NEXT-season
-  // status column is ignored (not a fallback), so Sock (status=out only on
-  // Field) and Ghost (paid, no declined data at all without Invites) are no
-  // longer excluded. Universe grows to 11 (adds Sock, Ghost — no Sully
-  // removal since nothing marks her declined); paid grows to 4 (Ghost).
+  // A4 (I3) — F-OUT-HOME is now CONDITIONED on Invites-NEXT rows existing.
+  // With the Invites tab stubbed entirely absent, Field's own NEXT-season
+  // status column is HONORED again (restores the pre-Invites workflow):
+  // Sock (Field-2027 status=out) is excluded exactly as before Wave 1.
+  // Ghost has no declined marker at all without Invites (that lived only on
+  // his Invites row), so he's a plain paid entry, not a refund-owed case.
+  // Universe: trailing 9 + Crash(new) + Ghost(new) = 11, minus Sock
+  // (excluded) = 10. Paid = Duck, Tank, Crash, Ghost = 4. "4 of 10 paid".
   const domW6 = makeDom("", fakeFetch, buildTestConfig({ invites: "" }));
   await until(() => domW6.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   const nyBodyTextW6 = domW6.window.document.querySelector("#nyBody")?.textContent || "";
-  check("W6: invites tab stubbed absent (rows null) — Field's status column is no longer authoritative (F-OUT-HOME): 4 of 11 paid, no funnel line, no admin headings",
-    nyBodyTextW6.includes("4 of 11 paid")
+  check("W6: A4 — invites tab stubbed absent: Field's NEXT-season status column is honored again (Sock excluded), 4 of 10 paid, no funnel line, no admin headings",
+    nyBodyTextW6.includes("4 of 10 paid") && !/\bSock\b/.test(nyBodyTextW6)
       && !/\d+\s*paid\s*·\s*\d+\s*responded/.test(nyBodyTextW6)
       && !nyBodyTextW6.includes("Needs an invite"),
     nyBodyTextW6.slice(0, 260));
@@ -814,9 +948,17 @@ check("W8: A-DATE — tie-break rule stated on the paid queue ('same-day ties ke
   await until(() => domW11.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   await settle();
   const nyBodyTextW11 = domW11.window.document.querySelector("#nyBody")?.textContent || "";
+  const healthTextW11 = domW11.window.document.querySelector("#healthStrip")?.textContent || "";
   check("W11: A-NEXT2 — Invites anchor runs ahead to 2028 (max year in its own tab) when the tab is already prepped past S-NEXT; admin view shows its rows (Blade)",
     nyBodyTextW11.includes("Blade"),
     nyBodyTextW11.slice(0, 500));
+  // A5 (I4+I5+M7) — this is exactly the "Invites runs ahead of nextSeason()"
+  // case: the paid header stays pinned to S-NEXT (2027) while the funnel
+  // counts are actually about Invites-2028 rows — flag it, and label the
+  // funnel block with the Invites season explicitly so that's never silent.
+  check("W33: A5 — Invites-ahead-of-nextSeason() is flagged, and the funnel block is explicitly labeled with the Invites season (2028), not silently mixed into the 2027 paid header",
+    /2028.*ahead of 2027|ahead of 2027.*2028/.test(healthTextW11) && /Invites — 2028/.test(nyBodyTextW11),
+    "health=" + healthTextW11.slice(0, 260) + " ny=" + nyBodyTextW11.slice(0, 260));
   domW11.window.close();
 }
 
@@ -872,6 +1014,14 @@ check("W15: admin dom reveals Declined (Sully) and Paid — refund owed (Ghost) 
     && /refund owed/i.test(nyBodyTextAdmin) && /Ghost/.test(nyBodyTextAdmin),
   nyBodyTextAdmin.slice(0, 700));
 
+// A1: "responded" never had a name list at all before this wave (design
+// decision recorded in the task-13 report) — now that the public owing list
+// is committed-only, the responded stage's name ("Johnson, Wade") must
+// surface somewhere, and that's admin-only.
+check("W31: A1 — admin dom reveals a new 'Responded' list ('Johnson, Wade') that never existed publicly or in admin before this wave",
+  /Responded/.test(nyBodyTextAdmin) && /Johnson, Wade/.test(nyBodyTextAdmin),
+  nyBodyTextAdmin.slice(0, 700));
+
 check("W16: admin gating is explicitly documented as non-cryptographic (social gating only, not a security boundary)",
   /non-cryptographic|not a security boundary/i.test(nyBodyTextAdmin),
   nyBodyTextAdmin.slice(0, 400));
@@ -881,6 +1031,190 @@ check("W17: F-FRESH — funnel block states its own freshness caveat ('ticked by
   nyBodyText.slice(0, 400));
 
 domAdmin.window.close();
+
+/* ---------------------------------------------------------------------
+   GROUP W (cont'd) — v2.2 Wave 2 pinned review fixes (A2-A4, A7)
+   --------------------------------------------------------------------- */
+{
+  // A2 (I1) — the paid-order tie-break must use TRUE Field-NEXT sheet
+  // order, not incidental Map/iteration order. Give Duck and Tank the SAME
+  // paid_date and swap their Field-NEXT row order (Tank's row now precedes
+  // Duck's). Duck would still win under the old bug — he's touched earlier
+  // via the trailing-Field loop (Field's 2026 block lists Duck before Tank)
+  // regardless of the NEXT block's own row order; the fix must seat Tank
+  // first because his Field-2027 ROW comes first now.
+  const fieldTieSwap = FIXTURES.field
+    .replace("2027,Tank,,,,,TRUE,2026-08-22", "2027,Tank,,,,,TRUE,2026-08-20")
+    .replace(
+      "2027,Duck,,,,,TRUE,2026-08-20\n2027,Tank,,,,,TRUE,2026-08-20",
+      "2027,Tank,,,,,TRUE,2026-08-20\n2027,Duck,,,,,TRUE,2026-08-20"
+    );
+  const tieSwapFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldTieSwap }),
+  });
+  const domW21 = makeDom("", tieSwapFetch);
+  await until(() => domW21.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const paidItemsW21 = [...domW21.window.document.querySelectorAll("#nyBody ol li")].map(li => li.textContent || "");
+  check("W21: A2 (I1) — paid-order tie-break uses TRUE Field-NEXT sheet order (Tank's row now precedes Duck's, same paid_date) — not incidental touch/insertion order",
+    paidItemsW21.length === 3 && /Tank/.test(paidItemsW21[0]) && /Duck/.test(paidItemsW21[1]) && /Crash/.test(paidItemsW21[2]),
+    "paidItems=" + JSON.stringify(paidItemsW21));
+  domW21.window.close();
+}
+
+{
+  // A3 (I2) — a duplicate NEXT-season Field row for the same person, with
+  // BLANK deposit/paid_date, must never erase the non-blank data the first
+  // row already recorded (S-MERGE pattern: duplicates are normal, not an
+  // error). Duck stays paid, keeps his original date, no spurious flag.
+  const hammerBlankRow = FIXTURES.field.split(/\r?\n/).find(l => l.startsWith("2027,Hammer,"));
+  const fieldBlankDup = FIXTURES.field.replace(
+    "2027,Duck,,,,,TRUE,2026-08-20",
+    "2027,Duck,,,,,TRUE,2026-08-20\n" + hammerBlankRow.replace("Hammer", "Duck")
+  );
+  const blankDupFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldBlankDup }),
+  });
+  const domW22 = makeDom("", blankDupFetch);
+  await until(() => domW22.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const paidItemsW22 = [...domW22.window.document.querySelectorAll("#nyBody ol li")].map(li => li.textContent || "");
+  const healthTextW22 = domW22.window.document.querySelector("#healthStrip")?.textContent || "";
+  check("W22: A3 (I2) — duplicate Field-NEXT row with blank deposit/paid_date never overwrites Duck's already-recorded paid status/date, no spurious conflict flag",
+    paidItemsW22.some(t => /Duck/.test(t) && /2026-08-20/.test(t)) && !/conflicting \w+ for Duck NEXT rows/i.test(healthTextW22),
+    "paidItems=" + JSON.stringify(paidItemsW22) + " health=" + healthTextW22.slice(0, 400));
+  domW22.window.close();
+}
+
+{
+  // A3 (I2) — TWO non-blank, DIFFERENT paid_date values on duplicate rows
+  // for the same person is a real conflict: the later row wins and it's
+  // flagged (mirrors S-MERGE's "later row's value, health flag" rule).
+  const fieldConflictDup = FIXTURES.field.replace(
+    "2027,Tank,,,,,TRUE,2026-08-22",
+    "2027,Tank,,,,,TRUE,2026-08-22\n2027,Tank,,,,,TRUE,2026-08-25"
+  );
+  const conflictDupFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldConflictDup }),
+  });
+  const domW23 = makeDom("", conflictDupFetch);
+  await until(() => domW23.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const paidItemsW23 = [...domW23.window.document.querySelectorAll("#nyBody ol li")].map(li => li.textContent || "");
+  const healthTextW23 = domW23.window.document.querySelector("#healthStrip")?.textContent || "";
+  const tankItemW23 = paidItemsW23.find(t => /Tank/.test(t)) || "";
+  check("W23: A3 (I2) — conflicting non-blank paid_date on duplicate Field-NEXT rows for Tank: later row wins (2026-08-25) and a health flag names the conflict",
+    /2026-08-25/.test(tankItemW23) && !/2026-08-22/.test(tankItemW23)
+      && /conflicting/i.test(healthTextW23) && /paid_date/i.test(healthTextW23) && /Tank/.test(healthTextW23),
+    "tankItem=" + tankItemW23 + " health=" + healthTextW23.slice(0, 240));
+  domW23.window.close();
+}
+
+{
+  // A3 (I2) — duplicate Invites-NEXT rows merge PARTIAL data instead of the
+  // second row's blanks overwriting the first row's ticks: Moose invited on
+  // row 1, responded on row 2 — the merge keeps BOTH, so Moose lands in
+  // Responded (the higher stage), not Invited. Invited becomes empty (Moose
+  // was its only member in the default fixture) and its heading disappears.
+  const invitesMergeDup = FIXTURES.invites.replace(
+    "2027,Moose,TRUE,,",
+    "2027,Moose,TRUE,,\n2027,Moose,,TRUE,"
+  );
+  const mergeDupFetch = withOverride({
+    invites: () => Promise.resolve({ ok: true, status: 200, text: async () => invitesMergeDup }),
+  });
+  const domW24 = makeDom("?admin=1", mergeDupFetch);
+  await until(() => domW24.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  await settle();
+  const nyBodyTextW24 = domW24.window.document.querySelector("#nyBody")?.textContent || "";
+  check("W24: A3 (I2) — duplicate Invites-NEXT rows merge partial data (Moose: invited on row 1, responded on row 2) rather than the second overwriting the first's invited with blank — Moose lands in Responded, Invited heading disappears (was Moose-only)",
+    /Responded/.test(nyBodyTextW24) && /Moose/.test(nyBodyTextW24) && !/Invited/.test(nyBodyTextW24),
+    nyBodyTextW24.slice(0, 700));
+  domW24.window.close();
+}
+
+{
+  // A4 (I3) — Field-NEXT status=declined is HONORED (not ignored) when
+  // Invites is entirely absent for this season: Ghost (paid + declined,
+  // sourced purely from his Field row) shows the admin "refund owed" line
+  // exactly as he would via Invites — the workflow is restored, not lost.
+  const fieldGhostDeclined = FIXTURES.field.replace(
+    "2027,Ghost,,,,,TRUE,2026-08-18",
+    "2027,Ghost,,,,declined,TRUE,2026-08-18"
+  );
+  const ghostDeclinedFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldGhostDeclined }),
+  });
+  const domW25 = makeDom("?admin=1", ghostDeclinedFetch, buildTestConfig({ invites: "" }));
+  await until(() => domW25.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  await settle();
+  const nyBodyTextW25 = domW25.window.document.querySelector("#nyBody")?.textContent || "";
+  check("W25: A4 (I3) — Field-NEXT status=declined is HONORED (not ignored) when Invites is entirely absent: Ghost (paid + declined, Field-only) shows admin 'refund owed'",
+    /refund owed/i.test(nyBodyTextW25) && /Ghost/.test(nyBodyTextW25),
+    nyBodyTextW25.slice(0, 700));
+  domW25.window.close();
+}
+
+{
+  // A4 (I3) — benign Field-NEXT status values ("in", "yes", blank) are
+  // NEVER flagged as ignored, even with Invites present and authoritative —
+  // only out/declined carry any meaning to ignore in the first place.
+  const fieldBenignStatus = FIXTURES.field.replace("2027,Hammer,,,,,,", "2027,Hammer,,,,in,,");
+  const benignFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldBenignStatus }),
+  });
+  const domW26 = makeDom("?admin=1", benignFetch);
+  await until(() => domW26.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  await settle();
+  const healthTextW26 = domW26.window.document.querySelector("#healthStrip")?.textContent || "";
+  const nyBodyTextW26 = domW26.window.document.querySelector("#nyBody")?.textContent || "";
+  check("W26: A4 (I3) — benign Field-NEXT status ('in') is never flagged as ignored even with Invites present, and Hammer stays in the committed-owing list",
+    !/for Hammer ignored/i.test(healthTextW26) && /Hammer/.test(nyBodyTextW26),
+    "health=" + healthTextW26.slice(0, 260) + " ny=" + nyBodyTextW26.slice(0, 200));
+  domW26.window.close();
+}
+
+{
+  // A4 (I3) — Invites authority is TAB-LEVEL, not per-person: even with
+  // Sock's own Invites-2027 row removed, the Invites tab still has OTHER
+  // 2027 rows, so Sock's Field status=out is still ignored+flagged (not
+  // honored) — Sock reappears (admin-visible, Needs an invite) rather than
+  // being silently excluded via his now-absent Invites row.
+  const invitesNoSock = FIXTURES.invites.split(/\r?\n/).filter(l => !l.startsWith("2027,Sock,")).join("\n");
+  const noSockFetch = withOverride({
+    invites: () => Promise.resolve({ ok: true, status: 200, text: async () => invitesNoSock }),
+  });
+  const domW27 = makeDom("?admin=1", noSockFetch);
+  await until(() => domW27.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  await settle();
+  const healthTextW27 = domW27.window.document.querySelector("#healthStrip")?.textContent || "";
+  const nyBodyTextW27 = domW27.window.document.querySelector("#nyBody")?.textContent || "";
+  check("W27: A4 (I3) — Invites authority is tab-level: with Sock's own Invites-2027 row removed (but other 2027 Invites rows present), Sock's Field status=out is still ignored+flagged, and Sock reappears (admin, Needs an invite)",
+    /Sock[^]*ignored|ignored[^]*Sock/i.test(healthTextW27) && /Needs an invite/.test(nyBodyTextW27) && /Sock/.test(nyBodyTextW27),
+    "health=" + healthTextW27.slice(0, 260) + " ny=" + nyBodyTextW27.slice(0, 400));
+  domW27.window.close();
+}
+
+{
+  // A7 (I7) — W4 gains teeth: scan real SOURCE, not just the fixture header
+  // and rendered DOM (which miss anything the app source might do with an
+  // email field without a fixture ever exercising it).
+  check("W28: A7 (I7) — index.html JS/HTML source contains no reference to 'email' anywhere (the app never reads, stores, or renders it — P-VAULT keeps addresses entirely out of this codebase)",
+    !/\bemail\b/i.test(html),
+    "");
+
+  const templatePySrc = readFileSync(path.join(ROOT, "tools", "make_template.py"), "utf8");
+  const sheetsDictSrc = templatePySrc.slice(templatePySrc.indexOf("SHEETS = {"), templatePySrc.indexOf("def main"));
+  check("W29: A7 (I7) — tools/make_template.py's actual sheet/column generator (the SHEETS dict — excludes the module docstring's prose explanation of P-VAULT, which legitimately says 'email') contains no email column or reference",
+    sheetsDictSrc.length > 500 && !/\bemail\b/i.test(sheetsDictSrc),
+    "len=" + sheetsDictSrc.length);
+
+  const readmeSrc = readFileSync(path.join(ROOT, "README.md"), "utf8");
+  const inviteSectionStart = readmeSrc.indexOf("## The invite list");
+  const inviteSectionEndIdx = readmeSrc.indexOf("\n## ", inviteSectionStart + 1);
+  const inviteSection = readmeSrc.slice(inviteSectionStart, inviteSectionEndIdx === -1 ? undefined : inviteSectionEndIdx);
+  const schemaSpans = [...inviteSection.matchAll(/`([^`]+)`/g)].map(m => m[1]).join(" | ");
+  check("W30: A7 (I7) — README's invite-list section: every backtick-quoted schema/header-paste string (the exact leak vector C1 fixed) contains no 'email' — surrounding prose describing the vault workflow may still say the word",
+    inviteSectionStart !== -1 && schemaSpans.length > 0 && !/\bemail\b/i.test(schemaSpans),
+    "spans=" + schemaSpans.slice(0, 300));
+}
 
 /* ---------------------------------------------------------------------
    GROUP M — Money tab (v2.2 Wave 1, Task 13)
@@ -922,10 +1256,21 @@ check("S2: S-VIEWS — VIEWS is derived from the [data-view] DOM (deduped), not 
   "");
 
 {
-  const navLinksText = [...doc.querySelectorAll(".nav-links a")].map(a => a.hash.slice(1));
-  check("S3: S-NAV off-season order — Home, Next Year, Field lead the nav (default dom's first_tee is ~18 days out, outside the ±3-day event window)",
+  // A6 (I6): pin first_tee to a far-future date via withOverride rather than
+  // relying on the default dom's real first_tee (2026-08-15) staying safely
+  // outside the ±3-day event window — that assumption goes red for real
+  // during the actual event week. Same pattern as E2's far-future override.
+  const infoFarFutureS3 = FIXTURES.info.replace("2026-08-15T09:00:00-06:00", "2099-08-15T09:00:00-06:00");
+  const farFutureFetchS3 = withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoFarFutureS3 }),
+  });
+  const domS3 = makeDom("", farFutureFetchS3);
+  await until(() => domS3.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const navLinksText = [...domS3.window.document.querySelectorAll(".nav-links a")].map(a => a.hash.slice(1));
+  check("S3: S-NAV off-season order — Home, Next Year, Field lead the nav (first_tee pinned far-future via override, A6 — can't go red during the real event window)",
     navLinksText.slice(0, 3).join(",") === "home,nextyear,field",
     navLinksText.join(","));
+  domS3.window.close();
 }
 
 {
@@ -947,6 +1292,76 @@ check("S2: S-VIEWS — VIEWS is derived from the [data-view] DOM (deduped), not 
 
 check("S5: S-NAV right-edge fade — .nav-inner::after gradient overlay present in the stylesheet",
   /\.nav-inner::after\s*\{[^}]*gradient/i.test(html), "");
+
+/* ---------------------------------------------------------------------
+   GROUP R — Rooms (§12 R-DERIVE, R-PUBLIC, R-FILTER, A-NEXT2)
+
+   fixtures/rooms.csv derivation (anchor = max(Rooms years)=2027, floor
+   nextSeason()-1=2026 -> anchor 2027; this deliberately reuses Field-2027's
+   existing paid/unpaid mix rather than adding a new fixture dimension):
+     2027 rows: Duck (Lodge·1 AND Cabin·A — double-booked), Ghost (Lodge·2),
+       Hammer (Cabin·B, has a Field-2027 row but UNPAID), guest:Pat
+       (Cabin·B), Zeke (Cabin·C, no Field row anywhere — unknown).
+     2026 row: Duck (Lodge·3) — prior-year row for the admin memory lens.
+   Paid-2027 order (A-DATE, established by H2/W1): Duck, Tank, Crash.
+   Assigned(2027) = {Duck, Ghost, Hammer, Pat, Zeke}. Paid minus assigned =
+   Tank, Crash (in that paid order) — the queue.
+   --------------------------------------------------------------------- */
+{
+  const roomsBodyText = doc.querySelector("#roomsBody")?.textContent || "";
+  const propLabels = [...doc.querySelectorAll("#roomsBody .room-prop")].map(p => p.textContent);
+  check("R1: Rooms view groups property -> room -> players (Lodge & Cabin present) with correct public names, including a plain unflagged player (Ghost)",
+    propLabels.includes("Lodge") && propLabels.includes("Cabin")
+      && /Duck/.test(roomsBodyText) && /Ghost/.test(roomsBodyText) && /Hammer/.test(roomsBodyText),
+    "props=" + JSON.stringify(propLabels) + " body=" + roomsBodyText.slice(0, 300));
+}
+
+{
+  const guestLi = [...doc.querySelectorAll("#roomsBody .room-player")].find(li => /Pat/.test(li.textContent || ""));
+  const guestText = guestLi?.textContent || "";
+  check("R2: guest:Pat renders with the prefix stripped ('Pat', not 'guest:Pat') plus a small (guest) mark, and is never flagged unknown/unpaid",
+    !!guestLi && guestText.includes("Pat") && !guestText.includes("guest:") && /guest/i.test(guestLi.innerHTML)
+      && !/"Pat"/.test(doc.querySelector("#healthStrip")?.textContent || ""),
+    "guestHTML=" + (guestLi?.innerHTML || "none"));
+}
+
+{
+  const healthTextR = doc.querySelector("#healthStrip")?.textContent || "";
+  check("R3: health flags — same player (Duck) in two rooms (Lodge·1 and Cabin·A)",
+    /Duck/.test(healthTextR) && /two rooms/i.test(healthTextR) && /Lodge · 1/.test(healthTextR) && /Cabin · A/.test(healthTextR),
+    healthTextR.slice(0, 400));
+  check("R4: health flags — assigned player not on the paid list (Hammer, has a Field-2027 row but unpaid)",
+    /Hammer/.test(healthTextR) && /not on the paid list/i.test(healthTextR),
+    healthTextR.slice(0, 400));
+  check("R5: health flags — unknown name without a guest: prefix (Zeke, no Field row any trailing season)",
+    /Zeke/.test(healthTextR) && /unknown name/i.test(healthTextR),
+    healthTextR.slice(0, 400));
+}
+
+{
+  const domRAdmin = makeDom("?admin=1");
+  await until(() => domRAdmin.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  await settle();
+  const rAdminDoc = domRAdmin.window.document;
+  const duckLis = [...rAdminDoc.querySelectorAll("#roomsBody .room-player")].filter(li => /Duck/.test(li.textContent || ""));
+  const duckAdminHTML = duckLis.map(li => li.innerHTML).join(" | ");
+  const publicHadPresent = /had:/i.test(doc.querySelector("#roomsBody")?.textContent || "");
+  check("R6: ?admin=1 memory lens shows Duck's PRIOR-year (2026) room 'had: Lodge · 3' beside his current assignment; the default (public) dom shows no 'had:' text at all",
+    duckLis.length > 0 && duckAdminHTML.includes("had: Lodge · 3") && !publicHadPresent,
+    "duckAdminHTML=" + duckAdminHTML + " publicHadPresent=" + publicHadPresent);
+  domRAdmin.window.close();
+}
+
+check("R7: client-side name filter input is present on the Rooms view",
+  !!doc.querySelector("#roomsFilter") && doc.querySelector("#roomsFilter").tagName === "INPUT",
+  "");
+
+{
+  const queueItems = [...doc.querySelectorAll("#roomsQueue ul li")].map(li => li.textContent || "");
+  check("R8: paid-but-unassigned queue = paid list MINUS assigned, in paid order (Tank then Crash — Duck/Ghost/Hammer already assigned, Crash never was)",
+    queueItems.length === 2 && /Tank/.test(queueItems[0]) && /Crash/.test(queueItems[1]),
+    "queueItems=" + JSON.stringify(queueItems));
+}
 
 /* ---------------------------------------------------------------------
    GROUP Z — guardrails (Z0) + unconfigured deploy (Z1-Z4, final review)
@@ -1017,7 +1432,7 @@ dom.window.close();
    --------------------------------------------------------------------- */
 const groupTally = {};
 results.forEach(([name, ok]) => {
-  const m = name.match(/^([A-IMSWZ])\d+:/);
+  const m = name.match(/^([A-IMRSVWZ])\d+:/);
   if (!m) return;
   const g = m[1];
   groupTally[g] = groupTally[g] || { pass: 0, total: 0 };
@@ -1026,7 +1441,7 @@ results.forEach(([name, ok]) => {
 });
 
 console.log("");
-["A", "B", "C", "D", "E", "F", "G", "H", "I", "M", "S", "W", "Z"].forEach(g => {
+["A", "B", "C", "D", "E", "F", "G", "H", "I", "M", "R", "S", "V", "W", "Z"].forEach(g => {
   if (groupTally[g]) console.log(`TALLY ${g} ${groupTally[g].pass}/${groupTally[g].total}`);
 });
 const failed = results.filter(r => !r[1]).length;

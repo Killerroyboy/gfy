@@ -9,10 +9,10 @@ No servers, no accounts, no build step. If you can edit a spreadsheet, you
 can run this site.
 
 The site is **tabbed** — the sticky nav bar is the tab list (Home, Board,
-Field, Calcutta, Money, Next Year, Schedule, Pairings, Rules, Champions,
-Shame, Photos). Switching tabs doesn't reload the page, and each tab has its
-own deep link (`yoursite.com/#calcutta`, `#nextyear`, …) — safe to bookmark
-or text someone straight to a section.
+Field, Calcutta, Money, Next Year, Rooms, Schedule, Pairings, Rules,
+Champions, Shame, Photos). Switching tabs doesn't reload the page, and each
+tab has its own deep link (`yoursite.com/#calcutta`, `#nextyear`, `#rooms`,
+…) — safe to bookmark or text someone straight to a section.
 
 ---
 
@@ -31,10 +31,10 @@ or text someone straight to a section.
    `collected` column on Calcutta, and the `invited`/`responded` columns on
    Invites, one at a time: **Insert > Checkbox**. Sheets converts the
    existing TRUE/FALSE values into checked/unchecked boxes in place —
-   nothing else to redo.
-4. The sheet has 12 tabs along the bottom (Info, Course, Field, Scores, …,
-   Invites). Each has a bold header row and a few sample rows showing the
-   shape.
+   nothing else to redo. (Rooms has no checkbox columns — skip it here.)
+4. The sheet has 13 tabs along the bottom (Info, Course, Field, Scores, …,
+   Invites, Rooms). Each has a bold header row and a few sample rows showing
+   the shape.
    **Keep the header rows exactly as they are.** Replace the sample rows
    with real data.
 5. **Teams, captains, and the `team` column.** Each row's `team` cell holds
@@ -78,7 +78,7 @@ If your PUB_ID doesn't start with `2PACX-`, you copied the wrong one.
 2. Look at the browser address bar. It ends with `#gid=` followed by a
    number, e.g. `…/edit#gid=1837552901`.
 3. That number is the gid for the tab you have selected. Click each of the
-   12 tabs in turn and write down each number. The first tab is usually `0`.
+   13 tabs in turn and write down each number. The first tab is usually `0`.
 
 ### 5. Share the photo folder (optional)
 
@@ -165,14 +165,23 @@ whenever someone pays — you don't wait for the season to turn over:
 2. Tick their `deposit` checkbox.
 3. Type the date it landed into `paid_date`.
 
-That's it — no other columns need filling in yet. Rooms go in the order
-people paid, so the site builds the paid list ordered by `paid_date`,
-earliest first; a paid row with no date sorts after the dated ones. Anyone
-not yet in the list shows up on the Owing side instead, with the deposit
-amount and payment handle (Info tab) right there to tap.
+That's it — no other columns need filling in yet. The site builds the paid
+list ordered by `paid_date`, earliest first (this is also the room-
+assignment order — see **Rooms**, below); a paid row with no date sorts
+after the dated ones. The public Owing list is deliberately narrow: it only
+shows people who already have a next-year Field row and haven't paid yet —
+add someone's row as soon as you know they're in, even before the deposit
+lands, so the board can nudge them by name. Everyone earlier in the process
+(invited, responded, no reply yet — see "The invite list," below) stays off
+the public board and only shows up under `?admin=1`.
 
-If someone isn't coming back, set their current-season `status` to `out` —
-they drop off the Next Year board without deleting any history.
+If someone isn't coming back, set `status` to `out` on their **next-year**
+Invites row (once you're using Invites at all for that season) or their
+next-year Field row (honored only when Invites has no rows yet for that
+season — see below) — they drop off the Next Year board without deleting
+any history. A **current**-season `status` of `out` is a different thing
+entirely: it only changes how someone shows on the Field tab itself (a
+"not returning" note); it has no effect on the Next Year board.
 
 ## The invite list
 
@@ -196,12 +205,22 @@ The workflow:
 4. Tick `responded` as replies land.
 
 The Next Year board turns this into a funnel — paid, responded, invited,
-still needs an invite — so you can see at a glance who's stuck and where.
-Someone who's already paid always shows as paid, even if you also ticked
-`invited`/`responded` for them; paid is the highest stage. If someone isn't
-coming back, set their `status` to `out` on either their Field row or their
-Invites row — same convention as Field, and it suppresses them from the
-board either way.
+still needs an invite — so you can see at a glance who's stuck and where
+(the counts are public; the names behind responded/invited/still-needs-an-
+invite are `?admin=1`-only — see below). Someone who's already paid always
+shows as paid, even if you also ticked `invited`/`responded` for them; paid
+is the highest stage.
+
+**Where `out`/`declined` belongs.** Once you've added ANY row to Invites for
+a season, Invites becomes the authoritative place for that season's
+`out`/`declined` — a `status` value left over on someone's Field row for the
+same season is ignored (and flagged on the health strip) rather than acted
+on. If you haven't touched Invites for a season at all yet, Field's own
+`status` is honored instead, so the tab still works standalone. In short:
+once you're using Invites, put `out`/`declined` there, not on Field.
+`declined` (this season only) shows under `?admin=1` and comes back into
+consideration on its own next season; `out` suppresses silently and for
+good.
 
 If you leave the Invites tab unconfigured or empty, the Next Year board just
 runs the plain paid/owing view with no funnel line — nothing else changes.
@@ -220,6 +239,71 @@ add the 12th tab yourself — no need to rebuild from the template:
 4. Click the new tab, copy its gid from the address bar (`#gid=…`, same as
    step 4 above), and paste it into `config.js` as `GID.invites`.
 
+## Rooms
+
+The Rooms tab tracks lodging assignments — who's in which room, at which
+property. Its columns: `year, property, room, player`. The sheet only ever
+stores assignments; the site derives everything else (the paid-but-not-yet-
+placed queue, the health flags, the admin memory lens).
+
+Add one row per person per room:
+
+1. Row-per-assignment: `year`, `property` (e.g. "Bear Creek Lodge"), `room`
+   (any label the property uses — "1", "3B", "Loft"), `player`.
+2. A lodging guest who isn't a tournament player — someone's plus-one, a
+   kid — gets a row too: prefix their name with `guest:` (e.g.
+   `guest:Pat`). The site strips the prefix and shows a small **(guest)**
+   mark instead; guests are never flagged as unknown or unpaid, because
+   they were never expected to be on the Field/paid list in the first
+   place.
+
+The Rooms view groups everyone by property, then room (names are public —
+this is a find-your-bed page), with a "Paid, not yet assigned" queue
+underneath: the same paid-order list Next Year uses, minus whoever already
+has a room. A filter box on the page narrows the whole view by name as you
+type; that's a browser-side convenience, it never touches the sheet.
+
+**Which year's rooms show?** Whichever year has the newest rows in the tab
+— but never older than the current season, so Rooms can serve the event
+that's about to happen (unlike Next Year/Invites, which are always about
+next year specifically). Add rows for next year's lodging whenever you like
+and the anchor follows them forward, same as Invites can run ahead.
+
+**Health flags** (site-side, automatic, on the same health strip as
+everything else):
+- The same player assigned to two different rooms.
+- A player assigned a room who isn't on the paid list yet — "assigned but
+  not paid," worth a text before they show up and find someone else's bag
+  on the other bed.
+- A name with no matching Field history and no `guest:` prefix — probably a
+  typo, or someone who needs the `guest:` prefix.
+
+Add `?admin=1` to the URL and each assigned player who stayed somewhere the
+year before gets a small "had: Property · Room" note next to their current
+assignment — handy for spreading people around without digging through last
+year's sheet by hand.
+
+## Would-pay, on the Calcutta board
+
+Next to each lot on the Calcutta board, a small second line answers "if the
+tournament ended this second, what would the owner collect?" — the exact
+same math as the Payout table further down the same page, just surfaced
+earlier (never a separate calculation that could quietly disagree with it).
+It reads **"Wins if it ended now"** while the tournament's still going, and
+flips to **"Won"** once every card is in. Three situations get their own
+plain-language text instead of a dollar figure: no owner at all reads
+**"unsold"**; a team that hasn't posted a single hole yet reads **"waiting
+on cards"**; a team that's posted but landed outside the paying spots reads
+**"—"**. None of this changes what an owner owes for the lot itself — the
+board says so directly: *"You owe the price regardless."*
+
+If a team has to withdraw mid-tournament, set that player's **current-
+season** Field `status` to `wd`. The board excludes them from the
+Projected → Final flip (so one incomplete card doesn't hold the rest of the
+field at "Projected" forever), flags it on the health strip, and marks the
+team with a small **WD** tag on the board. Nothing needs to be deleted —
+their partial card and their Calcutta lot both stay exactly as they were.
+
 ## When something looks wrong
 
 | Symptom | Likely cause |
@@ -231,13 +315,56 @@ add the 12th tab yourself — no need to rebuild from the template:
 | Album shows a permission error | Drive folder not shared "Anyone with the link" — step 5 |
 | Anything else | Check the health strip, then add `?debug=1` to the URL and read the panel |
 
+## Admin quick edits (cheat-sheet)
+
+The five things an operator actually touches most years, in one place:
+
+| Want to... | Edit... |
+|---|---|
+| Change the event date | **Info** tab, `first_tee` (ISO format with timezone offset, e.g. `2027-08-14T09:00:00-06:00`) |
+| Set lodging arrangements | **Rooms** tab — one row per person per room; `guest:Name` for non-players |
+| Change a team / its captain | **Field** tab, the `team` column — the captain's own row always has `player == team` |
+| Enter a Calcutta bid | **Calcutta** tab — one row per team lot: `team`, `owner`, `price`; tick `collected` once the pot's been paid |
+| Change the house rake | **Info** tab, `calcutta_rake` — a plain percentage number (`10` = 10%); if the real intent is "no rake," use `0` explicitly, don't leave it blank or type words |
+
+## The GFY Admin vault
+
+Everything published from the main GFY sheet is public — that's the whole
+mechanism this site runs on (see the warning under "The invite list,"
+above). Two kinds of information can never go on that sheet: **email
+addresses**, and **why someone isn't getting invited back**. Both live in a
+second, completely separate Google Sheet — call it "GFY Admin" — that is
+**never** published to the web, ever.
+
+The GFY Admin sheet holds:
+
+- Every email address you have for everyone, one row per person — as many
+  addresses per person as you have (work, personal, whatever).
+- A do-not-invite (DNI) list: name + the reason, in plain language, so
+  future-you remembers why next year.
+
+**The pairing rule.** Whenever you add someone to the DNI list in GFY
+Admin, also set `status` to `out` on their Invites row in the public
+sheet, in the same sitting. The two rows are a pair: GFY Admin says *why*
+(privately), the public Invites row says *that* (so the site actually
+suppresses them). One without the other is a gap — DNI-only means the
+site still quietly counts them as needing an invite; Invites-only means
+next year's operator has an exclusion with no memory of why.
+
+**Before sending invites**, cross-check the two sheets against each other
+by hand: everyone marked DNI in GFY Admin should be `out` in Invites, and
+nobody about to get an invite email should be sitting on the DNI list.
+Nothing in this codebase automates that check — it's a five-minute manual
+pass before you hit send, and it's the last thing standing between a bad
+call and an awkward conversation.
+
 ## For whoever maintains this
 
 ```
 index.html          the whole app (HTML + CSS + JS, no build step)
 config.js           the only file you edit routinely
 tools/make_template.py   regenerates tools/gfy-template.xlsx
-fixtures/           sample CSVs mirroring the 12 tabs, incl. edge cases
+fixtures/           sample CSVs mirroring the 13 tabs, incl. edge cases
 test/smoke.mjs      headless render test against the fixtures
 ```
 

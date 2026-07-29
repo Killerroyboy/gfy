@@ -30,7 +30,8 @@ window.CONFIG = {
     ledger: "",
     champions: "",
     shame: "",
-    invites: ""
+    invites: "",
+    rooms: ""
   },
 
   // The normal EDITING url of the sheet — powers the "Enter scores" button

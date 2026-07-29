@@ -134,15 +134,32 @@ SHEETS = {
     "Invites": {
         # Next-season outreach tracking — separate from who's actually paid
         # (that's Field, above). Invites is the AUTHORITATIVE source for
-        # out/declined for the next season (a status value on a Field NEXT
-        # row is ignored, flagged); status=out silently suppresses everyone,
-        # status=declined shows under the site's ?admin=1 view and comes
-        # back into consideration next season on its own.
+        # out/declined for the next season WHEN the tab has NEXT-season rows
+        # at all — if it's empty/unconfigured for a season, Field's own
+        # status column is honored instead (a status value on a Field NEXT
+        # row is otherwise ignored, flagged); status=out silently suppresses
+        # everyone, status=declined shows under the site's ?admin=1 view and
+        # comes back into consideration next season on its own.
         "headers": ["year", "player", "invited", "responded", "status"],
         "rows": [
             [2027, "Sully", "TRUE", "TRUE", ""],     # invited + responded
             [2027, "Tex", "TRUE", "FALSE", ""],      # invited, no reply yet
             [2027, "Bear", "FALSE", "FALSE", "out"], # not returning
+        ],
+    },
+    "Rooms": {
+        # Lodging assignments — sheet stores WHO's in WHICH room, nothing
+        # else; the site derives the paid-but-unassigned queue, the two-
+        # rooms/unpaid/unknown-name health flags, and (?admin=1 only) each
+        # player's prior-year room. A name prefixed "guest:" is a non-
+        # player lodging guest — exempt from the paid/known-name checks,
+        # rendered with the prefix stripped plus a small (guest) mark.
+        "headers": ["year", "property", "room", "player"],
+        "rows": [
+            [2026, "Bear Creek Lodge", "1", "Duck"],
+            [2026, "Bear Creek Lodge", "1", "Hammer"],
+            [2026, "Bear Creek Lodge", "2", "Sully"],
+            [2026, "Bear Creek Lodge", "2", "guest:Pat"],
         ],
     },
 }
