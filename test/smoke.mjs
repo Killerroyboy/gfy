@@ -629,6 +629,38 @@ function wouldTextFor(dom, team) {
 check("V7: W-ONE — the Calcutta board states the copy line 'You owe the price regardless.'",
   /You owe the price regardless\./.test(doc.body?.textContent || ""), "");
 
+{
+  // NEW-3 (PAY-WD, controller default: a withdrawn team cannot collect):
+  // same wd fixture as V6 (Tex marked wd, still incomplete) but asserting
+  // the PAYOUT side this time. Pre-fix, Tex sat at raw-standings pos 3 (a
+  // paying place, $72 per V1/V2's default derivation) purely because a
+  // partial card can rank par-relative better than a finished one, and
+  // still collected despite being withdrawn. Fixed: Tex is excluded from
+  // the ranking BEFORE paying places are assigned, so it gets no payout
+  // row; Moose (pos 4, previously "—" per V2, outside the money) promotes
+  // into the vacated 3rd place — same $72 (same payout-table share,
+  // wherever it lands is 20% of the same $360 payable, now sourced from a
+  // different team, same-source as the auction board's own would-pay
+  // number). Tex keeps its WD badge (V6) but its own would-pay cell now
+  // reads "withdrawn" instead of a dollar figure.
+  const fieldTexWD8 = FIXTURES.field.replace("2026,Tex,Tex,2019,18,In,TRUE,", "2026,Tex,Tex,2019,18,wd,TRUE,");
+  const texWdFetch8 = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldTexWD8 }),
+  });
+  const domV8 = makeDom("", texWdFetch8);
+  await until(() => domV8.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const v8doc = domV8.window.document;
+  const texPayRow = [...v8doc.querySelectorAll("#payBody .pay-row")].find(r => /Tex/.test(r.children[1]?.textContent || ""));
+  const moosePayRow = [...v8doc.querySelectorAll("#payBody .pay-row")].find(r => /Moose/.test(r.children[1]?.textContent || ""));
+  const moosePlace = moosePayRow?.children[0]?.textContent || "";
+  const mooseCut = moosePayRow?.children[3]?.textContent || "";
+  const texWouldV8 = wouldTextFor(v8doc, "Tex");
+  check("V8: PAY-WD (NEW-3) — a wd team (Tex, pos 3 on raw standings, a paying place) gets no payout row; Moose (pos 4, previously out of the money per V2) promotes into the vacated 3rd place at the same $72 payout-table share; Tex's own auction would-pay cell reads 'withdrawn'",
+    !texPayRow && !!moosePayRow && moosePlace === "3rd" && mooseCut === "$72" && texWouldV8 === "withdrawn",
+    "texPayRow=" + (texPayRow?.textContent || "none") + " moosePlace=" + moosePlace + " mooseCut=" + mooseCut + " texWould=" + texWouldV8);
+  domV8.window.close();
+}
+
 /* ---------------------------------------------------------------------
    GROUP H — next year (Task 7)
    --------------------------------------------------------------------- */
@@ -1310,10 +1342,22 @@ check("S5: S-NAV right-edge fade — .nav-inner::after gradient overlay present 
 {
   const roomsBodyText = doc.querySelector("#roomsBody")?.textContent || "";
   const propLabels = [...doc.querySelectorAll("#roomsBody .room-prop")].map(p => p.textContent);
-  check("R1: Rooms view groups property -> room -> players (Lodge & Cabin present) with correct public names, including a plain unflagged player (Ghost)",
+  // NEW-1: the header must label the anchor year it's actually showing
+  // ("Rooms — 2027"), with NO run-ahead flag on the default fixture — its
+  // anchor (2027) equals nextSeason() (2027) exactly, not past it, so the
+  // Invites-style run-ahead case never triggers here. NEW-2: no blank-year
+  // rooms rows exist in the default fixture either, so its own new flag
+  // must stay silent too (both are exercised on dedicated variant fixtures
+  // below/elsewhere, not the default one).
+  const roomsHeaderText = doc.querySelector("#rooms h2")?.textContent || "";
+  const healthTextDefault = doc.querySelector("#healthStrip")?.textContent || "";
+  check("R1: Rooms view groups property -> room -> players (Lodge & Cabin present) with correct public names, including a plain unflagged player (Ghost); header labels the anchor year ('Rooms — 2027', NEW-1); neither the NEW-1 run-ahead flag nor the NEW-2 blank-year-default flag fires on the default fixture",
     propLabels.includes("Lodge") && propLabels.includes("Cabin")
-      && /Duck/.test(roomsBodyText) && /Ghost/.test(roomsBodyText) && /Hammer/.test(roomsBodyText),
-    "props=" + JSON.stringify(propLabels) + " body=" + roomsBodyText.slice(0, 300));
+      && /Duck/.test(roomsBodyText) && /Ghost/.test(roomsBodyText) && /Hammer/.test(roomsBodyText)
+      && roomsHeaderText === "Rooms — 2027"
+      && !/Rooms tab already has rows for/.test(healthTextDefault)
+      && !/rooms row with blank year defaulted/.test(healthTextDefault),
+    "props=" + JSON.stringify(propLabels) + " header=" + roomsHeaderText + " body=" + roomsBodyText.slice(0, 300));
 }
 
 {
@@ -1361,6 +1405,34 @@ check("R7: client-side name filter input is present on the Rooms view",
   check("R8: paid-but-unassigned queue = paid list MINUS assigned, in paid order (Tank then Crash — Duck/Ghost/Hammer already assigned, Crash never was)",
     queueItems.length === 2 && /Tank/.test(queueItems[0]) && /Crash/.test(queueItems[1]),
     "queueItems=" + JSON.stringify(queueItems));
+}
+
+{
+  // NEW-2: a "current event" Rooms fixture variant — every explicit row is
+  // 2026 (nextSeason()-1, the Rooms anchor floor), plus one row with a
+  // BLANK year for a third player. Pre-fix, normalizeYears defaulted every
+  // blank Rooms row straight to nextSeason() (2027) regardless of what the
+  // rest of the tab said, which would drag the whole anchor to 2027 too
+  // (years=[2026,2026,2027] -> max=2027) and strand the blank row alone on
+  // a board its own sheet-mates never reached. Fixed: the blank row
+  // defaults to Rooms' OWN max non-blank year (2026) instead, so it lands
+  // on the SAME current-event board as Duck and Ghost.
+  const roomsCurrentEventBlank = "year,property,room,player\n2026,Lodge,1,Duck\n2026,Lodge,2,Ghost\n,Cabin,A,Bear\n";
+  const roomsBlankFetch = withOverride({
+    rooms: () => Promise.resolve({ ok: true, status: 200, text: async () => roomsCurrentEventBlank }),
+  });
+  const domR9 = makeDom("", roomsBlankFetch);
+  await until(() => domR9.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const r9doc = domR9.window.document;
+  const roomsHeaderTextR9 = r9doc.querySelector("#rooms h2")?.textContent || "";
+  const roomsBodyTextR9 = r9doc.querySelector("#roomsBody")?.textContent || "";
+  const healthTextR9 = r9doc.querySelector("#healthStrip")?.textContent || "";
+  check("R9: NEW-2 — a blank-year row (Bear) in a current-event Rooms fixture variant (Duck/Ghost both 2026) defaults to Rooms' own max year (2026) and lands on the SAME current board as Duck/Ghost, not next season's; header reads 'Rooms — 2026'; the flag names the tab and the chosen year",
+    roomsHeaderTextR9 === "Rooms — 2026"
+      && /Duck/.test(roomsBodyTextR9) && /Ghost/.test(roomsBodyTextR9) && /Bear/.test(roomsBodyTextR9)
+      && /rooms row with blank year defaulted to 2026/.test(healthTextR9),
+    "header=" + roomsHeaderTextR9 + " body=" + roomsBodyTextR9.slice(0, 300) + " health=" + healthTextR9.slice(0, 300));
+  domR9.window.close();
 }
 
 /* ---------------------------------------------------------------------

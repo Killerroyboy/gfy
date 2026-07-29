@@ -701,7 +701,7 @@
 <section class="band band-alt view" data-view="rooms" id="rooms">
   <div class="wrap">
     <p class="eyebrow">Find your bed</p>
-    <h2>Rooms</h2>
+    <h2>Rooms<span id="roomsYear"></span></h2>
     <p class="lede">Assignments by property and room. Paid and not placed yet? You're in the queue below.</p>
     <input type="search" id="roomsFilter" class="room-filter" placeholder="Find a name…" aria-label="Filter rooms by name">
     <div id="roomsBody"></div>
@@ -1491,6 +1491,14 @@ function roomsModel(){
   const floorNum=parseInt(nextSeason(),10)-1;
   const anchorNum=years.length?Math.max(floorNum,Math.max(...years)):floorNum;
   const anchor=String(anchorNum);
+  // NEW-1: running ahead of THIS season is normal for Rooms (it floors at
+  // nextSeason()-1, i.e. it's routinely showing the current/imminent event,
+  // not next year's) — that's not itself worth a flag. It's only worth one
+  // in the Invites-style run-ahead case: the anchor is already past
+  // nextSeason() itself, same as A5's invitesAhead flag.
+  const next=nextSeason();
+  if(anchorNum>parseInt(next,10))
+    flag('Rooms tab already has rows for '+anchor+' (ahead of '+next+') — using '+anchor+' as the Rooms season');
   const anchorRows=rows.filter(r=>r.year===anchor);
   if(!anchorRows.length) return {open:false,anchor};
 
@@ -1602,18 +1610,67 @@ function renderCalcutta(){
   }
   const ranked=rankedPlayers(basis).filter(p=>p.total!==null);
 
+  // W-WD: Field status "wd" (withdrawn) excludes a team from the Final/
+  // Projected completeness check — a withdrawn team's incomplete round
+  // count must never be the reason the rest of the field stays "Projected"
+  // forever. Health flag + a board annotation (WD badge on the auction
+  // row); nothing about the team's row is deleted or hidden. Computed
+  // BEFORE payout places are assigned below, so a wd team can't collect
+  // (PAY-WD, controller default rule: a withdrawn team cannot collect).
+  const fieldStatusByKey={};
+  (STATE.data.field||[]).filter(r=>r.player&&r.year===STATE.year).forEach(r=>{
+    fieldStatusByKey[nkey(r.player)]=String(r.status||"").trim().toLowerCase();
+  });
+  const wdKeys=new Set();
+  if(roster.size){
+    roster.forEach((t,k)=>{
+      const names=[t.captain,...t.members].filter(Boolean);
+      if(names.some(n=>fieldStatusByKey[nkey(n)]==="wd")){
+        wdKeys.add(k);
+        flag('Team "'+(t.captain||k)+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
+      }
+    });
+  } else {
+    Object.keys(fieldStatusByKey).forEach(k=>{
+      if(fieldStatusByKey[k]==="wd"){
+        wdKeys.add(k);
+        flag('"'+k+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
+      }
+    });
+  }
+  const done=ranked.filter(p=>!wdKeys.has(p.key)).every(p=>p.played>=36);
+
+  // PAY-WD: a withdrawn team cannot collect, so it is excluded from the
+  // ranking used to ASSIGN paying places (not from `ranked` itself, which
+  // other lookups below — "does this team have a card at all" — still need
+  // the full field for). A partial, still-in-progress card can rank
+  // par-relative BETTER than finished ones, so leaving a wd team in the
+  // payout ranking would let it hold a paying place it never finished for.
+  // Re-run the same competition-ranking grouping rankedPlayers() uses, over
+  // the reduced field, so the next team promotes into the vacated place
+  // with a renumbered place (and therefore the correct payout-table share)
+  // rather than a gap.
+  const payKey=p=>basis==="net"?p.net:(p.rel!==null?p.rel:p.total);
+  let payPos=0, payPrev=null, payI=0;
+  const payRanked=ranked.filter(p=>!wdKeys.has(p.key)).map(p=>{
+    payI++;
+    const k=payKey(p);
+    if(k!==payPrev){ payPos=payI; payPrev=k; }
+    return Object.assign({},p,{pos:p.total===null?null:payPos});
+  });
+
   /* group ties, split the combined shares evenly */
   const rowsOut=[];
   {
     let i=0;
-    while(i<ranked.length && ranked[i].pos<=places){
-      const tie=ranked.filter(p=>p.pos===ranked[i].pos);
-      const spanned=tie.map((_,k)=>shareAt(ranked[i].pos+k)).reduce((a,b)=>a+b,0);
+    while(i<payRanked.length && payRanked[i].pos<=places){
+      const tie=payRanked.filter(p=>p.pos===payRanked[i].pos);
+      const spanned=tie.map((_,k)=>shareAt(payRanked[i].pos+k)).reduce((a,b)=>a+b,0);
       const each=spanned/tie.length;
       tie.forEach(p=>{
         const lot=lots.find(l=>l.key===p.key);
         rowsOut.push({
-          place:ranked[i].pos, tied:tie.length>1, key:p.key, name:p.name,
+          place:payRanked[i].pos, tied:tie.length>1, key:p.key, name:p.name,
           detail:(basis==="net"?"net ":"")+(p.rel!==null?toPar(p.rel):p.total)+" · "+thruLabel(p),
           owner:lot?lot.owner:"—",
           each, lot
@@ -1638,42 +1695,17 @@ function renderCalcutta(){
   rowsOut.forEach(r=>{ if(!r.lot) r.ownerCut=0; });
   const rowsOutByKey=new Map(rowsOut.map(r=>[r.key,r]));
 
-  // W-WD: Field status "wd" (withdrawn) excludes a team from the Final/
-  // Projected completeness check — a withdrawn team's incomplete round
-  // count must never be the reason the rest of the field stays "Projected"
-  // forever. Health flag + a board annotation (WD badge on the auction
-  // row); nothing about the team's row is deleted or hidden.
-  const fieldStatusByKey={};
-  (STATE.data.field||[]).filter(r=>r.player&&r.year===STATE.year).forEach(r=>{
-    fieldStatusByKey[nkey(r.player)]=String(r.status||"").trim().toLowerCase();
-  });
-  const wdKeys=new Set();
-  if(roster.size){
-    roster.forEach((t,k)=>{
-      const names=[t.captain,...t.members].filter(Boolean);
-      if(names.some(n=>fieldStatusByKey[nkey(n)]==="wd")){
-        wdKeys.add(k);
-        flag('Team "'+(t.captain||k)+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
-      }
-    });
-  } else {
-    Object.keys(fieldStatusByKey).forEach(k=>{
-      if(fieldStatusByKey[k]==="wd"){
-        wdKeys.add(k);
-        flag('"'+k+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
-      }
-    });
-  }
-  const done=ranked.filter(p=>!wdKeys.has(p.key)).every(p=>p.played>=36);
-
   // W-ONE: per-lot "wins if it ended now" (or "Won" once Final) — sourced
   // ONLY from rowsOut/ownerCut above, never recomputed. Distinct texts for
-  // the three non-numeric states: no owner at all ("unsold"), owner exists
-  // but the team hasn't posted a card yet ("waiting on cards"), team has
-  // posted but placed outside the paying spots ("—").
+  // the four non-numeric states: withdrawn (PAY-WD — takes priority over
+  // every other state; a wd team can't collect regardless of where its raw
+  // standing would otherwise put it), no owner at all ("unsold"), owner
+  // exists but the team hasn't posted a card yet ("waiting on cards"), team
+  // has posted but placed outside the paying spots ("—").
   $("#aucBody").innerHTML=lots.map((l,i)=>{
     let wouldText;
-    if(l.owner==="—") wouldText="unsold";
+    if(wdKeys.has(l.key)) wouldText="withdrawn";
+    else if(l.owner==="—") wouldText="unsold";
     else{
       const rp=ranked.find(p=>p.key===l.key);
       if(!rp) wouldText="waiting on cards";
@@ -1783,9 +1815,14 @@ function renderNextYear(){
 // admin (?admin=1) lens only ADDS the prior-year "had:" memory line beside
 // an already-public name; it never hides anything Rooms shows by default.
 function renderRooms(){
-  const body=$("#roomsBody"), queueEl=$("#roomsQueue");
+  const body=$("#roomsBody"), queueEl=$("#roomsQueue"), yearEl=$("#roomsYear");
   if(!body) return;
   const rm=roomsModel();
+  // NEW-1: renderRooms never displayed the year it was actually showing —
+  // label it in the header ("Rooms — 2027") whenever an anchor is known,
+  // open board or not (a same-anchor empty board still needs the label so
+  // it's clear WHICH year came up empty).
+  if(yearEl) yearEl.textContent=rm.anchor?" — "+esc(rm.anchor):"";
   if(!rm.open){
     body.innerHTML='<div class="lb-empty">Add a Rooms tab and assignments fill in here.</div>';
     if(queueEl) queueEl.innerHTML="";
@@ -2252,12 +2289,36 @@ function normalizeYears(data){
     if(!rows||!rows.length||!("year" in rows[0])) return;
     const isNextSeason=NEXT_SEASON_TABS.includes(tab);
     const doDefault=isNextSeason||YEAR_DEFAULT_TABS.includes(tab);
+    // NEW-2: Rooms' blank-year default is its OWN tab's max non-blank year,
+    // not a blanket nextSeason() — Rooms' anchor floors at nextSeason()-1
+    // (A-NEXT2), so a blank row meant for the CURRENT event was silently
+    // landing a season ahead of every other row on that same sheet (and
+    // could even drag the whole board's anchor a year ahead with it). Only
+    // fall back to nextSeason() when Rooms has no non-blank year at all —
+    // nothing on the sheet to infer "current" from. Invites has no such
+    // floor and keeps defaulting its blanks straight to nextSeason().
+    let roomsOwnMax=null;
+    if(tab==="rooms"){
+      const nums=rows.map(r=>{
+        const raw=r.year;
+        if(!raw||!String(raw).trim()) return NaN;
+        return parseInt(String(raw).trim().replace(/,/g,""),10);
+      }).filter(n=>!isNaN(n));
+      if(nums.length) roomsOwnMax=String(Math.max(...nums));
+    }
     rows.forEach(r=>{
       const raw=r.year;
       if(!raw||!String(raw).trim()){
         if(!doDefault) return;
-        if(isNextSeason){ r.year=next; flag(tab+" row with blank year defaulted to "+next+" (NEXT season)"); }
-        else { r.year=activeSeason(); flag("row with blank year defaulted to "+r.year+" ("+tab+")"); }
+        if(tab==="rooms"){
+          const def=roomsOwnMax||next;
+          r.year=def;
+          flag("rooms row with blank year defaulted to "+def+(roomsOwnMax?" (rooms tab's own current max year)":" (NEXT season)"));
+        } else if(isNextSeason){
+          r.year=next; flag(tab+" row with blank year defaulted to "+next+" (NEXT season)");
+        } else {
+          r.year=activeSeason(); flag("row with blank year defaulted to "+r.year+" ("+tab+")");
+        }
         return;
       }
       const n=parseInt(String(raw).trim().replace(/,/g,""),10);
