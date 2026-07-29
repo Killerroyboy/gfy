@@ -136,6 +136,24 @@
   .hcell.bogey .hs{color:var(--sage)}
   .hcell.blowup .hs{color:var(--rust)}
 
+  /* v2.3 scorecard grid (G-GRID/G-SCROLL): page never scrolls sideways —
+     .sg-scroll owns the overflow. Headers are the tap targets (≥44px). */
+  .sg{margin-top:26px}
+  .sg-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .sg-t{border-collapse:collapse}
+  .sg-t th,.sg-t td{border:1px solid rgba(200,162,74,.14);text-align:center;
+    font-variant-numeric:tabular-nums;min-width:2.2rem;padding:4px 3px;font-size:.85rem}
+  .sg-t th.sg-h{height:44px;padding:0 3px;cursor:pointer;color:var(--sage);
+    font-weight:400;font-size:.7rem;letter-spacing:.08em} /* table cells ignore min-height; height sets the row */
+  .sg-t .sg-team{position:sticky;left:0;background:var(--pine);text-align:left;
+    padding:4px 10px;white-space:nowrap;z-index:2;border-right-color:var(--brass-dim)}
+  .sg-t tr.sg-par td,.sg-t tr.sg-yds td{font-size:.55rem;color:var(--brass-dim);border-color:transparent}
+  .sg-t td.under{color:var(--brass);font-weight:700}
+  .sg-t td.bogey{color:var(--sage)}
+  .sg-t td.blowup{color:var(--rust)}
+  .sg-t th[data-hole="10"],.sg-t td[data-hole="10"]{border-left:2px solid var(--brass-dim)}
+  .sg-controls{display:flex;gap:8px;margin-bottom:10px}
+
   /* field */
   .fld{display:grid;grid-template-columns:1fr 6rem 6rem 5rem;gap:10px;align-items:baseline;
        padding:13px 6px;border-bottom:1px solid rgba(200,162,74,.13)}
@@ -467,6 +485,13 @@
     </div>
     <div id="lbBody">
       <div class="lb-empty">No cards posted yet. Scores appear here as the sheet fills in.</div>
+    </div>
+    <div class="sg" id="sgWrap" hidden>
+      <p class="nine-lab">Hole by hole</p>
+      <div class="lb-empty" id="sgNote" hidden>Hole-by-hole view needs all 18 holes on the Course tab.</div>
+      <div class="sg-controls" id="sgRounds" hidden></div>
+      <div class="sg-scroll" id="sgScroll"><table class="sg-t" id="sgTable"></table></div>
+      <div class="sg-panel card-drop" id="sgPanel" hidden></div>
     </div>
     <p class="sync" id="lbSync"></p>
   </div>
@@ -1156,6 +1181,7 @@ function renderLeaderboard(){
     // quiet and let stale cards keep looking current.
     $("#lbBody").innerHTML='<div class="lb-empty">No cards posted yet. Scores appear here as the sheet fills in.</div>';
     STATE.open=null;
+    renderScoreGrid([]);
     return;
   }
   const wdKeys=wdKeySet();
@@ -1182,6 +1208,39 @@ function renderLeaderboard(){
     STATE.open = STATE.open===b.dataset.player ? null : b.dataset.player;
     renderLeaderboard();
   }));
+  renderScoreGrid(players);
+}
+
+/* ---------- v2.3 hole-by-hole grid (G-GRID) ---------- */
+function renderScoreGrid(players){
+  const wrap=$("#sgWrap"), note=$("#sgNote"), scroll=$("#sgScroll"), table=$("#sgTable");
+  if(!wrap) return;
+  if(!players.length){ wrap.hidden=true; return; }
+  wrap.hidden=false;
+  const pars=courseMap(), yds=courseYards();
+  if(!pars){ note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return; }
+  note.hidden=true; scroll.hidden=false;
+  const rounds=[...new Set(players.flatMap(p=>Object.keys(p.rounds)))].sort();
+  const rd=(STATE.gridRound&&rounds.includes(STATE.gridRound))?STATE.gridRound:rounds[0];
+  table.dataset.round=rd;
+  const head=
+    `<tr><th class="sg-team">Team</th>${HOLES.map(h=>`<th class="sg-h" data-hole="${h}">${h}</th>`).join("")}</tr>`+
+    `<tr class="sg-par"><td class="sg-team">Par</td>${HOLES.map(h=>`<td data-hole="${h}">${pars[h]}</td>`).join("")}</tr>`+
+    `<tr class="sg-yds"><td class="sg-team">Yds</td>${HOLES.map(h=>`<td data-hole="${h}">${yds?yds[h]:"—"}</td>`).join("")}</tr>`;
+  const body=players.map(p=>{
+    const r=p.rounds[rd];
+    const name=`<td class="sg-team">${teamLabel(p.key,p.name).html}</td>`;
+    if(!r) return `<tr class="sg-teamrow">${name}<td colspan="18">—</td></tr>`;
+    if(!r.holes) // G-TOTALS: totals-only round — no fabricated cells
+      return `<tr class="sg-teamrow">${name}<td colspan="18">round total ${r.total} — no hole-by-hole card</td></tr>`;
+    return `<tr class="sg-teamrow">${name}${HOLES.map(h=>{
+      const v=r.holes[h];
+      if(v===undefined) return `<td data-hole="${h}"></td>`;
+      const cls=scoreClass(v,pars[h]).trim();   // S7: reuse the site's existing idiom (under/bogey/blowup)
+      return `<td data-hole="${h}"${cls?` class="${cls}"`:""}>${v}</td>`;
+    }).join("")}</tr>`;
+  }).join("");
+  table.innerHTML=head+body;
 }
 
 function seniorityBadge(since,season){

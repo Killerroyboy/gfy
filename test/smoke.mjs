@@ -1563,13 +1563,52 @@ dom.window.close();
     JSON.stringify(yds ?? null).slice(0, 80));
   domK1.window.close();
 }
+{
+  const domK2 = makeDom("");
+  await until(() => domK2.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const d = domK2.window.document;
+  const table = d.querySelector("#sgTable");
+  check("K2: grid renders one row per team + par/yds header rows",
+    !!table && table.querySelectorAll("tr.sg-teamrow").length === d.querySelectorAll("#lbBody .lb-row").length
+    && !!table.querySelector("tr.sg-par") && !!table.querySelector("tr.sg-yds"));
+  // Default round is "1". Duck r1: h1 4 vs par 4 → neutral; h3 4 vs par 3 → bogey.
+  // Moose r1: h7 7 vs par 3 → blowup.
+  const row = name => table && [...table.querySelectorAll("tr.sg-teamrow")].find(r => r.textContent.includes(name));
+  const duck = row("Duck"), moose = row("Moose");
+  const dc = duck ? duck.querySelectorAll("td[data-hole]") : [];
+  check("K3: score-vs-par coloring classes (neutral/bogey/blowup)", dc.length === 18
+    && dc[0].className === "" && dc[2].className.includes("bogey")
+    && moose && moose.querySelectorAll("td[data-hole]")[6].className.includes("blowup"),
+    duck ? duck.innerHTML.slice(0, 200) : "no Duck row");
+  // Bear is totals-only (r1=76) — G-TOTALS: an honest totals row, no fabricated cells
+  const bear = row("Bear");
+  check("K4: totals-only team gets a totals row, never fabricated cells",
+    bear && bear.textContent.includes("round total 76") && bear.querySelectorAll("td[data-hole]").length === 0,
+    bear ? bear.textContent : "no Bear row");
+  check("K5: page body does not scroll sideways (grid scroll is contained)",
+    !!d.querySelector("#sgScroll") && d.querySelector("#sgWrap").closest("section") !== null);
+  domK2.window.close();
+}
+{
+  // G-HIDE: course tab short → honest note, cards untouched
+  const domK6 = makeDom("", withOverride({ course: () => Promise.resolve({ ok: true, status: 200,
+    text: async () => "hole,par,yards\n1,4,385\n2,4,410\n" }) }));
+  await until(() => domK6.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const d6 = domK6.window.document;
+  check("K6: partial course data hides grid behind honest note",
+    d6.querySelector("#sgNote") && !d6.querySelector("#sgNote").hidden
+    && d6.querySelector("#sgNote").textContent.includes("18 holes")
+    && d6.querySelector("#sgScroll").hidden === true
+    && d6.querySelectorAll("#lbBody .lb-row").length > 0);
+  domK6.window.close();
+}
 
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
 const groupTally = {};
 results.forEach(([name, ok]) => {
-  const m = name.match(/^([A-IKMRSVWZ])\d+:/);
+  const m = name.match(/^([A-Z])\d+:/);
   if (!m) return;
   const g = m[1];
   groupTally[g] = groupTally[g] || { pass: 0, total: 0 };
@@ -1578,7 +1617,7 @@ results.forEach(([name, ok]) => {
 });
 
 console.log("");
-["A", "B", "C", "D", "E", "F", "G", "H", "I", "K", "M", "R", "S", "V", "W", "Z"].forEach(g => {
+["A","B","C","D","E","F","G","H","I","K","L","M","N","P","Q","R","S","V","W","Z"].forEach(g => {
   if (groupTally[g]) console.log(`TALLY ${g} ${groupTally[g].pass}/${groupTally[g].total}`);
 });
 const failed = results.filter(r => !r[1]).length;
