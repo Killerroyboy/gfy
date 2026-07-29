@@ -29,12 +29,16 @@
 
   .nav{position:sticky;top:0;z-index:20;background:rgba(10,23,18,.88);
        backdrop-filter:blur(8px);border-bottom:1px solid rgba(200,162,74,.25)}
-  .nav-inner{max-width:1100px;margin:0 auto;padding:11px 24px;display:flex;align-items:center;gap:14px}
+  .nav-inner{max-width:1100px;margin:0 auto;padding:11px 24px;display:flex;align-items:center;gap:14px;position:relative}
   .nav-mark{width:19px;height:25px;color:var(--brass);flex:none}
   .nav-name{font-family:var(--display);font-weight:700;font-size:1.05rem;
             letter-spacing:.34em;margin-right:auto;padding-left:2px}
   .nav-links{display:flex;gap:19px;align-items:center;overflow-x:auto;scrollbar-width:none}
   .nav-links::-webkit-scrollbar{display:none}
+  /* S-NAV: right-edge fade — hints the nav keeps scrolling when it's cut off
+     (phones, or the reordered off-season/event-window lists running long). */
+  .nav-inner::after{content:"";position:absolute;top:0;right:0;bottom:0;width:28px;
+    background:linear-gradient(to right, transparent, rgba(10,23,18,.88));pointer-events:none}
   .nav a{color:var(--sage);text-decoration:none;white-space:nowrap;font-size:.63rem;
          letter-spacing:.2em;text-transform:uppercase;font-weight:400;padding:4px 0;
          border-bottom:1px solid transparent;transition:color .2s,border-color .2s}
@@ -704,7 +708,11 @@ document.querySelector("#mark path").setAttribute("d",MARK_PATH);
    Deliberately its own script, ahead of config.js: view switching must not
    wait on the (parser-blocking) sheet config to load, and none of this
    touches CONFIG/INFO/fetch — it only toggles which .view section shows. */
-const VIEWS=["home","board","field","pairings","calcutta","money","schedule","rules","champions","shame","photos","nextyear"];
+// S-VIEWS: VIEWS is derived from the [data-view] DOM (deduped) instead of a
+// hand-maintained literal — a new .view section is picked up automatically,
+// no third place to remember to update. The alias map stays hand-maintained
+// (it encodes deep-link history, not the DOM).
+const VIEWS=[...new Set([...document.querySelectorAll(".view")].map(s=>s.dataset.view))];
 const VIEW_ALIASES={leaderboard:"board",card:"schedule",grounds:"schedule"};
 function showView(name){
   const aliased=VIEW_ALIASES[name]||name;
@@ -817,6 +825,24 @@ const toPar=n=> n===0 ? "E" : (n>0 ? "+"+n : String(n));
 const ordSuffix=n=>n===1?"st":n===2?"nd":n===3?"rd":"th";
 const yes=v=>/^(y|yes|true|paid|in|1)$/i.test(String(v||"").trim());
 
+/* A-DATE: one parser for every "real date" cell (currently just paid_date).
+   ISO (yyyy-mm-dd, optionally with a time suffix) is preferred; M/D/YY and
+   M/D/YYYY are tolerated. Anything else is not a date — callers flag it and
+   sort it last rather than guessing. */
+function parseDate(v){
+  const s=String(v==null?"":v).trim();
+  if(!s) return null;
+  let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m){ const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3])); return isNaN(d.getTime())?null:d; }
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if(m){
+    let yr=+m[3]; if(yr<100) yr+=2000;
+    const d=new Date(Date.UTC(yr,+m[1]-1,+m[2]));
+    return isNaN(d.getTime())?null:d;
+  }
+  return null;
+}
+
 const nkey=s=>String(s||"").trim().replace(/\s+/g," ").toLowerCase();
 let HEALTH=[];
 const flag=m=>{ if(!HEALTH.includes(m)) HEALTH.push(m); };
@@ -829,10 +855,18 @@ function roundNorm(v){
   return WORDROUND[w]||"1";
 }
 function activeSeason(){
-  const ys=(STATE.data.scores||[]).map(r=>parseInt(r.year,10)).filter(n=>n>0);
-  if(ys.length) return String(Math.max(...ys));
+  // A-SANE: a Scores row more than a year past first_tee is almost always a
+  // typo'd year (fat-fingered on a phone), not a genuine future season — if
+  // it wins the max() it silently strands the real board on a garbage year.
   const t=new Date(INFO.first_tee||CONFIG.FIRST_TEE);
-  return String(isNaN(t)?new Date().getFullYear():t.getFullYear());
+  const teeYear=isNaN(t.getTime())?null:t.getFullYear();
+  const ceiling=teeYear===null?Infinity:teeYear+1;
+  const ysAll=(STATE.data.scores||[]).map(r=>parseInt(r.year,10)).filter(n=>n>0);
+  const ys=ysAll.filter(n=>n<=ceiling);
+  ysAll.filter(n=>n>ceiling).forEach(n=>
+    flag("Scores year "+n+" is past first_tee+1 ("+ceiling+") — ignored for the active season"));
+  if(ys.length) return String(Math.max(...ys));
+  return String(teeYear===null?new Date().getFullYear():teeYear);
 }
 function rosterMap(){
   const m=new Map();
@@ -1033,7 +1067,16 @@ function rankedPlayers(basis){
 
 function renderLeaderboard(){
   const players=rankedPlayers("gross");
-  if(!players.length) return;
+  if(!players.length){
+    // S-STALE (live bug, fixed here): this used to just `return`, leaving
+    // whatever rows were already in #lbBody on screen under a fresh
+    // "Updated" stamp — a re-fetch that legitimately goes to zero rows must
+    // repaint the same honest empty state the v1 markup ships with, not go
+    // quiet and let stale cards keep looking current.
+    $("#lbBody").innerHTML='<div class="lb-empty">No cards posted yet. Scores appear here as the sheet fills in.</div>';
+    STATE.open=null;
+    return;
+  }
   $("#lbBody").innerHTML=players.map(p=>{
     const pos=p.pos;
     const lead=(pos===1)?" lead":"";
@@ -1186,6 +1229,15 @@ function calcuttaModel(year=STATE.year){
   const pot=lots.reduce((s,l)=>s+l.price,0);
   const rakePct=num(INFO.calcutta_rake), rake=Math.round(pot*rakePct/100), payable=pot-rake;
   if(rakePct>100) flag('calcutta_rake is '+rakePct+'% — over 100%, check the Info tab');
+  // W-RAKE0: a non-blank, non-zero cell that num() reads as 0 ("ten",
+  // "TBD", a stray currency symbol with no digits...) is a broken cell, not
+  // a genuine no-rake house — silently charging 0% is the wrong failure
+  // mode for a money field.
+  {
+    const rakeRaw=String(INFO.calcutta_rake==null?"":INFO.calcutta_rake).trim();
+    if(rakeRaw && rakeRaw!=="0" && rakePct===0)
+      flag('calcutta_rake "'+rakeRaw+'" parsed to 0% — check the Info tab');
+  }
   if(payable<0) flag('calcutta payable is negative — check rake and prices');
   const owed={};
   lots.filter(l=>!l.collected).forEach(l=>{
@@ -1199,65 +1251,85 @@ function calcuttaModel(year=STATE.year){
            outstanding:Object.values(owed).sort((a,b)=>b.total-a.total) };
 }
 function nextYearModel(){
-  const season=activeSeason(), next=String(parseInt(season,10)+1);
+  const season=activeSeason(), seasonNum=parseInt(season,10), next=String(seasonNum+1);
   const field=STATE.data.field||[];
-  const byKey=new Map();
-  field.filter(r=>r.year===season&&r.player).forEach(r=>
-    byKey.set(nkey(r.player),{name:r.player,paid:false,date:"",out:false}));
-  const nxt=field.filter(r=>r.year===next&&r.player);
-  if(!nxt.length) return {open:false,next};
-  nxt.forEach(r=>{
-    const k=nkey(r.player);
-    if(!byKey.has(k)) byKey.set(k,{name:r.player,paid:false,date:"",out:false});
-    const p=byKey.get(k);
-    if(String(r.status||"").trim().toLowerCase()==="out") p.out=true;
-    if(yes(r.deposit)){ p.paid=true; p.date=(r.paid_date||"").trim(); }
-  });
-  const all=[...byKey.values()].filter(p=>!p.out);
-  const paid=all.filter(p=>p.paid).sort((a,b)=>{
-    const da=a.date||"9999", db=b.date||"9999";
-    return da<db?-1:(da>db?1:0);
-  });
+  const invitesAll=STATE.data.invites||[];
+  const hasInvites=Array.isArray(STATE.data.invites)&&STATE.data.invites.length>0;
 
-  /* ---- invites funnel (v2.1) ----
-     Universe = union of current-season Field players, NEXT-season Field
-     rows, and NEXT-season Invites rows; minus anyone flagged status=out in
-     either NEXT-season source. Per-person stage (highest wins): paid (NEXT
-     Field deposit) > responded (invites.responded) > invited
-     (invites.invited) > needsInvite. Canonical-key (nkey) matching
-     throughout, same as everything above.
-     PRIVACY: Invites rows carry an `email` column for mail-merge only — it
-     is read nowhere in this codebase and must never reach the DOM. */
-  const invitesRows=STATE.data.invites;
-  const hasInvites=Array.isArray(invitesRows)&&invitesRows.length>0;
-  const funnel=new Map();
-  const touch=player=>{
-    const k=nkey(player);
-    if(!funnel.has(k)) funnel.set(k,{name:player,out:false,invited:false,responded:false});
-    return funnel.get(k);
+  // A-NEXT2: Invites is its own NEXT-season surface — its anchor floors at
+  // S-NEXT (season+1) but can run ahead of it if the tab already carries a
+  // later season's rows (prepping outreach before Field has NEXT rows at
+  // all). Picker-independent, same as everything else on this board.
+  const invitesYears=invitesAll.map(r=>parseInt(r.year,10)).filter(n=>n>0);
+  const invitesNext=String(Math.max(seasonNum+1, invitesYears.length?Math.max(...invitesYears):0));
+
+  const fieldNextRows=field.filter(r=>r.year===next&&r.player);
+  const invitesNextRows=invitesAll.filter(r=>r.year===invitesNext&&r.player);
+
+  // F-OPEN: either NEXT-season source alone is enough to open collections —
+  // outreach commonly starts (Invites) before anyone has a Field row at all.
+  if(!fieldNextRows.length && !invitesNextRows.length) return {open:false,next};
+
+  // F-UNIV: Field(trailing 3 seasons) ∪ Field-NEXT ∪ Invites-NEXT. Trailing
+  // union is what lets a declined-this-year player silently reappear next
+  // season (F-DECLINED) — no special-case carry-forward code needed, they
+  // just never left the historical Field window.
+  const trailing=new Set([seasonNum,seasonNum-1,seasonNum-2].map(String));
+  const people=new Map();
+  const touch=name=>{
+    const k=nkey(name);
+    if(!people.has(k)) people.set(k,{name,paid:false,date:"",invited:false,responded:false,status:""});
+    return people.get(k);
   };
-  field.filter(r=>r.year===season&&r.player).forEach(r=>touch(r.player));
-  nxt.forEach(r=>{
+  field.filter(r=>r.player&&trailing.has(r.year)).forEach(r=>touch(r.player));
+  fieldNextRows.forEach(r=>{
     const p=touch(r.player);
-    if(String(r.status||"").trim().toLowerCase()==="out") p.out=true;
+    if(yes(r.deposit)){ p.paid=true; p.date=(r.paid_date||"").trim(); }
+    // F-OUT-HOME: Field is NOT the authoritative out/declined source for the
+    // NEXT season anymore — Invites is. A status value here used to
+    // silently suppress a player; now it's ignored, loudly.
+    if(String(r.status||"").trim())
+      flag('Field '+next+' status "'+r.status+'" for '+r.player+' ignored — Invites is authoritative for out/declined');
   });
-  (invitesRows||[]).filter(r=>r.year===next&&r.player).forEach(r=>{
+  invitesNextRows.forEach(r=>{
     const p=touch(r.player);
-    if(String(r.status||"").trim().toLowerCase()==="out") p.out=true;
     if(yes(r.invited)) p.invited=true;
     if(yes(r.responded)) p.responded=true;
+    p.status=String(r.status||"").trim().toLowerCase();
   });
-  const paidKeys=new Set(paid.map(p=>nkey(p.name)));
+
+  // F-STAGE + F-DECLINED: paid AND out/declined => money was already
+  // collected from someone not coming — admin-only "refund owed", never a
+  // silent deletion. Plain `out` => fully suppressed, even under ?admin=1
+  // (F-DECLINED: "silent suppress"). Plain `declined` => admin-visible,
+  // excluded from the public all/paid/owing/needs population (F-DECLINED:
+  // "excluded from owing/nag lists").
+  const refunds=[], declined=[];
   const stages={paid:[],responded:[],invited:[],needs:[]};
-  funnel.forEach((p,k)=>{
-    if(p.out) return;
-    if(paidKeys.has(k)) stages.paid.push({name:p.name});
+  people.forEach(p=>{
+    const dead=p.status==="out"||p.status==="declined";
+    if(p.paid&&dead){ refunds.push({name:p.name,date:p.date,status:p.status}); return; }
+    if(p.status==="out") return;
+    if(p.status==="declined"){ declined.push({name:p.name}); return; }
+    if(p.paid) stages.paid.push({name:p.name,date:p.date});
     else if(p.responded) stages.responded.push({name:p.name});
     else if(p.invited) stages.invited.push({name:p.name});
     else stages.needs.push({name:p.name});
   });
 
-  return {open:true,next,all,paid,owing:all.filter(p=>!p.paid),stages,hasInvites};
+  // A-DATE: paid queue orders by real date, not string lexical order.
+  // Unparseable dates are flagged and sort after every dated row; same-day
+  // (or same-unparsed) ties keep sheet order (stable sort on insertion index).
+  const paid=stages.paid.map((p,i)=>{
+    const d=parseDate(p.date);
+    if(p.date&&!d) flag('paid_date "'+p.date+'" for '+p.name+' is unparseable — sorted after dated rows');
+    return {p,i,t:d?d.getTime():Infinity};
+  }).sort((a,b)=>a.t-b.t||a.i-b.i).map(o=>o.p);
+
+  const all=[...stages.paid,...stages.responded,...stages.invited,...stages.needs];
+  const owing=[...stages.responded,...stages.invited,...stages.needs];
+
+  return {open:true,next,invitesNext,all,paid,owing,stages,hasInvites,declined,refunds};
 }
 
 function renderCalcutta(){
@@ -1362,6 +1434,9 @@ function renderCalcutta(){
     (rowsOut.some(r=>!r.lot)?" · unsold lots' shares stay in the pot":"");
 }
 
+function nameListHTML(items,cls){
+  return `<ul class="${cls}">`+items.map(p=>`<li>${esc(p.name)}</li>`).join("")+`</ul>`;
+}
 function renderNextYear(){
   const nyBody=$("#nyBody");
   if(!nyBody) return;
@@ -1372,37 +1447,66 @@ function renderNextYear(){
   }
   const paidHTML=ny.paid.length
     ? "<ol>"+ny.paid.map(p=>`<li>${esc(p.name)}${p.date?" — "+esc(p.date):""}</li>`).join("")+"</ol>"
+      +`<p class="basis">Paid order; same-day ties keep sheet order.</p>`
     : "";
-  const owingHTML=ny.owing.length
-    ? `<div class="mn-net down">${ny.owing.map(p=>esc(p.name)).join(", ")}</div>`
-    : "";
+  // S-structure: owing renders as real <ul><li> items, not a comma-joined
+  // blob — one name per row, same as the paid list next to it.
+  const owingHTML=ny.owing.length ? nameListHTML(ny.owing,"mn-net down") : "";
   const handle=String(INFO.payment_handle||"").trim();
   const handleHTML=/^https?:\/\//i.test(handle)
     ? `<a href="${esc(handle)}">${esc(handle)}</a>`
     : esc(handle);
   const handleSpan=`<span style="text-transform:none;letter-spacing:normal">${handleHTML}</span>`;
-  /* Invites funnel line + Needs-an-invite block: only when the Invites tab
-     is actually configured and has rows. Absent/empty tab -> hasInvites is
-     false -> both stay empty strings -> exactly the pre-invites v2 layout. */
+  /* F-NAMES: public board = counts only. The funnel summary line (and its
+     F-FRESH caption) render whenever the Invites tab is configured; only
+     when hasInvites is false does this stay empty (pre-invites v2 layout). */
   const funnelHTML=ny.hasInvites
     ? `<p>${esc(ny.stages.paid.length)} paid · ${esc(ny.stages.responded.length)} responded · `
       +`${esc(ny.stages.invited.length)} invited · ${esc(ny.stages.needs.length)} need an invite</p>`
+      +`<p class="basis">Invite states are ticked by hand and may lag.</p>`
     : "";
-  const needsHTML=ny.hasInvites&&ny.stages.needs.length
-    ? `<h3 class="subhead">Needs an invite</h3><div class="mn-net down">${ny.stages.needs.map(p=>esc(p.name)).join(", ")}</div>`
-    : "";
+  /* F-NAMES: invited / needs-invite / declined / paid-refund-owed NAMES are
+     social-gated behind ?admin=1 — a courtesy screen against a casually
+     forwarded link, documented here as non-cryptographic, not a security
+     boundary. The public paid/owing lists above are unaffected — those
+     render "as today" per spec. */
+  let adminHTML="";
+  if(ADMIN){
+    const invitedHTML=ny.stages.invited.length
+      ? `<h3 class="subhead">Invited</h3>`+nameListHTML(ny.stages.invited,"mn-net") : "";
+    const needsHTML=ny.stages.needs.length
+      ? `<h3 class="subhead">Needs an invite</h3>`+nameListHTML(ny.stages.needs,"mn-net down") : "";
+    const declinedHTML=ny.declined.length
+      ? `<h3 class="subhead">Declined</h3>`+nameListHTML(ny.declined,"mn-net down") : "";
+    const refundHTML=ny.refunds.length
+      ? `<h3 class="subhead">Paid — refund owed</h3><ul class="mn-net down">`+
+        ny.refunds.map(r=>`<li>${esc(r.name)} — paid, ${esc(r.status)} — refund owed</li>`).join("")+`</ul>`
+      : "";
+    if(invitedHTML||needsHTML||declinedHTML||refundHTML){
+      adminHTML=`<p class="basis">Admin view (?admin=1) — social gating only, not a security boundary.</p>`+
+        invitedHTML+needsHTML+declinedHTML+refundHTML;
+    }
+  }
   nyBody.innerHTML=`<p class="eyebrow">${esc(ny.paid.length)} of ${esc(ny.all.length)} paid for ${esc(ny.next)}</p>`+
     funnelHTML+
     paidHTML+owingHTML+
-    needsHTML+
+    adminHTML+
     `<p class="basis">Deposit ${money(num(INFO.deposit_amount))} · ${handleSpan}</p>`;
 }
 
 function renderMoney(){
-  const rows=forYear(STATE.data.ledger,STATE.year).filter(r=>r.player);
+  const allRows=STATE.data.ledger;
+  const rows=forYear(allRows,STATE.year).filter(r=>r.player);
   if(!rows.length){
     $("#potTotal").textContent="—"; $("#potPlayers").textContent="—"; $("#potOpen").textContent="—";
-    $("#mnBody").innerHTML='<div class="mn-empty">Add a Ledger tab and the settle-up math runs itself.</div>';
+    // Off-season: the Ledger tab is configured and has real rows, just none
+    // for the year on screen — point at Next Year instead of asking Riley
+    // to "add a Ledger tab" that already exists. A genuinely absent/empty
+    // tab keeps the original setup-prompt copy.
+    $("#mnBody").innerHTML=(Array.isArray(allRows)&&allRows.length)
+      ? `<div class="mn-empty">Nothing to settle for ${esc(STATE.year)}. See <a href="#nextyear">Next Year</a> `
+        +`for the ${esc(String(parseInt(activeSeason(),10)+1))} collection.</div>`
+      : '<div class="mn-empty">Add a Ledger tab and the settle-up math runs itself.</div>';
     return;
   }
   const people=rows.map(r=>({
@@ -1577,6 +1681,32 @@ function renderHealth(){
     HEALTH.map(h=>`<div>${esc(h)}</div>`).join("")+`</details>`;
 }
 
+/* ---------- S-NAV: seasonal nav order ----------
+   Off-season (the common state — most of the year), the nav should lead
+   with what people actually open: Home, Next Year (collections), Field
+   (who's in). Inside the event window (first_tee ± 3 days — the same
+   window paintHome/tick use for pre/post-event), it flips to what matters
+   on the ground: Board, Pairings, Calcutta. Computed once per paint, not
+   live-recomputed on scroll/click — it does not need to be. */
+const NAV_OFF_PRIORITY=["home","nextyear","field"];
+const NAV_EVENT_PRIORITY=["board","pairings","calcutta"];
+function seasonPhase(){
+  const tee=new Date(INFO.first_tee||CONFIG.FIRST_TEE);
+  if(isNaN(tee.getTime())) return "off";
+  const win=3*86400000, t=tee.getTime(), now=Date.now();
+  return (now>=t-win && now<=t+win) ? "event" : "off";
+}
+function applyNavOrder(){
+  const nav=document.querySelector(".nav-links");
+  if(!nav) return;
+  const priority=seasonPhase()==="event"?NAV_EVENT_PRIORITY:NAV_OFF_PRIORITY;
+  const rest=VIEWS.filter(v=>!priority.includes(v));
+  const order=[...priority.filter(v=>VIEWS.includes(v)),...rest];
+  const byView={};
+  nav.querySelectorAll("a").forEach(a=>{ byView[a.hash.slice(1)]=a; });
+  order.forEach(v=>{ if(byView[v]) nav.appendChild(byView[v]); });
+}
+
 /* ---------- countdown ---------- */
 function tick(){
   const el=$("#countdown");
@@ -1694,6 +1824,12 @@ if(CONFIG.DRIVE_FOLDER_ID){
    back to the cache silently, and never WRITES the cache either, so a
    debug run can't poison normal mode's offline copy. */
 const DEBUG = new URLSearchParams(location.search).has("debug");
+// F-NAMES: ?admin=1 gates funnel NAME lists (invited / needs-invite /
+// declined / paid-refund-owed) that stay off the public board. Same pattern
+// as DEBUG above — a URL flag, not an auth boundary (documented as
+// non-cryptographic; it's social gating, keeping outreach status off a link
+// that gets casually forwarded, not a secret).
+const ADMIN = new URLSearchParams(location.search).has("admin");
 
 async function pullDebug(tab){
   const rep={tab,url:"",status:"—",rows:0,headers:[],state:"FAILED",reason:"",data:null};
@@ -1757,12 +1893,32 @@ async function loadDebug(){
 }
 
 /* ---------- load ---------- */
+// A-SANE: every year cell, in every tab that has one, gets parseInt-cleaned
+// at ingest ("2,027" / "2027.0" are fine; genuinely unparseable text is
+// flagged and the row is left out of year filtering rather than guessed at).
+// Blank-year DEFAULTING stays scoped the way it always was — most tabs
+// default to activeSeason(); Invites is a NEXT-season surface (A-NEXT2) and
+// defaults blank years to NEXT instead, so a half-filled-in invite row still
+// lands on next year's board rather than vanishing into the archive.
+const YEAR_DEFAULT_TABS=["field","scores","calcutta","schedule","pairings","ledger","shame"];
 function normalizeYears(data){
-  ["field","scores","calcutta","schedule","pairings","ledger","shame"].forEach(tab=>{
+  const next=String(parseInt(activeSeason(),10)+1);
+  Object.keys(data).forEach(tab=>{
     const rows=data[tab];
-    if(!rows||!rows.length||!rows.some(r=>r.year)) return;
+    if(!rows||!rows.length||!("year" in rows[0])) return;
+    const isInvites=tab==="invites";
+    const doDefault=isInvites||YEAR_DEFAULT_TABS.includes(tab);
     rows.forEach(r=>{
-      if(!r.year){ r.year=activeSeason(); flag("row with blank year defaulted to "+r.year+" ("+tab+")"); }
+      const raw=r.year;
+      if(!raw||!String(raw).trim()){
+        if(!doDefault) return;
+        if(isInvites){ r.year=next; flag("invites row with blank year defaulted to "+next+" (NEXT season)"); }
+        else { r.year=activeSeason(); flag("row with blank year defaulted to "+r.year+" ("+tab+")"); }
+        return;
+      }
+      const n=parseInt(String(raw).trim().replace(/,/g,""),10);
+      if(isNaN(n)){ flag('unparseable year "'+raw+'" in '+tab+" — row excluded from year filtering"); return; }
+      r.year=String(n);
     });
   });
 }
@@ -1801,8 +1957,11 @@ function paint(data,results){
   HEALTH=[];
   STATE.data=data;
   results.forEach((r,i)=>{ if(!r.live&&r.err) flag(TABS[i]+": "+r.err); });
-  normalizeYears(data);
+  // renderInfo first: normalizeYears/activeSeason lean on INFO.first_tee
+  // (A-SANE's ceiling) and must see the sheet's real value, not just
+  // config.js's default, on every paint — not only the second one.
   renderInfo(data.info);
+  normalizeYears(data);
   renderAll();
   $("#lbSync").textContent=stampFor("scores",results);
   $("#schedSync").textContent=stampFor("schedule",results);
@@ -1810,6 +1969,7 @@ function paint(data,results){
   const nyEl=$("#nySync"); if(nyEl) nyEl.textContent=stampFor("field",results);
   tick();
   paintHome();
+  applyNavOrder();
   renderHealth();
 }
 async function load(){

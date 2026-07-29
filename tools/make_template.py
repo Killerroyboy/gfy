@@ -13,8 +13,11 @@ Sheets checkbox type, so the samples below hold the literal strings
 TRUE/FALSE; the README documents the one-time conversion step (select the
 column > Insert > Checkbox) after "Save as Google Sheets".
 
-Invites.email is for mail-merge only — the site never renders it (see the
-README's "The invite list" section).
+Invites has NO email column (v2.2 P-VAULT: all email addresses live in a
+separate, never-published admin vault sheet — outside this template, and
+outside this codebase entirely). Invites.status accepts "out" (not
+returning, silently suppressed) or "declined" (this season only, shown
+under the site's ?admin=1 view, reappears next season) — see F-DECLINED.
 """
 from pathlib import Path
 
@@ -130,14 +133,16 @@ SHEETS = {
     },
     "Invites": {
         # Next-season outreach tracking — separate from who's actually paid
-        # (that's Field, above). status=out means "not returning" and
-        # suppresses the person from the Next Year board, same convention
-        # as Field.status. email is mail-merge only; it never renders.
-        "headers": ["year", "player", "email", "invited", "responded", "status"],
+        # (that's Field, above). Invites is the AUTHORITATIVE source for
+        # out/declined for the next season (a status value on a Field NEXT
+        # row is ignored, flagged); status=out silently suppresses everyone,
+        # status=declined shows under the site's ?admin=1 view and comes
+        # back into consideration next season on its own.
+        "headers": ["year", "player", "invited", "responded", "status"],
         "rows": [
-            [2027, "Sully", "sully@example.com", "TRUE", "TRUE", ""],   # invited + responded
-            [2027, "Tex", "tex@example.com", "TRUE", "FALSE", ""],      # invited, no reply yet
-            [2027, "Bear", "bear@example.com", "FALSE", "FALSE", "out"],# not returning
+            [2027, "Sully", "TRUE", "TRUE", ""],     # invited + responded
+            [2027, "Tex", "TRUE", "FALSE", ""],      # invited, no reply yet
+            [2027, "Bear", "FALSE", "FALSE", "out"], # not returning
         ],
     },
 }

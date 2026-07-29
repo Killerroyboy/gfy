@@ -10,6 +10,13 @@
 //
 // Group W (v2.1 "Invites") added at task 12 — the next-year funnel that
 // tracks outreach (invited/responded) ahead of who's actually paid.
+//
+// v2.2 Wave 1 (task 13, docs/superpowers/specs/2026-07-28-gfy-v2-teams-design.md
+// §12) hardens the anchors/dates, makes the funnel counts-only public with
+// names gated behind ?admin=1, fixes the S-STALE live bug, and derives
+// VIEWS/nav order from the DOM. Group W is rewritten (not just extended) for
+// the new semantics; groups A/F/G/H gain a few checks; groups M and S are
+// new.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -165,6 +172,59 @@ check("A9: Moose has BOTH rounds (76/74 — word round labels didn't collide)",
   rows[3]?.r1 === "76" && rows[3]?.r2 === "74", rows[3] && JSON.stringify(rows[3]));
 
 /* ---------------------------------------------------------------------
+   GROUP A (cont'd) — A-SANE (v2.2 Wave 1, Task 13): activeSeason() ignores
+   a Scores year past first_tee+1 (typo guard), and every year cell across
+   every tab is parseInt-normalized at ingest (commas/decimals tolerated,
+   truly unparseable text flagged and excluded from year filtering).
+   --------------------------------------------------------------------- */
+{
+  const scoresOutlier = FIXTURES.scores + "2099,Duck,1,4,4,4,5,4,4,4,4,5,4,5,3,4,4,4,3,5,4,,\n";
+  const outlierFetch = withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresOutlier }),
+  });
+  const domA10 = makeDom("", outlierFetch);
+  await until(() => domA10.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearBtnsA10 = [...domA10.window.document.querySelectorAll("#years .year-btn")];
+  const pressedA10 = yearBtnsA10.find(b => b.getAttribute("aria-pressed") === "true");
+  const healthTextA10 = domA10.window.document.querySelector("#healthStrip")?.textContent || "";
+  check("A10: A-SANE — a Scores year past first_tee+1 (2099) does not win activeSeason (still 2026), and is flagged",
+    !!pressedA10 && pressedA10.textContent.trim() === "2026" && /2099/.test(healthTextA10),
+    "pressed=" + (pressedA10 ? pressedA10.textContent : "none") + " health=" + healthTextA10.slice(0, 240));
+  domA10.window.close();
+}
+
+{
+  // CSV-quote the comma-formatted year so it stays one field, not two.
+  const fieldCommaYear = FIXTURES.field.replace("2026,Bear,Bear,2023,11,In,TRUE,", '"2,026",Bear,Bear,2023,11,In,TRUE,');
+  const commaFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldCommaYear }),
+  });
+  const domA11a = makeDom("", commaFetch);
+  await until(() => domA11a.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const fldTextA11a = domA11a.window.document.querySelector("#fldBody")?.textContent || "";
+  const healthTextA11a = domA11a.window.document.querySelector("#healthStrip")?.textContent || "";
+  check("A11a: A-SANE — comma-formatted year cell ('2,026') parseInt-normalizes cleanly; Bear still shows in the 2026 Field roster, no spurious flag",
+    /Bear/.test(fldTextA11a) && !/unparseable/i.test(healthTextA11a),
+    "fld=" + fldTextA11a.slice(0, 160) + " health=" + healthTextA11a.slice(0, 200));
+  domA11a.window.close();
+}
+
+{
+  const fieldBadYear = FIXTURES.field.replace("2026,Bear,Bear,2023,11,In,TRUE,", "N/A,Bear,Bear,2023,11,In,TRUE,");
+  const badFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldBadYear }),
+  });
+  const domA11b = makeDom("", badFetch);
+  await until(() => domA11b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const fldTextA11b = domA11b.window.document.querySelector("#fldBody")?.textContent || "";
+  const healthTextA11b = domA11b.window.document.querySelector("#healthStrip")?.textContent || "";
+  check("A11b: A-SANE — unparseable year cell ('N/A') is flagged and the row drops out of year filtering rather than silently matching",
+    /unparseable/i.test(healthTextA11b) && /N\/A/.test(healthTextA11b) && !/Bear/.test(fldTextA11b),
+    "fld=" + fldTextA11b.slice(0, 160) + " health=" + healthTextA11b.slice(0, 200));
+  domA11b.window.close();
+}
+
+/* ---------------------------------------------------------------------
    GROUP B — season/year (Task 3)
    --------------------------------------------------------------------- */
 const fldBodyText = doc.querySelector("#fldBody")?.textContent || "";
@@ -252,12 +312,18 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
 }
 
 {
+  // v2.2 Wave 1 recompute (D3 semantics — the count legitimately changes
+  // when fixtures/behavior change): F-OUT-HOME makes Field's own NEXT-season
+  // status column non-authoritative, and Sock's Field 2027 row still carries
+  // status=out — that's now a 4th flag ("ignored") on top of the original
+  // three (Hamer unmatched, Sully h9 merge conflict, Moose blank-year
+  // default). Exact new set documented in the task-13 report.
   const healthMainText = doc.querySelector("#healthStrip")?.textContent || "";
   const warnMatch = healthMainText.match(/(\d+)\s*(data )?warning/i);
   const warnCount = warnMatch ? parseInt(warnMatch[1], 10) : -1;
-  check("D3: health strip shows exactly the 3 expected flags (Hamer unmatched, Sully h9 merge conflict, Moose blank-year default)",
-    warnCount === 3 && /Hamer/i.test(healthMainText) && /h9/i.test(healthMainText)
-      && /(blank|defaulted)/i.test(healthMainText),
+  check("D3: health strip shows exactly the 4 expected flags (Hamer unmatched, Sully h9 merge conflict, Moose blank-year default, Sock's Field-2027 status ignored)",
+    warnCount === 4 && /Hamer/i.test(healthMainText) && /h9/i.test(healthMainText)
+      && /(blank|defaulted)/i.test(healthMainText) && /ignored/i.test(healthMainText) && /Sock/.test(healthMainText),
     healthMainText);
 }
 
@@ -316,7 +382,11 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
 }
 
 {
-  const infoPast = FIXTURES.info.replace("2026-08-15T09:00:00-06:00", "2020-08-15T09:00:00-06:00");
+  // A-SANE ceilings activeSeason() at first_tee_year+1, so the "past
+  // first_tee" simulation has to stay inside the fixture's real season
+  // (2026) — an arbitrarily distant year (the old 2020 override) would push
+  // every real Scores row past the ceiling and collapse activeSeason().
+  const infoPast = FIXTURES.info.replace("2026-08-15T09:00:00-06:00", "2026-06-01T09:00:00-06:00");
   const pastFetch = withOverride({
     info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoPast }),
   });
@@ -358,6 +428,18 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
   check("F2: veterans-first ordering — Duck (since 2019) group before Bear (since 2023) group",
     groups.length > 0 && idxDuck !== -1 && idxBear !== -1 && idxDuck < idxBear,
     "idxDuck=" + idxDuck + " idxBear=" + idxBear + " order=" + groups.map(g => (g.textContent || "").slice(0, 12)).join("|"));
+}
+
+{
+  // F-DECLINED seniority invariant (v2.2 Wave 1): Sully declines on the
+  // 2027 Invites row (fixtures/invites.csv). Her Field badge is computed
+  // purely from `since` (2021) on the 2026 Field tab — 2026-2021+1 = "6th
+  // year" — and must be completely unaffected by an unrelated tab's status.
+  const body = doc.querySelector("#fldBody");
+  const sullyEl = [...body.querySelectorAll("*")].find(el => el.textContent.includes("Sully"));
+  check("F3: seniority-through-declined invariant — Sully's Field badge ('6th year') is unchanged by her declined status on the 2027 Invites row",
+    !!sullyEl && nearestTextAncestor(sullyEl, "6th year"),
+    "found=" + !!sullyEl);
 }
 
 /* ---------------------------------------------------------------------
@@ -411,6 +493,23 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
     JSON.stringify(payRows));
 }
 
+{
+  // W-RAKE0 (v2.2 Wave 1): a non-blank, non-"0" calcutta_rake cell that
+  // num() reads as 0% (no digits at all) is a broken cell, not a genuine
+  // no-rake house.
+  const infoRakeBad = FIXTURES.info.replace("calcutta_rake,10", "calcutta_rake,TBD");
+  const rakeFetch = withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoRakeBad }),
+  });
+  const domG5 = makeDom("", rakeFetch);
+  await until(() => domG5.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const healthTextG5 = domG5.window.document.querySelector("#healthStrip")?.textContent || "";
+  check("G5: W-RAKE0 — calcutta_rake cell that parses to 0 from a non-blank/non-zero value ('TBD') is flagged",
+    /calcutta_rake/i.test(healthTextG5) && /TBD/.test(healthTextG5),
+    healthTextG5.slice(0, 220));
+  domG5.window.close();
+}
+
 /* ---------------------------------------------------------------------
    GROUP H — next year (Task 7)
    --------------------------------------------------------------------- */
@@ -446,6 +545,19 @@ check("H5: deposit amount and payment handle rendered",
     "years=" + [...h6doc.querySelectorAll("#years .year-btn")].map(b => b.textContent).join(",")
       + " nyBody=" + nyTextAfterClick.slice(0, 160));
   domH6.window.close();
+}
+
+{
+  // S-structure (v2.2 Wave 1): owing renders as real <ul><li> items, not a
+  // comma-joined blob. Owing = responded+invited+needs = "Johnson, Wade",
+  // Moose, Hammer, Tex, Bear, Blade — 6 people (see task-13 report
+  // derivation). Note "Johnson, Wade" legitimately contains a comma in her
+  // own name; the assertion is on <li> COUNT, not on comma-absence.
+  const owingListEl = doc.querySelector("#nyBody ul.mn-net.down");
+  const owingItems = owingListEl ? [...owingListEl.querySelectorAll("li")].map(li => li.textContent) : [];
+  check("H7: owing list renders as 6 separate <ul><li> items, not one comma-joined blob",
+    !!owingListEl && owingItems.length === 6,
+    "owingItems=" + JSON.stringify(owingItems));
 }
 
 /* ---------------------------------------------------------------------
@@ -496,64 +608,291 @@ check("H5: deposit amount and payment handle rendered",
 }
 
 /* ---------------------------------------------------------------------
-   GROUP W — invites funnel (v2.1 Invites tab, Task 12)
-   Fixture (fixtures/invites.csv, year 2027): Duck paid-overlap (already
-   paid via Field 2027); "Johnson, Wade" responded; Moose invited only;
-   Sock invited+responded but status=out on his Field 2027 row (must be
-   suppressed — the out-cross-source rule); Blade brand-new with nothing
-   ticked (needs). Hand-derived funnel: paid = Duck, Tank, Crash (all via
-   Field 2027 deposit); responded = Johnson, Wade; invited = Moose;
-   needs = Hammer, Sully, Tex, Bear, Blade. 3 paid · 1 responded ·
-   1 invited · 5 need an invite.
+   GROUP W — invites funnel, hardened (v2.2 Wave 1, Task 13; supersedes the
+   v2.1 Task-12 suite it grew from — see docs/superpowers/specs §12).
+
+   Fixture re-derivation (fixtures/field.csv + fixtures/invites.csv, both
+   dated 2027 = NEXT). Universe = Field(trailing 3 seasons: 2024-2026, only
+   2026 has rows) ∪ Field-2027 ∪ Invites-2027:
+     Field-2026 (9): Duck, Hammer, Sully, "Johnson, Wade", Moose, Sock, Tex,
+       Tank, Bear.
+     Field-2027 adds: Crash (paid 2026-09-01), Ghost (paid 2026-08-18).
+       Duck/Tank also paid (2026-08-20 / 2026-08-22). Hammer present,
+       unpaid. Sock present, status=out — F-OUT-HOME: Field's NEXT-season
+       status is no longer authoritative, so this is now IGNORED + FLAGGED,
+       not acted on.
+     Invites-2027 adds: Blade (new, nothing ticked). Duck (invited+responded
+       — paid overlap). "Johnson, Wade" (invited+responded). Moose (invited
+       only). Sock (status=out — the AUTHORITATIVE source now). Sully
+       (invited+responded+status=declined). Ghost (status=declined, no
+       invited/responded ticks).
+   Per-person resolution (F-DECLINED precedence: paid+dead > out > declined
+   > paid > responded > invited > needs):
+     Sock    — status=out, unpaid            -> excluded everywhere (silent)
+     Sully   — status=declined, unpaid       -> declined (admin-only)
+     Ghost   — status=declined, PAID         -> refund-owed (admin-only)
+     Duck    — paid 2026-08-20               -> paid
+     Tank    — paid 2026-08-22               -> paid
+     Crash   — paid 2026-09-01               -> paid
+     "Johnson, Wade" — responded, unpaid     -> responded
+     Moose   — invited only, unpaid          -> invited
+     Hammer, Tex, Bear, Blade — nothing, unpaid -> needs
+   Remaining population (all) = 9: 3 paid + 1 responded + 1 invited +
+   4 needs. "3 of 9 paid" — unchanged from the pre-Wave-1 fixture by
+   coincidence (Sully leaves the denominator via declined, Blade enters via
+   the new Invites row; the count nets to the same 9).
    --------------------------------------------------------------------- */
-check("W1: funnel line reads exact hand-derived counts — 3 paid · 1 responded · 1 invited · 5 need an invite",
-  nyBodyText.includes("3 paid · 1 responded · 1 invited · 5 need an invite"),
+check("W1: funnel line reads the hand-derived counts — 3 paid · 1 responded · 1 invited · 4 need an invite",
+  nyBodyText.includes("3 paid · 1 responded · 1 invited · 4 need an invite"),
   nyBodyText.slice(0, 260));
 
-{
-  const needsIdx = nyBodyText.indexOf("Needs an invite");
-  const needsBlockText = needsIdx === -1 ? "" : nyBodyText.slice(needsIdx);
-  check("W2: Needs-an-invite block lists Blade and Hammer",
-    needsBlockText.includes("Blade") && needsBlockText.includes("Hammer"),
-    needsBlockText.slice(0, 160));
-}
+check("W2: public board's owing list (money, unchanged 'as today') still names Hammer/Tex/Bear/Blade, but carries no funnel-stage headings (Invited/Needs an invite/Declined) or refund note — F-NAMES gate",
+  /Hammer/.test(nyBodyText) && /Tex/.test(nyBodyText) && /Bear/.test(nyBodyText) && /Blade/.test(nyBodyText)
+    && !nyBodyText.includes("Needs an invite") && !nyBodyText.includes("Invited")
+    && !nyBodyText.includes("Declined") && !/refund owed/i.test(nyBodyText),
+  nyBodyText.slice(0, 500));
 
-check("W3: Sock appears nowhere on the Next Year board (out on his Field row suppresses him despite invited+responded on his Invites row)",
-  nyBodyText.trim().length > 0 && !nyBodyText.includes("Sock"),
-  nyBodyText.slice(0, 300));
+check("W3: Sully (declined) and Ghost (paid+declined) are absent from the public board entirely — no owing nag, no silent money loss shown publicly (F-DECLINED)",
+  !nyBodyText.includes("Sully") && !nyBodyText.includes("Ghost"),
+  nyBodyText.slice(0, 500));
 
-{
-  const fullHTML = doc.documentElement.outerHTML;
-  const fixtureEmails = ["duck@example.com", "wade@example.com", "moose@example.com", "sock@example.com", "blade@example.com"];
-  const leaked = fixtureEmails.filter(e => fullHTML.includes(e));
-  check("W4: no fixture email address appears anywhere in the rendered document (privacy rule — email is mail-merge only)",
-    leaked.length === 0, "leaked=" + JSON.stringify(leaked));
-}
+check("W4: no email column anywhere — Invites schema is year/player/invited/responded/status only (v2.2: email removed to the admin vault, P-VAULT — out of this codebase entirely)",
+  !/email/i.test(FIXTURES.invites.split(/\r?\n/)[0]) && !/@example\.com/.test(doc.documentElement.outerHTML),
+  FIXTURES.invites.split(/\r?\n/)[0]);
 
 {
-  const infoPastW5 = FIXTURES.info.replace("2026-08-15T09:00:00-06:00", "2020-08-15T09:00:00-06:00");
+  // The default dom's first_tee (2026-08-15) is only ~18 days out from
+  // "now", inside pre-event — Home shows the countdown, not the status
+  // strip, so this uses the same "shift first_tee earlier, same season"
+  // past-fetch pattern as E3 above rather than the live default dom.
+  const infoPastW5 = FIXTURES.info.replace("2026-08-15T09:00:00-06:00", "2026-06-01T09:00:00-06:00");
   const pastFetchW5 = withOverride({
     info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoPastW5 }),
   });
   const domW5 = makeDom("", pastFetchW5);
   await settle();
   const homeStatusW5 = domW5.window.document.querySelector("#homeStatus")?.textContent || "";
-  check("W5: Home strip contains '5 need an invite' linking #nextyear",
-    homeStatusW5.includes("5 need an invite"), homeStatusW5);
+  check("W5: Home strip contains '4 need an invite' linking #nextyear",
+    homeStatusW5.includes("4 need an invite"), homeStatusW5);
   domW5.window.close();
 }
 
 {
+  // F-OUT-HOME consequence: without an Invites tab, Field's own NEXT-season
+  // status column is ignored (not a fallback), so Sock (status=out only on
+  // Field) and Ghost (paid, no declined data at all without Invites) are no
+  // longer excluded. Universe grows to 11 (adds Sock, Ghost — no Sully
+  // removal since nothing marks her declined); paid grows to 4 (Ghost).
   const domW6 = makeDom("", fakeFetch, buildTestConfig({ invites: "" }));
   await until(() => domW6.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   const nyBodyTextW6 = domW6.window.document.querySelector("#nyBody")?.textContent || "";
-  check("W6: invites tab stubbed absent (rows null) — board renders exactly the v2 baseline, no funnel line, no needs block",
-    nyBodyTextW6.includes("3 of 9 paid")
+  check("W6: invites tab stubbed absent (rows null) — Field's status column is no longer authoritative (F-OUT-HOME): 4 of 11 paid, no funnel line, no admin headings",
+    nyBodyTextW6.includes("4 of 11 paid")
       && !/\d+\s*paid\s*·\s*\d+\s*responded/.test(nyBodyTextW6)
       && !nyBodyTextW6.includes("Needs an invite"),
     nyBodyTextW6.slice(0, 260));
   domW6.window.close();
 }
+
+{
+  const fieldBadDate = FIXTURES.field.replace("2027,Crash,,,,,TRUE,2026-09-01", "2027,Crash,,,,,TRUE,not-a-date");
+  const badDateFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldBadDate }),
+  });
+  const domW7 = makeDom("", badDateFetch);
+  await until(() => domW7.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const healthTextW7 = domW7.window.document.querySelector("#healthStrip")?.textContent || "";
+  const paidItemsW7 = [...domW7.window.document.querySelectorAll("#nyBody ol li")].map(li => li.textContent || "");
+  check("W7: A-DATE — unparseable paid_date ('not-a-date') is flagged and sorts Crash after the two dated rows",
+    /unparseable/i.test(healthTextW7) && paidItemsW7.length === 3 && /Crash/.test(paidItemsW7[2]),
+    "paidItems=" + JSON.stringify(paidItemsW7) + " health=" + healthTextW7.slice(0, 220));
+  domW7.window.close();
+}
+
+check("W8: A-DATE — tie-break rule stated on the paid queue ('same-day ties keep sheet order')",
+  /same-day/i.test(nyBodyText) && /sheet order/i.test(nyBodyText),
+  nyBodyText.slice(0, 400));
+
+{
+  const fieldSlashDate = FIXTURES.field.replace("2027,Tank,,,,,TRUE,2026-08-22", "2027,Tank,,,,,TRUE,8/22/26");
+  const slashFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldSlashDate }),
+  });
+  const domW9 = makeDom("", slashFetch);
+  await until(() => domW9.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const paidItemsW9 = [...domW9.window.document.querySelectorAll("#nyBody ol li")].map(li => li.textContent || "");
+  const healthTextW9 = domW9.window.document.querySelector("#healthStrip")?.textContent || "";
+  check("W9: A-DATE — M/D/YY paid_date ('8/22/26') parses and keeps Tank in its correct paid-order slot, no flag",
+    paidItemsW9.length === 3 && /Tank/.test(paidItemsW9[1]) && !/unparseable/i.test(healthTextW9),
+    "paidItems=" + JSON.stringify(paidItemsW9) + " health=" + healthTextW9.slice(0, 220));
+  domW9.window.close();
+}
+
+{
+  const invitesBlankYear = FIXTURES.invites.split(/\r?\n/).map((line, i) => {
+    if (i === 0 || !line.trim()) return line;
+    return line.replace(/^\d+,/, ",");
+  }).join("\n");
+  const blankYearFetch = withOverride({
+    invites: () => Promise.resolve({ ok: true, status: 200, text: async () => invitesBlankYear }),
+  });
+  const domW10 = makeDom("", blankYearFetch);
+  await until(() => domW10.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const healthTextW10 = domW10.window.document.querySelector("#healthStrip")?.textContent || "";
+  const nyBodyTextW10 = domW10.window.document.querySelector("#nyBody")?.textContent || "";
+  check("W10: A-NEXT2 — Invites rows with a blank year default to NEXT (2027), not activeSeason, and are flagged",
+    /defaulted to 2027/.test(healthTextW10) && nyBodyTextW10.includes("2027"),
+    healthTextW10.slice(0, 300));
+  domW10.window.close();
+}
+
+{
+  // A-NEXT2: Invites already has rows for 2028 (ahead of S-NEXT=2027) — the
+  // anchor should run ahead to 2028 rather than treat those rows as inert.
+  // Field also needs a 2028 row so F-OPEN admits the model at all.
+  const invites2028 = FIXTURES.invites.replace(/\b2027\b/g, "2028");
+  const field2028 = FIXTURES.field + "\n2028,Zed,,,,,TRUE,2027-08-20\n";
+  const futureInvitesFetch = withOverride({
+    invites: () => Promise.resolve({ ok: true, status: 200, text: async () => invites2028 }),
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => field2028 }),
+  });
+  const domW11 = makeDom("?admin=1", futureInvitesFetch);
+  await until(() => domW11.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  await settle();
+  const nyBodyTextW11 = domW11.window.document.querySelector("#nyBody")?.textContent || "";
+  check("W11: A-NEXT2 — Invites anchor runs ahead to 2028 (max year in its own tab) when the tab is already prepped past S-NEXT; admin view shows its rows (Blade)",
+    nyBodyTextW11.includes("Blade"),
+    nyBodyTextW11.slice(0, 500));
+  domW11.window.close();
+}
+
+{
+  // F-UNIV reappearance: roll the season to 2027 (next=2028). Sully (Field
+  // 2026, since=2021) is still inside the trailing-3 window {2025,2026,2027}
+  // even though she declined for 2027 — no 2028 Invites row exists for her,
+  // so she lands back in Needs (admin view) purely from the trailing union,
+  // no special-case carry-forward code required.
+  const scoresWith2027 = FIXTURES.scores + "\n2027,Duck,1,4,4,4,5,4,4,4,4,5,4,5,3,4,4,4,3,5,4,,\n";
+  const fieldWith2028 = FIXTURES.field + "\n2028,Zed,,,,,TRUE,2027-08-20\n";
+  const nextSeasonFetch = withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresWith2027 }),
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldWith2028 }),
+  });
+  const domW12 = makeDom("?admin=1", nextSeasonFetch);
+  await until(() => domW12.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  await settle();
+  const nyBodyTextW12 = domW12.window.document.querySelector("#nyBody")?.textContent || "";
+  check("W12: F-UNIV — season rolls to 2027 (next=2028): Sully reappears in the universe via the trailing-3-years union despite declining for 2027",
+    nyBodyTextW12.includes("2028") && nyBodyTextW12.includes("Sully"),
+    nyBodyTextW12.slice(0, 600));
+  domW12.window.close();
+}
+
+{
+  const fieldNo2027 = FIXTURES.field.split(/\r?\n/).filter(line => !line.startsWith("2027,")).join("\n");
+  const no2027Fetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldNo2027 }),
+  });
+  const domW13 = makeDom("", no2027Fetch);
+  await until(() => domW13.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const nyBodyTextW13 = domW13.window.document.querySelector("#nyBody")?.textContent || "";
+  check("W13: F-OPEN — Field-2027 rows removed but Invites-2027 rows present: collection is still open (union, not Field-only)",
+    !nyBodyTextW13.includes("not open yet") && nyBodyTextW13.includes("2027"),
+    nyBodyTextW13.slice(0, 300));
+  domW13.window.close();
+}
+
+const domAdmin = makeDom("?admin=1");
+await until(() => domAdmin.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+await settle();
+const nyBodyTextAdmin = domAdmin.window.document.querySelector("#nyBody")?.textContent || "";
+
+check("W14: admin dom (?admin=1) reveals the Invited list (Moose) and Needs-an-invite list (Hammer, Tex, Bear, Blade) — F-NAMES",
+  /Invited/.test(nyBodyTextAdmin) && /Moose/.test(nyBodyTextAdmin)
+    && nyBodyTextAdmin.includes("Needs an invite")
+    && ["Hammer", "Tex", "Bear", "Blade"].every(n => nyBodyTextAdmin.includes(n)),
+  nyBodyTextAdmin.slice(0, 700));
+
+check("W15: admin dom reveals Declined (Sully) and Paid — refund owed (Ghost) — F-DECLINED",
+  nyBodyTextAdmin.includes("Declined") && /Sully/.test(nyBodyTextAdmin)
+    && /refund owed/i.test(nyBodyTextAdmin) && /Ghost/.test(nyBodyTextAdmin),
+  nyBodyTextAdmin.slice(0, 700));
+
+check("W16: admin gating is explicitly documented as non-cryptographic (social gating only, not a security boundary)",
+  /non-cryptographic|not a security boundary/i.test(nyBodyTextAdmin),
+  nyBodyTextAdmin.slice(0, 400));
+
+check("W17: F-FRESH — funnel block states its own freshness caveat ('ticked by hand' / 'may lag')",
+  /ticked by hand/i.test(nyBodyText) && /may lag/i.test(nyBodyText),
+  nyBodyText.slice(0, 400));
+
+domAdmin.window.close();
+
+/* ---------------------------------------------------------------------
+   GROUP M — Money tab (v2.2 Wave 1, Task 13)
+   --------------------------------------------------------------------- */
+check("M1: Money tab off-season empty state (Ledger has 2025 rows but none for the selected 2026) points to Next Year, not the generic 'Add a Ledger tab' message",
+  /#nextyear/.test(doc.querySelector("#mnBody")?.innerHTML || "") && /Next Year/i.test(doc.querySelector("#mnBody")?.textContent || "")
+    && !/Add a Ledger tab/i.test(doc.querySelector("#mnBody")?.textContent || ""),
+  doc.querySelector("#mnBody")?.textContent || "");
+
+{
+  const domM2 = makeDom("", fakeFetch, buildTestConfig({ ledger: "" }));
+  await until(() => domM2.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const mnBodyTextM2 = domM2.window.document.querySelector("#mnBody")?.textContent || "";
+  check("M2: Money tab with NO Ledger tab configured at all still shows the generic 'Add a Ledger tab' message (regression guard vs M1's off-season case)",
+    /Add a Ledger tab/i.test(mnBodyTextM2),
+    mnBodyTextM2);
+  domM2.window.close();
+}
+
+/* ---------------------------------------------------------------------
+   GROUP S — structure (v2.2 Wave 1, Task 13): S-VIEWS, S-NAV, S-STALE
+   --------------------------------------------------------------------- */
+{
+  const domS = makeDom("");
+  await until(() => domS.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const beforeRows = domS.window.document.querySelectorAll("#lbBody .lb-row").length;
+  domS.window.eval("STATE.data.scores = []; renderLeaderboard();");
+  const afterRowCount = domS.window.document.querySelectorAll("#lbBody .lb-row").length;
+  const afterEmptyText = domS.window.document.querySelector("#lbBody .lb-empty")?.textContent || "";
+  check("S1: S-STALE (live bug, fixed) — leaderboard repaints the honest empty state when scores go to zero rows, no stale rows left behind",
+    beforeRows > 0 && afterRowCount === 0 && /No cards posted yet/.test(afterEmptyText),
+    "before=" + beforeRows + " after=" + afterRowCount + " emptyText=" + afterEmptyText);
+  domS.window.close();
+}
+
+check("S2: S-VIEWS — VIEWS is derived from the [data-view] DOM (deduped), not a hardcoded literal; alias map still present",
+  /VIEWS\s*=\s*\[\.\.\.new Set\(/.test(html) && /querySelectorAll\((["'])\.view\1\)/.test(html)
+    && /\.map\(s\s*=>\s*s\.dataset\.view\)/.test(html) && /VIEW_ALIASES/.test(html),
+  "");
+
+{
+  const navLinksText = [...doc.querySelectorAll(".nav-links a")].map(a => a.hash.slice(1));
+  check("S3: S-NAV off-season order — Home, Next Year, Field lead the nav (default dom's first_tee is ~18 days out, outside the ±3-day event window)",
+    navLinksText.slice(0, 3).join(",") === "home,nextyear,field",
+    navLinksText.join(","));
+}
+
+{
+  const now = new Date();
+  const pad2 = n => String(n).padStart(2, "0");
+  const nowISO = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}T09:00:00-06:00`;
+  const infoEventWindow = FIXTURES.info.replace("2026-08-15T09:00:00-06:00", nowISO);
+  const eventFetch = withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoEventWindow }),
+  });
+  const domS4 = makeDom("", eventFetch);
+  await until(() => domS4.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const navLinksTextS4 = [...domS4.window.document.querySelectorAll(".nav-links a")].map(a => a.hash.slice(1));
+  check("S4: S-NAV event-window order — Board, Pairings, Calcutta lead the nav (first_tee = today, inside ±3 days)",
+    navLinksTextS4.slice(0, 3).join(",") === "board,pairings,calcutta",
+    navLinksTextS4.join(","));
+  domS4.window.close();
+}
+
+check("S5: S-NAV right-edge fade — .nav-inner::after gradient overlay present in the stylesheet",
+  /\.nav-inner::after\s*\{[^}]*gradient/i.test(html), "");
 
 /* ---------------------------------------------------------------------
    GROUP Z — guardrails (Z0) + unconfigured deploy (Z1-Z4, final review)
@@ -624,7 +963,7 @@ dom.window.close();
    --------------------------------------------------------------------- */
 const groupTally = {};
 results.forEach(([name, ok]) => {
-  const m = name.match(/^([A-IWZ])\d+:/);
+  const m = name.match(/^([A-IMSWZ])\d+:/);
   if (!m) return;
   const g = m[1];
   groupTally[g] = groupTally[g] || { pass: 0, total: 0 };
@@ -633,7 +972,7 @@ results.forEach(([name, ok]) => {
 });
 
 console.log("");
-["A", "B", "C", "D", "E", "F", "G", "H", "I", "W", "Z"].forEach(g => {
+["A", "B", "C", "D", "E", "F", "G", "H", "I", "M", "S", "W", "Z"].forEach(g => {
   if (groupTally[g]) console.log(`TALLY ${g} ${groupTally[g].pass}/${groupTally[g].total}`);
 });
 const failed = results.filter(r => !r[1]).length;

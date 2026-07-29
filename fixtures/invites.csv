@@ -1,6 +1,8 @@
-year,player,email,invited,responded,status
-2027,Duck,duck@example.com,TRUE,TRUE,
-2027,"Johnson, Wade",wade@example.com,TRUE,TRUE,
-2027,Moose,moose@example.com,TRUE,,
-2027,Sock,sock@example.com,TRUE,TRUE,
-2027,Blade,blade@example.com,,,
+year,player,invited,responded,status
+2027,Duck,TRUE,TRUE,
+2027,"Johnson, Wade",TRUE,TRUE,
+2027,Moose,TRUE,,
+2027,Sock,TRUE,TRUE,out
+2027,Blade,,,
+2027,Sully,TRUE,TRUE,declined
+2027,Ghost,,,declined
