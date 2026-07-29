@@ -1743,8 +1743,11 @@ dom.window.close();
   check("Q1: presend-check exports its pure functions",
     !!mod && [mod.parseCsv, mod.insideRepo, mod.diffVault, mod.scanForEmails].every(f => typeof f === "function"));
   if (mod) {
-    const rows = mod.parseCsv('player,email\n"Duck, Sr.",d@example.com\nTex,t@example.com');
-    check("Q2: parseCsv handles quoted commas", rows.length === 2 && rows[0].player === "Duck, Sr.");
+    const rows = mod.parseCsv('player,email\n"Duck, Sr.",d@example.com\nTex,t@example.com\n"Multi\nLine",m@example.com');
+    check("Q2: parseCsv handles quoted commas and a quoted embedded newline",
+      rows.length === 3 && rows[0].player === "Duck, Sr."
+      && rows[2].player === "Multi\nLine" && rows[2].email === "m@example.com",
+      JSON.stringify(rows));
     const contacts = [
       { player: "Duck", email: "d@example.com", do_not_invite: "FALSE" },
       { player: "Sully", email: "s@example.com", do_not_invite: "FALSE" },
@@ -1756,12 +1759,28 @@ dom.window.close();
       d.neverInvited.length === 1 && d.neverInvited[0].player === "Sully"
       && d.missingFromVault.length === 1 && d.missingFromVault[0] === "Hammer"
       && d.dniViolations.length === 1 && d.dniViolations[0].player === "Tank", JSON.stringify(d));
-    check("Q4: value-level email watchdog fires (headers clean, value dirty)",
-      mod.scanForEmails("rooms", [{ notes: "mail me at real@gmail.com" }]).length === 1
-      && mod.scanForEmails("rooms", [{ notes: "no address here" }]).length === 0);
-    check("Q5: vault file inside the repo is refused",
+    // IMPORTANT-6 dedup proof: header "player,email,,," has three unnamed
+    // trailing columns; pre-fix they all collapsed onto one "" key (last
+    // value wins) and silently swallowed an address planted in an earlier
+    // one. Leave the named "email" column blank so the only email-ish value
+    // in the row lives in the de-duped unnamed column (col_3).
+    const dedupRows = mod.parseCsv("player,email,,,\nDuck,,,hidden@example.com,\n");
+    // MINOR-7 proof: an email-like string in the HEADER LINE itself (never
+    // reached by scanForEmails, which only walks parsed data rows).
+    const headerHit = typeof mod.scanHeaderLine === "function"
+      ? mod.scanHeaderLine("rooms", "player,notes@example.com,reason\nDuck,x,y\n")
+      : [];
+    check("Q4: value-level email watchdog fires (headers clean, value dirty); duplicate/empty-header de-dup preserves a value hidden in an unnamed column; header-line scan flags an email-like header",
+      mod.scanForEmails("rooms", [{ notes: "mail me at stray@example.com" }]).length === 1
+      && mod.scanForEmails("rooms", [{ notes: "no address here" }]).length === 0
+      && mod.scanForEmails("rooms", dedupRows).length === 1
+      && headerHit.length === 1 && /rooms HEADER contains email-like text/.test(headerHit[0]),
+      "dedupRows=" + JSON.stringify(dedupRows) + " headerHit=" + JSON.stringify(headerHit));
+    check("Q5: vault file inside the repo is refused; the repo root itself counts as inside; a sibling-prefix path is NOT inside (path.sep boundary, not a string prefix)",
       mod.insideRepo(path.join(ROOT, "vault.csv"), ROOT) === true
-      && mod.insideRepo("/tmp/contacts.csv", ROOT) === false);
+      && mod.insideRepo("/tmp/contacts.csv", ROOT) === false
+      && mod.insideRepo(ROOT, ROOT) === true
+      && mod.insideRepo(path.join(path.dirname(ROOT), path.basename(ROOT) + "-notes", "vault.csv"), ROOT) === false);
   }
 }
 
