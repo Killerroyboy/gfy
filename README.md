@@ -188,11 +188,11 @@ named editors is the safe default.
 ### Polish script (run after big sheet edits)
 
 `tools/sheet-polish.gs` → Extensions → Apps Script on the LIVE sheet →
-paste → run `polish()`. Safe to re-run any time (it never changes cell
-values). First run also repairs the handicap column (checkbox → typed
-number) and fills the Course tab with the real MeadowCreek 18. To verify
-idempotence after an Apps Script edit: run `polish()` twice in a row and
-confirm no cell value changed between runs (File → Version history).
+paste → run `polish()`. Safe to re-run any time — re-running never changes
+cell values (the first run repairs the handicap column and autofills
+Course — both one-time, evidence-gated). To verify idempotence after an
+Apps Script edit: run `polish()` twice in a row and confirm no cell value
+changed between runs (File → Version history).
 
 The polish script also OWNS conditional formatting on Field and Rooms — it
 replaces all conditional-format rules on those two tabs each run. Don't
@@ -423,18 +423,21 @@ next year's operator has an exclusion with no memory of why.
 **Before sending invites**, cross-check the two sheets against each other
 by hand: everyone marked DNI in GFY Admin should be `out` in Invites, and
 nobody about to get an invite email should be sitting on the DNI list.
-Nothing in this codebase automates that check — it's a five-minute manual
-pass before you hit send, and it's the last thing standing between a bad
-call and an awkward conversation.
+The pre-send checker automates this cross-check — see "Before every send
+round" above; it flags DNI names with active invite rows AND unpaired DNI
+names missing their `out` row.
 
 ## For whoever maintains this
 
 ```
-index.html          the whole app (HTML + CSS + JS, no build step)
-config.js           the only file you edit routinely
-tools/make_template.py   regenerates tools/gfy-template.xlsx
-fixtures/           sample CSVs mirroring the 13 tabs, incl. edge cases
-test/smoke.mjs      headless render test against the fixtures
+index.html                    the whole app (HTML + CSS + JS, no build step)
+config.js                     the only file you edit routinely
+tools/make_template.py        regenerates tools/gfy-template.xlsx
+tools/make_admin_template.py  regenerates tools/gfy-admin-template.xlsx (the never-published vault template)
+tools/sheet-polish.gs         Apps Script sheet hygiene — checkboxes, dropdowns, Course autofill (see above)
+tools/presend-check.mjs       the pre-send checker — vault diff, DNI check, email-leak watchdog (see above)
+fixtures/                     sample CSVs mirroring the 13 tabs, incl. edge cases
+test/smoke.mjs                headless render test against the fixtures
 ```
 
 Run the test before deploying any change:
