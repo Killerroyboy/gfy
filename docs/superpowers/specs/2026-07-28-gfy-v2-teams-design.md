@@ -266,3 +266,40 @@ Two adversarial reviews (31 + 14 findings) + owner decisions. Binding rules; sup
 - **S-NAV**: seasonal nav order (off-season: Home·NextYear·Rooms·Field first; event window: Board·Pairings·Calcutta first) + right-edge fade affordance.
 - **S-STALE**: renderLeaderboard's `if(!players.length) return` early-return replaced with explicit empty state + regression fixture (LIVE BUG, ships with this wave).
 - Money tab off-season empty state points to Next Year; owing list rendered as a list, not a comma blob.
+
+## §13 — v2.3 addendum: scorecard grid, admin vault, sheet ergonomics, gmail loop (2026-07-29)
+
+Brainstormed with Riley 2026-07-29; all four approaches Riley-selected, design approved. Binding rules, same style as §12. Inherits §12 (P-VAULT, P-GMAIL, F-DECLINED vocabulary) unchanged.
+
+### Course data (real MeadowCreek — meadowcreekgolfresort.com, New Meadows, ID)
+- **C-REAL**: Course tab (existing headers `hole, par, yards`) gets the real 18 rows — **White tees**, Riley-selected. Canonical transcription (source: scorecard image on /overview/, gold/white/par rows each checksum-verified against the card's printed OUT/IN/Total):
+  - par (1–18): 4,5,4,3,4,4,4,3,5 · 4,4,4,3,4,5,4,3,5 — out 36, in 36, total 72
+  - white yards (1–18): 319,469,407,124,357,348,391,180,499 · 286,354,344,148,406,433,352,151,533 — out 3094, in 3007, total 6101
+  - The card's Green-tee row failed checksum (sum 2 off its printed total) — **do not use green data anywhere** unless re-verified from a better source (S1: null over guess).
+- **C-STATIC**: course-static assets are SITE-side, never sheet columns: hole photos by convention `assets/holes/hole-N.jpg` (rendered iff the file exists, hidden on error — no broken-image states); map-locator pin coordinates hardcoded in the site beside the layout image they index into.
+- **C-IMG (Riley ruled, informed)**: course-site assets (layout map, the two labeled hole photos — holes 3 and 12 are the ONLY per-hole photos that exist on their site, scorecard-derived data) are rehosted in the public repo. IP note was surfaced with the option; Riley chose it. Site carries noindex. Own photos taken at the event can replace/extend later via the same C-STATIC convention.
+
+### Scorecard grid + hole panels
+- **G-GRID**: Board view gains a hole-by-hole grid: teams as rows (standings order), holes 1–18 as columns, header rows for par and white yards; cells colored by score vs par (eagle/birdie green shades, par plain, bogey soft red, double+ strong red); unplayed = blank cell, never 0.
+- **G-SCROLL**: sticky team-name column; horizontal scroll contained inside the grid's own container — the page never scrolls sideways (existing mobile rule).
+- **G-ROUND**: a round toggle appears only when a second round has any hole data.
+- **G-TOTALS**: a totals-only team (no hole map) renders one em-dash row plus its total — never fabricated per-hole cells.
+- **G-PANEL**: tapping a hole's column header opens a panel: hole number, par, yards, every team's score on that hole, best score, map locator (full layout image with that hole's pin highlighted), and the real photo when one exists (holes 3, 12 today).
+- **G-HIDE**: when courseMap() is null (missing/partial course data) the grid hides behind an honest note; existing team cards render regardless (current behavior preserved, not degraded).
+
+### Admin vault (the email-tracking answer; extends P-VAULT)
+- **V-TABS**: `tools/make_admin_template.py` → `gfy-admin-template.xlsx`, two tabs: **Contacts** (`player, email, email_alt, phone, do_not_invite ✓, reason, notes`) and **SendLog** (`date, player, address_used, what, note`). Riley uploads to Drive → save as Google Sheet → **NEVER publish** (P-VAULT). Flow of record: addresses live in Contacts; each send round appends to SendLog; replies tick `responded` on the public Invites tab.
+- **V-MATCH**: `Contacts.player` must equal the public sheet's spelling exactly. `tools/presend-check.mjs` = the P-VAULT operator pre-send checker, runnable today without any Drive auth: input = a locally downloaded vault export (xlsx/csv) + the live public Invites CSV; output = both-direction diff (in vault, never invited / invited, missing from vault) + do-not-invite violations + published-schema watchdog (alarm if an email-like column ever appears in published headers). Run before every send round.
+
+### Sheet ergonomics (live sheet, in place)
+- **E-SCRIPT**: `tools/sheet-polish.gs` — Riley pastes into Extensions → Apps Script on the LIVE sheet and runs once; idempotent (re-runnable), touches no gids. Applies: frozen + warn-on-edit-protected header rows (all 13 tabs); real checkboxes (`deposit`, `collected`, `invited`, `responded`); status dropdowns; conditional colors (unpaid deposit soft red, rookie `since == active season` highlight, assigned-but-not-paid room flag); Course-tab autofill per C-REAL (replaces the 3 sample rows).
+- **E-VOCAB**: every dropdown list in the script derives from the exact vocabulary the site parses (Field.status `In/wd/out`; Invites status per F-DECLINED). One owner: a script↔site vocabulary drift is a bug, and the smoke suite asserts the script's lists against the site's parser constants.
+
+### Gmail loop (operating procedure; P-GMAIL unchanged)
+- Prerequisite (Riley-only): `/mcp` → authenticate Gmail. Then per pass: scan replies → human-review list (name, matched address, snippet; auto-replies/OOO dropped) → Riley approves → `responded` ticked. Emails never enter any published artifact or the repo.
+
+### Testing
+- New smoke fixtures: grid with a partial round; totals-only team; conflicting duplicate entries; missing course data (G-HIDE path); hole-panel data assembly; E-VOCAB parity assertion. Existing 111 stay green.
+
+### Sequencing note
+- Work lands on `v2.1-invites` (or its successor branch) — reversible preview work. Yesterday's `v2.1-invites → main` push gate is untouched by this addendum and remains Riley's.
