@@ -774,6 +774,14 @@ const TABS = ["info","course","field","scores","schedule","pairings",
               "calcutta","payout","ledger","champions","shame","invites","rooms"];
 let INFO = {};
 const HOLES = Array.from({length:18},(_,i)=>i+1);
+/* Hole-number pin positions on assets/course-map.png, percent of image
+   width/height (574x1024 source). Derived from the numbered circles on the
+   course's own layout art. */
+const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,y:18.8},
+  5:{x:47.9,y:11.2}, 6:{x:61.8,y:15.1}, 7:{x:46.5,y:31.6}, 8:{x:34.0,y:44.4},
+  9:{x:34.0,y:63.0}, 10:{x:57.5,y:59.4}, 11:{x:45.8,y:42.2}, 12:{x:66.2,y:28.8},
+  13:{x:81.5,y:22.8}, 14:{x:76.7,y:37.6}, 15:{x:67.1,y:64.0}, 16:{x:72.6,y:83.1},
+  17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
 let STATE = { data:{}, year:null, open:null };
 
 /* ---------- CSV ---------- */
