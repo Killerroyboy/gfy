@@ -62,16 +62,35 @@ export function insideRepo(vaultPath, repoRoot = REPO){
 const norm = s => String(s || "").trim().toLowerCase();
 const yes = s => /^(true|yes|1|x|✓)$/i.test(String(s || "").trim());
 
+// DNI three-state semantics (spec §13 V-MATCH): the site suppresses a
+// do-not-invite person from its "needs an invite" funnel ONLY via an
+// Invites-NEXT row with status out/declined. So:
+//   VIOLATION — a DNI name whose Invites-NEXT row has invited/responded
+//     ticked, OR whose status is anything other than out/declined. The site
+//     is either actively courting them or hasn't suppressed them.
+//   UNPAIRED (warn) — a DNI name with NO Invites-NEXT row at all. This is
+//     the dangerous silent state: the site's funnel then counts them as
+//     needing an invite, with nothing on the health strip to say otherwise.
+//   silent/OK — a DNI name paired with an out/declined row. Correct state.
 export function diffVault(contacts, invites){
   const nextYear = Math.max(0, ...invites.map(r => parseInt(r.year, 10) || 0));
   const inv = invites.filter(r => (parseInt(r.year, 10) || 0) === nextYear);
-  const invNames = new Set(inv.map(r => norm(r.player)).filter(Boolean));
+  const invByName = new Map(inv.map(r => [norm(r.player), r]));
+  const invNames = new Set(invByName.keys());
   const vaultNames = new Set(contacts.map(c => norm(c.player)).filter(Boolean));
+  const dniContacts = contacts.filter(c => c.player && yes(c.do_not_invite));
   return {
     nextYear,
     neverInvited: contacts.filter(c => c.player && !yes(c.do_not_invite) && !invNames.has(norm(c.player))),
     missingFromVault: [...invNames].filter(n => !vaultNames.has(n)).map(n => inv.find(r => norm(r.player) === n).player),
-    dniViolations: contacts.filter(c => yes(c.do_not_invite) && invNames.has(norm(c.player))),
+    dniViolations: dniContacts.filter(c => {
+      const row = invByName.get(norm(c.player));
+      if (!row) return false; // no row at all -> unpaired, not a violation
+      if (yes(row.invited) || yes(row.responded)) return true;
+      const status = norm(row.status);
+      return status !== "out" && status !== "declined";
+    }),
+    dniUnpaired: dniContacts.filter(c => !invByName.has(norm(c.player))),
   };
 }
 
@@ -174,6 +193,10 @@ async function main(){
   console.log(`\n== GFY pre-send check (next season detected: ${d.nextYear || "?"}) ==`);
   console.log(`\nDO-NOT-INVITE VIOLATIONS (${d.dniViolations.length}):` +
     (d.dniViolations.length ? "\n  " + d.dniViolations.map(c => `${c.player} — ${c.reason || "no reason recorded"}`).join("\n  ") : " none"));
+  console.log(`\nUNPAIRED DO-NOT-INVITE (${d.dniUnpaired.length}):` +
+    (d.dniUnpaired.length
+      ? "\n  " + d.dniUnpaired.map(c => `${c.player} — unpaired do-not-invite — add an Invites row with status \`out\` so the site suppresses them`).join("\n  ")
+      : " none"));
   console.log(`\nIn the vault, not yet on the Invites tab (${d.neverInvited.length}):` +
     (d.neverInvited.length ? "\n  " + d.neverInvited.map(c => `${c.player} <${c.email}>`).join("\n  ") : " none"));
   console.log(`\nOn the Invites tab, MISSING from the vault (${d.missingFromVault.length}):` +
@@ -234,7 +257,7 @@ async function main(){
     }
   }
 
-  process.exitCode = (d.dniViolations.length || dirty || skipped || vProbeFailed) ? 1 : 0;
+  process.exitCode = (d.dniViolations.length || d.dniUnpaired.length || dirty || skipped || vProbeFailed) ? 1 : 0;
 }
 
 // MINOR-8: a symlinked invocation (e.g. a shim in $PATH pointing at this
