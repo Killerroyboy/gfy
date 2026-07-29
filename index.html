@@ -147,7 +147,8 @@
     font-weight:400;font-size:.7rem;letter-spacing:.08em} /* table cells ignore min-height; height sets the row */
   .sg-t .sg-team{position:sticky;left:0;background:var(--pine-2);text-align:left;
     padding:4px 10px;white-space:nowrap;z-index:2;border-right-color:var(--brass-dim)}
-  .sg-t tr.sg-par td,.sg-t tr.sg-yds td{font-size:.55rem;color:var(--brass-dim);border-color:transparent}
+  .sg-t tbody th.sg-team{font-weight:300}
+  .sg-t tr.sg-par td,.sg-t tr.sg-par th,.sg-t tr.sg-yds td,.sg-t tr.sg-yds th{font-size:.55rem;color:var(--brass-dim);border-color:transparent}
   .sg-t td.under{color:var(--brass);font-weight:700}
   .sg-t td.bogey{color:var(--sage)}
   .sg-t td.blowup{color:var(--rust)}
@@ -1258,10 +1259,10 @@ function renderScoreGrid(players){
   const prevRd=table.dataset.round;   // captured before this render's mutations, for G-FOCUS's same-round guard
   table.dataset.round=rd;
   const head=
-    `<thead><tr><th class="sg-team">Team</th>${HOLES.map(h=>`<th class="sg-h" data-hole="${h}" scope="col" role="button" tabindex="0">${h}</th>`).join("")}</tr></thead>`;
+    `<thead><tr><th class="sg-team" scope="col">Team</th>${HOLES.map(h=>`<th class="sg-h" data-hole="${h}" scope="col" role="button" tabindex="0">${h}</th>`).join("")}</tr></thead>`;
   const meta=
-    `<tr class="sg-par"><td class="sg-team">Par</td>${HOLES.map(h=>`<td data-hole="${h}">${pars[h]}</td>`).join("")}</tr>`+
-    `<tr class="sg-yds"><td class="sg-team">Yds</td>${HOLES.map(h=>`<td data-hole="${h}">${yds&&yds[h]?yds[h]:"—"}</td>`).join("")}</tr>`;
+    `<tr class="sg-par"><th scope="row" class="sg-team">Par</th>${HOLES.map(h=>`<td data-hole="${h}">${pars[h]}</td>`).join("")}</tr>`+
+    `<tr class="sg-yds"><th scope="row" class="sg-team">Yds</th>${HOLES.map(h=>`<td data-hole="${h}">${yds&&yds[h]?yds[h]:"—"}</td>`).join("")}</tr>`;
   const body=players.map(p=>{
     const r=p.rounds[rd];
     const name=`<th scope="row" class="sg-team">${teamLabel(p.key,p.name).html}</th>`;
