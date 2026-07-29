@@ -1737,6 +1737,34 @@ dom.window.close();
     gs.length > 0 && !/docs\.google\.com|spreadsheets\/d\//.test(gs));
 }
 
+/* ---------- Q: presend-check (v2.3 §13 V-MATCH/V-PATH) ---------- */
+{
+  const mod = await import("../tools/presend-check.mjs").catch(() => null);
+  check("Q1: presend-check exports its pure functions",
+    !!mod && [mod.parseCsv, mod.insideRepo, mod.diffVault, mod.scanForEmails].every(f => typeof f === "function"));
+  if (mod) {
+    const rows = mod.parseCsv('player,email\n"Duck, Sr.",d@example.com\nTex,t@example.com');
+    check("Q2: parseCsv handles quoted commas", rows.length === 2 && rows[0].player === "Duck, Sr.");
+    const contacts = [
+      { player: "Duck", email: "d@example.com", do_not_invite: "FALSE" },
+      { player: "Sully", email: "s@example.com", do_not_invite: "FALSE" },
+      { player: "Tank", email: "t@example.com", do_not_invite: "TRUE", reason: "sample" },
+    ];
+    const invites = [ { year: "2027", player: "Duck" }, { year: "2027", player: "Tank" }, { year: "2027", player: "Hammer" } ];
+    const d = mod.diffVault(contacts, invites);
+    check("Q3: diff both directions + DNI violation",
+      d.neverInvited.length === 1 && d.neverInvited[0].player === "Sully"
+      && d.missingFromVault.length === 1 && d.missingFromVault[0] === "Hammer"
+      && d.dniViolations.length === 1 && d.dniViolations[0].player === "Tank", JSON.stringify(d));
+    check("Q4: value-level email watchdog fires (headers clean, value dirty)",
+      mod.scanForEmails("rooms", [{ notes: "mail me at real@gmail.com" }]).length === 1
+      && mod.scanForEmails("rooms", [{ notes: "no address here" }]).length === 0);
+    check("Q5: vault file inside the repo is refused",
+      mod.insideRepo(path.join(ROOT, "vault.csv"), ROOT) === true
+      && mod.insideRepo("/tmp/contacts.csv", ROOT) === false);
+  }
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */

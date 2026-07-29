@@ -1,1 +1,5 @@
 node_modules/
+# vault containment (spec §13 V-PATH): exports/diffs must never be committable
+*vault*
+*gfy-admin*
+!tools/gfy-admin-template.xlsx

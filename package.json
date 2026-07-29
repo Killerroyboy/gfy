@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node test/smoke.mjs"
+    "test": "node test/smoke.mjs",
+    "presend": "node tools/presend-check.mjs"
   },
   "devDependencies": {
     "jsdom": "^29.1.1"
