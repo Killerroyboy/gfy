@@ -1691,6 +1691,28 @@ dom.window.close();
   domL4.window.close();
 }
 
+/* ---------- N: hole panel (v2.3 §13) ---------- */
+{
+  const domN = makeDom("");
+  await until(() => domN.window.document.querySelectorAll("#sgTable th.sg-h").length === 18);
+  const d = domN.window.document;
+  d.querySelector('#sgTable th.sg-h[data-hole="3"]').click();
+  await until(() => !d.querySelector("#sgPanel").hidden);
+  const p = d.querySelector("#sgPanel");
+  check("N1: hole panel opens with par + yards + every team's score",
+    p.textContent.includes("Hole 3") && p.textContent.includes("Par 3") && p.textContent.includes("175")
+    && p.querySelectorAll(".sg-p-row").length === d.querySelectorAll("#sgTable tr.sg-teamrow").length,
+    p.textContent.slice(0, 160));
+  check("N2: map locator pin positioned from PINS",
+    p.querySelector(".sg-pin") && p.querySelector(".sg-pin").getAttribute("style").includes("27"));
+  check("N3: hole photo uses the assets convention with error-hide",
+    p.querySelector("img.sg-p-photo") && p.querySelector("img.sg-p-photo").getAttribute("src") === "assets/holes/hole-3.jpg");
+  d.querySelector('#sgTable th.sg-h[data-hole="3"]').click();
+  await until(() => d.querySelector("#sgPanel").hidden);
+  check("N4: second tap closes the panel (full-cycle, S14)", d.querySelector("#sgPanel").hidden === true);
+  domN.window.close();
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */

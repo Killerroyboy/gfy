@@ -155,6 +155,18 @@
   .sg-t tr.sg-par td[data-hole="10"],.sg-t tr.sg-yds td[data-hole="10"]{border-left:2px solid var(--brass-dim)}
   .sg-controls{display:flex;gap:8px;margin-bottom:10px}
   .sg-controls[hidden]{display:none}
+  .sg-t th.sg-h:focus-visible{outline:2px solid var(--brass);outline-offset:-2px}
+
+  /* v2.3 hole panel (G-PANEL): tapping a hole header opens per-hole detail */
+  .sg-panel{padding:16px;margin-top:10px}
+  .sg-p-head{font-family:var(--display);color:var(--brass);margin-bottom:10px}
+  .sg-p-map{position:relative;max-width:280px;margin:10px 0}
+  .sg-p-map img{max-width:100%;display:block;opacity:.92}
+  .sg-pin{position:absolute;width:14px;height:14px;border-radius:50%;
+    border:2px solid var(--brass);background:rgba(200,162,74,.35);transform:translate(-50%,-50%)}
+  .sg-p-photo{max-width:100%;margin-top:10px;border:1px solid rgba(200,162,74,.25)}
+  .sg-p-row{display:flex;justify-content:space-between;max-width:280px;padding:2px 0}
+  .sg-p-row.best{color:var(--brass)}
 
   /* field */
   .fld{display:grid;grid-template-columns:1fr 6rem 6rem 5rem;gap:10px;align-items:baseline;
@@ -809,7 +821,7 @@ const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,
   9:{x:34.0,y:63.0}, 10:{x:57.5,y:59.4}, 11:{x:45.8,y:42.2}, 12:{x:66.2,y:28.8},
   13:{x:81.5,y:22.8}, 14:{x:76.7,y:37.6}, 15:{x:67.1,y:64.0}, 16:{x:72.6,y:83.1},
   17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
-let STATE = { data:{}, year:null, open:null, gridRound:null };
+let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -1217,6 +1229,14 @@ function renderLeaderboard(){
 function renderScoreGrid(players){
   const wrap=$("#sgWrap"), note=$("#sgNote"), scroll=$("#sgScroll"), table=$("#sgTable");
   if(!wrap) return;
+  // G-PANEL: any re-render (refresh, round toggle, or a fresh fetch that
+  // no longer matches) closes a stale open hole panel — it must not survive
+  // a data change it was drawn against.
+  if(STATE.gridHole!==null){
+    STATE.gridHole=null;
+    const panel=$("#sgPanel");
+    panel.hidden=true; panel.innerHTML="";
+  }
   if(!players.length){ wrap.hidden=true; return; }
   wrap.hidden=false;
   const pars=courseMap(), yds=courseYards();
@@ -1238,12 +1258,13 @@ function renderScoreGrid(players){
   const prevRd=table.dataset.round;   // captured before this render's mutations, for G-FOCUS's same-round guard
   table.dataset.round=rd;
   const head=
-    `<tr><th class="sg-team">Team</th>${HOLES.map(h=>`<th class="sg-h" data-hole="${h}">${h}</th>`).join("")}</tr>`+
+    `<thead><tr><th class="sg-team">Team</th>${HOLES.map(h=>`<th class="sg-h" data-hole="${h}" scope="col" role="button" tabindex="0">${h}</th>`).join("")}</tr></thead>`;
+  const meta=
     `<tr class="sg-par"><td class="sg-team">Par</td>${HOLES.map(h=>`<td data-hole="${h}">${pars[h]}</td>`).join("")}</tr>`+
     `<tr class="sg-yds"><td class="sg-team">Yds</td>${HOLES.map(h=>`<td data-hole="${h}">${yds&&yds[h]?yds[h]:"—"}</td>`).join("")}</tr>`;
   const body=players.map(p=>{
     const r=p.rounds[rd];
-    const name=`<td class="sg-team">${teamLabel(p.key,p.name).html}</td>`;
+    const name=`<th scope="row" class="sg-team">${teamLabel(p.key,p.name).html}</th>`;
     if(!r) return `<tr class="sg-teamrow">${name}<td colspan="18">no round ${rd} card</td></tr>`;
     if(!r.holes) // G-TOTALS: totals-only round — no fabricated cells
       return `<tr class="sg-teamrow">${name}<td colspan="18">round total ${r.total} — no hole-by-hole card</td></tr>`;
@@ -1255,7 +1276,7 @@ function renderScoreGrid(players){
     }).join("")}</tr>`;
   }).join("");
   const sx=scroll.scrollLeft;
-  table.innerHTML=head+body;
+  table.innerHTML=`${head}<tbody>${meta}${body}</tbody>`;
   scroll.scrollLeft=sx;
 
   // G-ROUND toggle
@@ -1280,6 +1301,26 @@ function renderScoreGrid(players){
       if(cell&&cell.offsetLeft) scroll.scrollLeft=Math.max(0,cell.offsetLeft-scroll.clientWidth/2);
     }
   }
+}
+
+/* ---------- v2.3 hole panel (G-PANEL) ---------- */
+function renderHolePanel(h){
+  const panel=$("#sgPanel");
+  if(STATE.gridHole===h){ STATE.gridHole=null; panel.hidden=true; panel.innerHTML=""; return; }
+  STATE.gridHole=h;
+  const pars=courseMap(), yds=courseYards(), players=rankedPlayers("gross");
+  const rd=$("#sgTable").dataset.round;
+  const scores=players.map(p=>{const r=p.rounds[rd];return {name:teamLabel(p.key,p.name).html,v:r&&r.holes?r.holes[h]:undefined};});
+  const played=scores.filter(s=>s.v!==undefined).map(s=>s.v);
+  const best=played.length?Math.min(...played):null;
+  const pin=PINS[h];
+  panel.innerHTML=
+    `<div class="sg-p-head">Hole ${h} · Par ${pars[h]}${yds?` · ${yds[h]} yds`:""}</div>`+
+    `<div class="sg-p-map"><img src="assets/course-map.png" alt="Course layout, hole ${h} marked">`+
+      `<span class="sg-pin" style="left:${pin.x}%;top:${pin.y}%"></span></div>`+
+    `<img class="sg-p-photo" src="assets/holes/hole-${h}.jpg" alt="Hole ${h}" onerror="this.hidden=true">`+
+    scores.map(s=>`<div class="sg-p-row${s.v!==undefined&&s.v===best?" best":""}"><span>${s.name}</span><span>${s.v??"—"}</span></div>`).join("");
+  panel.hidden=false;
 }
 
 function seniorityBadge(since,season){
@@ -2263,6 +2304,20 @@ $("#sgRounds").addEventListener("click",e=>{
   if(!b) return;
   STATE.gridRound=b.dataset.rd;
   renderScoreGrid(rankedPlayers("gross"));
+});
+
+/* ---------- hole panel (G-PANEL): hole headers are the tap/keyboard target ---------- */
+$("#sgTable").addEventListener("click",e=>{
+  const th=e.target.closest("th.sg-h[data-hole]");
+  if(th) renderHolePanel(parseInt(th.dataset.hole,10));
+});
+$("#sgTable").addEventListener("keydown",e=>{
+  const th=e.target.closest("th.sg-h[data-hole]");
+  if(!th) return;
+  if(e.key==="Enter"||e.key===" "){
+    e.preventDefault();
+    renderHolePanel(parseInt(th.dataset.hole,10));
+  }
 });
 
 /* ---------- installable app ---------- */
