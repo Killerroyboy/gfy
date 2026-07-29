@@ -1551,12 +1551,25 @@ dom.window.close();
   domZ5.window.close();
 }
 
+/* ---------- K: scorecard grid (v2.3 §13) ---------- */
+{
+  const domK1 = makeDom("");
+  await until(() => domK1.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  // courseYards is an internal fn; probe it via the page's own script scope
+  // (same pattern as the existing S-group eval probe). try/catch so the RED
+  // step prints FAIL rather than aborting the suite on ReferenceError:
+  let yds; try { yds = domK1.window.eval("courseYards()"); } catch { yds = undefined; }
+  check("K1: courseYards returns 18 ints from fixture", !!yds && Object.keys(yds).length === 18 && yds[1] === 385,
+    JSON.stringify(yds ?? null).slice(0, 80));
+  domK1.window.close();
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
 const groupTally = {};
 results.forEach(([name, ok]) => {
-  const m = name.match(/^([A-IMRSVWZ])\d+:/);
+  const m = name.match(/^([A-IKMRSVWZ])\d+:/);
   if (!m) return;
   const g = m[1];
   groupTally[g] = groupTally[g] || { pass: 0, total: 0 };
@@ -1565,7 +1578,7 @@ results.forEach(([name, ok]) => {
 });
 
 console.log("");
-["A", "B", "C", "D", "E", "F", "G", "H", "I", "M", "R", "S", "V", "W", "Z"].forEach(g => {
+["A", "B", "C", "D", "E", "F", "G", "H", "I", "K", "M", "R", "S", "V", "W", "Z"].forEach(g => {
   if (groupTally[g]) console.log(`TALLY ${g} ${groupTally[g].pass}/${groupTally[g].total}`);
 });
 const failed = results.filter(r => !r[1]).length;

@@ -972,6 +972,13 @@ function courseMap(){
   return Object.keys(pars).length===18 ? pars : null;
 }
 
+function courseYards(){
+  const rows=STATE.data.course||[];
+  const yds={};
+  rows.forEach(r=>{ const h=parseInt(r.hole,10); if(h>=1&&h<=18) yds[h]=parseInt(r.yards,10)||0; });
+  return Object.keys(yds).length===18 ? yds : null;
+}
+
 /* ---------- build player cards ---------- */
 function buildPlayers(){
   const roster=rosterMap();
