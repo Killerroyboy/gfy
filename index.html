@@ -828,19 +828,45 @@ const yes=v=>/^(y|yes|true|paid|in|1)$/i.test(String(v||"").trim());
 /* A-DATE: one parser for every "real date" cell (currently just paid_date).
    ISO (yyyy-mm-dd, optionally with a time suffix) is preferred; M/D/YY and
    M/D/YYYY are tolerated. Anything else is not a date — callers flag it and
-   sort it last rather than guessing. */
+   sort it last rather than guessing.
+   C3: JS's Date silently rolls invalid components over into the next
+   month/year (e.g. Feb 30 -> Mar 2) instead of rejecting them — round-trip
+   the constructed UTC date against the parsed y/mo/day and reject on any
+   mismatch, plus a plausibility window, so those typos flag instead of
+   silently landing on the wrong day. */
 function parseDate(v){
   const s=String(v==null?"":v).trim();
   if(!s) return null;
+  const valid=(d,y,mo,day)=>{
+    if(isNaN(d.getTime())) return null;
+    if(d.getUTCFullYear()!==y||d.getUTCMonth()!==mo-1||d.getUTCDate()!==day) return null;
+    if(y<2000||y>2100) return null;
+    return d;
+  };
   let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if(m){ const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3])); return isNaN(d.getTime())?null:d; }
+  if(m){
+    const y=+m[1],mo=+m[2],day=+m[3];
+    return valid(new Date(Date.UTC(y,mo-1,day)),y,mo,day);
+  }
   m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
   if(m){
     let yr=+m[3]; if(yr<100) yr+=2000;
-    const d=new Date(Date.UTC(yr,+m[1]-1,+m[2]));
-    return isNaN(d.getTime())?null:d;
+    const mo=+m[1],day=+m[2];
+    return valid(new Date(Date.UTC(yr,mo-1,day)),yr,mo,day);
   }
   return null;
+}
+
+/* C3 disclosure: a slash date where BOTH components are <=12 is genuinely
+   ambiguous (M/D vs D/M) — parseDate above always keeps the M/D reading,
+   this exposes the normalized ISO reading so a reader can see how it was
+   interpreted. ISO-formatted raw strings never match (no "/") so they never
+   get the parenthetical. */
+function ambiguousISO(raw,d){
+  if(!d) return null;
+  const m=String(raw||"").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if(!m||+m[1]>12||+m[2]>12) return null;
+  return d.toISOString().slice(0,10);
 }
 
 const nkey=s=>String(s||"").trim().replace(/\s+/g," ").toLowerCase();
@@ -1323,6 +1349,8 @@ function nextYearModel(){
   const paid=stages.paid.map((p,i)=>{
     const d=parseDate(p.date);
     if(p.date&&!d) flag('paid_date "'+p.date+'" for '+p.name+' is unparseable — sorted after dated rows');
+    const iso=ambiguousISO(p.date,d);
+    if(iso) p.dateISO=iso;
     return {p,i,t:d?d.getTime():Infinity};
   }).sort((a,b)=>a.t-b.t||a.i-b.i).map(o=>o.p);
 
@@ -1446,7 +1474,7 @@ function renderNextYear(){
     return;
   }
   const paidHTML=ny.paid.length
-    ? "<ol>"+ny.paid.map(p=>`<li>${esc(p.name)}${p.date?" — "+esc(p.date):""}</li>`).join("")+"</ol>"
+    ? "<ol>"+ny.paid.map(p=>`<li>${esc(p.name)}${p.date?" — "+esc(p.date):""}${p.dateISO?" ("+esc(p.dateISO)+")":""}</li>`).join("")+"</ol>"
       +`<p class="basis">Paid order; same-day ties keep sheet order.</p>`
     : "";
   // S-structure: owing renders as real <ul><li> items, not a comma-joined

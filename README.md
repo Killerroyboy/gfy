@@ -178,15 +178,20 @@ they drop off the Next Year board without deleting any history.
 
 The Invites tab tracks next season's *outreach* — who was emailed, who
 wrote back, who still needs a nudge — separate from who's actually paid
-(that's the Field tab, above). Its columns: `year, player, email, invited,
+(that's the Field tab, above). Its columns: `year, player, invited,
 responded, status`.
+
+> **⚠ NEVER put email addresses (or anything sensitive) in this
+> spreadsheet — every published tab is publicly fetchable.** Emails live in
+> the separate, never-published **GFY Admin** sheet.
 
 The workflow:
 
 1. Add everyone you might invite back to Invites, with **next year** in
-   `year` and their email address in `email`.
-2. Send your invite email (mail-merge off the `email` column, or just BCC
-   everyone — the sheet doesn't send anything itself).
+   `year`.
+2. Send your invite email (mail-merge off the GFY Admin sheet, or just BCC
+   everyone — the published sheet doesn't send anything itself and must
+   never hold the addresses).
 3. Tick `invited` for everyone you emailed.
 4. Tick `responded` as replies land.
 
@@ -198,11 +203,8 @@ coming back, set their `status` to `out` on either their Field row or their
 Invites row — same convention as Field, and it suppresses them from the
 board either way.
 
-**Privacy: the `email` column never appears on the site.** It exists only so
-you can mail-merge from the sheet — no code path in `index.html` ever reads
-it into a rendered page. If you leave the Invites tab unconfigured or empty,
-the Next Year board just runs the plain paid/owing view with no funnel
-line — nothing else changes.
+If you leave the Invites tab unconfigured or empty, the Next Year board just
+runs the plain paid/owing view with no funnel line — nothing else changes.
 
 ### Adding the Invites tab to a sheet you already built
 
@@ -211,8 +213,8 @@ add the 12th tab yourself — no need to rebuild from the template:
 
 1. In the Google Sheet, click **+** at the bottom to add a sheet, and name
    it exactly **Invites**.
-2. Paste the header row into row 1: `year, player, email, invited,
-   responded, status`.
+2. Paste the header row into row 1: `year, player, invited, responded,
+   status`.
 3. Select the `invited` and `responded` columns, one at a time: **Insert >
    Checkbox** (same one-time step as Field.deposit).
 4. Click the new tab, copy its gid from the address bar (`#gid=…`, same as

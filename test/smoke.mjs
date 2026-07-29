@@ -729,6 +729,60 @@ check("W8: A-DATE — tie-break rule stated on the paid queue ('same-day ties ke
 }
 
 {
+  // C3 spec r1: JS's Date silently rolls Feb 30 into Mar 2 — round-trip
+  // validation must catch that instead of trusting the rolled-over date.
+  const fieldRollover = FIXTURES.field.replace("2027,Crash,,,,,TRUE,2026-09-01", "2027,Crash,,,,,TRUE,2026-02-30");
+  const rolloverFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldRollover }),
+  });
+  const domW18 = makeDom("", rolloverFetch);
+  await until(() => domW18.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const healthTextW18 = domW18.window.document.querySelector("#healthStrip")?.textContent || "";
+  const paidItemsW18 = [...domW18.window.document.querySelectorAll("#nyBody ol li")].map(li => li.textContent || "");
+  check("W18: A-DATE round-trip (spec r1) — invalid calendar date '2026-02-30' is flagged, not silently read as March 2, and sorts Crash after the two dated rows",
+    /unparseable/i.test(healthTextW18) && paidItemsW18.length === 3
+      && /Crash/.test(paidItemsW18[2]) && /2026-02-30/.test(paidItemsW18[2])
+      && !/March|Mar\s*2\b|2026-03-02|03\/02\/2026/.test(paidItemsW18[2]),
+    "paidItems=" + JSON.stringify(paidItemsW18) + " health=" + healthTextW18.slice(0, 220));
+  domW18.window.close();
+}
+
+{
+  // C3 spec r2: out-of-range month must flag, not roll into the next year.
+  const fieldOOB = FIXTURES.field.replace("2027,Crash,,,,,TRUE,2026-09-01", "2027,Crash,,,,,TRUE,2026-13-05");
+  const oobFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldOOB }),
+  });
+  const domW19 = makeDom("", oobFetch);
+  await until(() => domW19.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const healthTextW19 = domW19.window.document.querySelector("#healthStrip")?.textContent || "";
+  const paidItemsW19 = [...domW19.window.document.querySelectorAll("#nyBody ol li")].map(li => li.textContent || "");
+  check("W19: A-DATE round-trip (spec r2) — out-of-range month '2026-13-05' is flagged and sorts Crash after the two dated rows",
+    /unparseable/i.test(healthTextW19) && paidItemsW19.length === 3 && /Crash/.test(paidItemsW19[2]),
+    "paidItems=" + JSON.stringify(paidItemsW19) + " health=" + healthTextW19.slice(0, 220));
+  domW19.window.close();
+}
+
+{
+  // C3 spec r3: '03/08/2026' is genuinely ambiguous (both components <=12) —
+  // the M/D reading (March 8) is kept, but the normalized ISO reading must
+  // be visible in parentheses beside the raw string so a reader can see how
+  // it was interpreted.
+  const fieldAmbiguous = FIXTURES.field.replace("2027,Tank,,,,,TRUE,2026-08-22", "2027,Tank,,,,,TRUE,03/08/2026");
+  const ambiguousFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldAmbiguous }),
+  });
+  const domW20 = makeDom("", ambiguousFetch);
+  await until(() => domW20.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const paidItemsW20 = [...domW20.window.document.querySelectorAll("#nyBody ol li")].map(li => li.textContent || "");
+  const tankItemW20 = paidItemsW20.find(t => /Tank/.test(t)) || "";
+  check("W20: A-DATE ambiguity disclosure (spec r3) — ambiguous slash date '03/08/2026' keeps the M/D reading but shows the normalized ISO date '(2026-03-08)' beside the raw string",
+    /03\/08\/2026/.test(tankItemW20) && /\(2026-03-08\)/.test(tankItemW20),
+    "paidItems=" + JSON.stringify(paidItemsW20));
+  domW20.window.close();
+}
+
+{
   const invitesBlankYear = FIXTURES.invites.split(/\r?\n/).map((line, i) => {
     if (i === 0 || !line.trim()) return line;
     return line.replace(/^\d+,/, ",");
