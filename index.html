@@ -145,14 +145,16 @@
     font-variant-numeric:tabular-nums;min-width:2.2rem;padding:4px 3px;font-size:.85rem}
   .sg-t th.sg-h{height:44px;padding:0 3px;cursor:pointer;color:var(--sage);
     font-weight:400;font-size:.7rem;letter-spacing:.08em} /* table cells ignore min-height; height sets the row */
-  .sg-t .sg-team{position:sticky;left:0;background:var(--pine);text-align:left;
+  .sg-t .sg-team{position:sticky;left:0;background:var(--pine-2);text-align:left;
     padding:4px 10px;white-space:nowrap;z-index:2;border-right-color:var(--brass-dim)}
   .sg-t tr.sg-par td,.sg-t tr.sg-yds td{font-size:.55rem;color:var(--brass-dim);border-color:transparent}
   .sg-t td.under{color:var(--brass);font-weight:700}
   .sg-t td.bogey{color:var(--sage)}
   .sg-t td.blowup{color:var(--rust)}
   .sg-t th[data-hole="10"],.sg-t td[data-hole="10"]{border-left:2px solid var(--brass-dim)}
+  .sg-t tr.sg-par td[data-hole="10"],.sg-t tr.sg-yds td[data-hole="10"]{border-left:2px solid var(--brass-dim)}
   .sg-controls{display:flex;gap:8px;margin-bottom:10px}
+  .sg-controls[hidden]{display:none}
 
   /* field */
   .fld{display:grid;grid-template-columns:1fr 6rem 6rem 5rem;gap:10px;align-items:baseline;
@@ -807,7 +809,7 @@ const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,
   9:{x:34.0,y:63.0}, 10:{x:57.5,y:59.4}, 11:{x:45.8,y:42.2}, 12:{x:66.2,y:28.8},
   13:{x:81.5,y:22.8}, 14:{x:76.7,y:37.6}, 15:{x:67.1,y:64.0}, 16:{x:72.6,y:83.1},
   17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
-let STATE = { data:{}, year:null, open:null };
+let STATE = { data:{}, year:null, open:null, gridRound:null };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -1221,16 +1223,17 @@ function renderScoreGrid(players){
   if(!pars){ note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return; }
   note.hidden=true; scroll.hidden=false;
   const rounds=[...new Set(players.flatMap(p=>Object.keys(p.rounds)))].sort();
+  if(!rounds.length){ note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return; }
   const rd=(STATE.gridRound&&rounds.includes(STATE.gridRound))?STATE.gridRound:rounds[0];
   table.dataset.round=rd;
   const head=
     `<tr><th class="sg-team">Team</th>${HOLES.map(h=>`<th class="sg-h" data-hole="${h}">${h}</th>`).join("")}</tr>`+
     `<tr class="sg-par"><td class="sg-team">Par</td>${HOLES.map(h=>`<td data-hole="${h}">${pars[h]}</td>`).join("")}</tr>`+
-    `<tr class="sg-yds"><td class="sg-team">Yds</td>${HOLES.map(h=>`<td data-hole="${h}">${yds?yds[h]:"—"}</td>`).join("")}</tr>`;
+    `<tr class="sg-yds"><td class="sg-team">Yds</td>${HOLES.map(h=>`<td data-hole="${h}">${yds&&yds[h]?yds[h]:"—"}</td>`).join("")}</tr>`;
   const body=players.map(p=>{
     const r=p.rounds[rd];
     const name=`<td class="sg-team">${teamLabel(p.key,p.name).html}</td>`;
-    if(!r) return `<tr class="sg-teamrow">${name}<td colspan="18">—</td></tr>`;
+    if(!r) return `<tr class="sg-teamrow">${name}<td colspan="18">no round ${rd} card</td></tr>`;
     if(!r.holes) // G-TOTALS: totals-only round — no fabricated cells
       return `<tr class="sg-teamrow">${name}<td colspan="18">round total ${r.total} — no hole-by-hole card</td></tr>`;
     return `<tr class="sg-teamrow">${name}${HOLES.map(h=>{
@@ -1240,7 +1243,9 @@ function renderScoreGrid(players){
       return `<td data-hole="${h}"${cls?` class="${cls}"`:""}>${v}</td>`;
     }).join("")}</tr>`;
   }).join("");
+  const sx=scroll.scrollLeft;
   table.innerHTML=head+body;
+  scroll.scrollLeft=sx;
 }
 
 function seniorityBadge(since,season){

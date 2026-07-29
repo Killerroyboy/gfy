@@ -1585,8 +1585,17 @@ dom.window.close();
   check("K4: totals-only team gets a totals row, never fabricated cells",
     bear && bear.textContent.includes("round total 76") && bear.querySelectorAll("td[data-hole]").length === 0,
     bear ? bear.textContent : "no Bear row");
+  // G-SCROLL: the grid's horizontal overflow must live on .sg-scroll alone —
+  // assert against the page's own CSS text, not just DOM presence.
+  const cssTextK5 = [...d.querySelectorAll("style")].map(s => s.textContent).join("");
+  const sgStartK5 = cssTextK5.indexOf(".sg{");
+  const sgEndK5 = cssTextK5.indexOf("/* field */", sgStartK5);
+  const sgCssK5 = cssTextK5.slice(sgStartK5, sgEndK5 === -1 ? sgStartK5 : sgEndK5);
+  const overflowMatchesK5 = sgCssK5.match(/overflow-x/g) || [];
+  const overflowLineK5 = sgCssK5.split("\n").find(l => l.includes("overflow-x")) || "";
   check("K5: page body does not scroll sideways (grid scroll is contained)",
-    !!d.querySelector("#sgScroll") && d.querySelector("#sgWrap").closest("section") !== null);
+    !!d.querySelector("#sgScroll") && overflowMatchesK5.length === 1 && overflowLineK5.includes(".sg-scroll"),
+    "overflowCount=" + overflowMatchesK5.length + " overflowLine=" + overflowLineK5.trim());
   domK2.window.close();
 }
 {
@@ -1601,6 +1610,22 @@ dom.window.close();
     && d6.querySelector("#sgScroll").hidden === true
     && d6.querySelectorAll("#lbBody .lb-row").length > 0);
   domK6.window.close();
+}
+{
+  // K7: unplayed and zero-valued cells render blank, never 0. Tex round-2
+  // fixture: h1=0 (posInt drops non-positive scores → cell stays blank)
+  // and h9+ unplayed (never recorded → cell stays blank).
+  const domK7 = makeDom("");
+  await until(() => domK7.window.document.querySelectorAll("tr.sg-teamrow").length > 0);
+  domK7.window.eval("STATE.gridRound='2';renderLeaderboard()");
+  const d7 = domK7.window.document;
+  const table7 = d7.querySelector("#sgTable");
+  const texRow = table7 && [...table7.querySelectorAll("tr.sg-teamrow")].find(r => r.textContent.includes("Tex"));
+  const texCells = texRow ? texRow.querySelectorAll("td[data-hole]") : [];
+  check("K7: unplayed and zero-valued cells render blank, never 0",
+    texCells.length === 18 && texCells[8].textContent.trim() === "" && texCells[0].textContent.trim() === "",
+    texRow ? texRow.innerHTML.slice(0, 300) : "no Tex row");
+  domK7.window.close();
 }
 
 /* ---------------------------------------------------------------------
@@ -1617,9 +1642,7 @@ results.forEach(([name, ok]) => {
 });
 
 console.log("");
-["A","B","C","D","E","F","G","H","I","K","L","M","N","P","Q","R","S","V","W","Z"].forEach(g => {
-  if (groupTally[g]) console.log(`TALLY ${g} ${groupTally[g].pass}/${groupTally[g].total}`);
-});
+Object.keys(groupTally).sort().forEach(g => console.log(`TALLY ${g} ${groupTally[g].pass}/${groupTally[g].total}`));
 const failed = results.filter(r => !r[1]).length;
 console.log(`TALLY TOTAL ${results.length - failed}/${results.length}`);
 process.exit(failed ? 1 : 0);
