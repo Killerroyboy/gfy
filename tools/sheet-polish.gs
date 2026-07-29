@@ -92,7 +92,7 @@ function colorRooms_(sh){
   const field = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Field");
   const pcol = field ? colLetter_(headerIndex_(field, "player") || 2) : "B";
   const rules = [SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=AND(${c}2<>"",LEFT(${c}2,6)<>"guest:",ISNA(MATCH(${c}2,INDIRECT("Field!" + pcol + ":" + pcol),0)))`)
+    .whenFormulaSatisfied(`=AND(${c}2<>"",LEFT(${c}2,6)<>"guest:",ISNA(MATCH(${c}2,INDIRECT("Field!${pcol}:${pcol}"),0)))`)
     .setBackground("#3d3223")
     .setRanges([sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))]).build()];
   if (sh.getConditionalFormatRules().length > rules.length)
