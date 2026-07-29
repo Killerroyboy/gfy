@@ -1725,14 +1725,37 @@ dom.window.close();
     JSON.stringify(invStatus) === JSON.stringify(["declined","out"]), String(invStatus));
   check("P3: site actually parses that vocabulary (parity's other leg)",
     html.includes('statusLower==="out"||statusLower==="declined"') && html.includes('/^in$/i') && html.includes('"wd"'));
-  check("P4: checkbox columns are the closed list",
-    gs.includes('const CHECKBOX_COLS') && ["deposit","collected","invited","responded"].every(c => gs.includes(`"${c}"`))
+  // P4: parse the CHECKBOX_COLS object literal itself (not just substring
+  // includes()) and set-compare its column values so an extra/renamed
+  // column would fail this just as loudly as a missing one.
+  const cbBody = (gs.match(/const CHECKBOX_COLS\s*=\s*(\{[^;]*\});/s) || [])[1] || "";
+  const cbCols = [...cbBody.matchAll(/:\s*\[([^\]]*)\]/g)]
+    .flatMap(m => m[1].split(",").map(s => s.trim().replace(/^"|"$/g, "")).filter(Boolean))
+    .sort();
+  check("P4: checkbox columns are the closed list — exactly {deposit, collected, invited, responded, settled}, no extras",
+    gs.includes('const CHECKBOX_COLS')
+    && JSON.stringify(cbCols) === JSON.stringify(["collected","deposit","invited","responded","settled"])
     && !/CHECKBOX_COLS[^;]*handicap/s.test(gs));
-  check("P5: COURSE_DATA passes C-REAL checksums",
+  // P5 sibling: tools/make_template.py holds the SECOND copy of the course
+  // truth (the xlsx-template rows). Regex the Course dict's rows out of the
+  // python source (scoped between the "Course" and "Field" keys so we don't
+  // pick up an unrelated 3-number tuple from Payout elsewhere in the file)
+  // and guard it with the same C-REAL checksums.
+  const pyPath = path.join(ROOT, "tools", "make_template.py");
+  let py = ""; try { py = readFileSync(pyPath, "utf8"); } catch {}
+  const pyCourseBlock = (py.match(/"Course":\s*\{([\s\S]*?)\n\s{4}"Field":/) || [])[1] || "";
+  const pyCourse = [...pyCourseBlock.matchAll(/\[(\d+),\s*(\d+),\s*(\d+)\]/g)]
+    .map(m => [Number(m[1]), Number(m[2]), Number(m[3])]);
+  check("P5: COURSE_DATA passes C-REAL checksums (both the .gs and tools/make_template.py copies)",
     !!course && course.length === 18
     && course.reduce((s, r) => s + r[1], 0) === 72
     && course.slice(0,9).reduce((s, r) => s + r[2], 0) === 3094
-    && course.slice(9).reduce((s, r) => s + r[2], 0) === 3007);
+    && course.slice(9).reduce((s, r) => s + r[2], 0) === 3007
+    && pyCourse.length === 18
+    && pyCourse.reduce((s, r) => s + r[1], 0) === 72
+    && pyCourse.slice(0,9).reduce((s, r) => s + r[2], 0) === 3094
+    && pyCourse.slice(9).reduce((s, r) => s + r[2], 0) === 3007,
+    "pyCourse=" + JSON.stringify(pyCourse));
   check("P6: script embeds no sheet ids/urls (safe for public repo)",
     gs.length > 0 && !/docs\.google\.com|spreadsheets\/d\//.test(gs));
 }
