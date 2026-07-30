@@ -20,30 +20,36 @@ function teardown(){
   });
 }
 
-/* ---------- form writer (F-WRITE, F-LOCK, F-YEAR, F-NKEY) ---------- */
-function onScoreFormSubmit(e){
-  const lock = LockService.getDocumentLock();               // F-LOCK: concurrent shotgun-start submissions
-  try { lock.waitLock(10000); }
-  catch(_) { markResponse_(e, "rejected: busy — resubmit"); return; }
-  try {
-    try {
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
-      const ans = namedAnswers_(e);                            // {team, round, hole, score} by header prefix
-      const year = firstTeeYear_(ss);                          // F-YEAR: the form serves the current event only
-      if (!year){ markResponse_(e, "rejected: Info first_tee unreadable — check sheet setup"); return; }
-      const roster = rosterTeams_(ss, year);                   // Map NORM(team) -> canonical casing, scoped to this year
-      const team = roster.get(NORM(ans.team));
-      const round = String(parseInt(ans.round, 10));
-      const hole = parseInt(ans.hole, 10);
-      const score = parseInt(ans.score, 10);
-      if (!team){ markResponse_(e, "rejected: team not in roster"); return; }
-      if (!(round === "1" || round === "2")){ markResponse_(e, "rejected: invalid round"); return; }
-      if (!(hole >= 1 && hole <= 18)){ markResponse_(e, "rejected: invalid hole"); return; }
-      if (!(score >= 1 && score <= 19)){ markResponse_(e, "rejected: invalid score"); return; }
-      writeScore_(ss, year, team, round, hole, score);
-      markResponse_(e, "applied");
-    } catch(err) { markResponse_(e, "rejected: internal error — " + String(err).slice(0, 80)); }
+/* ---------- shared validator (§18 SC-VALIDATE) ---------- */
+// ONE validator for both lanes: the form trigger below AND doPost. Caller holds NO lock;
+// applyScore_ owns the DocumentLock itself (F-LOCK: concurrent shotgun-start submissions).
+// p = {team, round, hole, score} (string or number inputs both fine — parsed here).
+function applyScore_(ss, p){
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(10000)) return {ok:false, verdict:"busy — resubmit", team:p.team, round:0, holes:null};
+  try{
+    const year = firstTeeYear_(ss);                            // F-YEAR: the form/endpoint serve the current event only
+    if (!year) return {ok:false, verdict:"Info first_tee unreadable — check sheet setup", team:p.team, round:0, holes:null};
+    const roster = rosterTeams_(ss, year);                     // Map NORM(team) -> canonical casing, scoped to this year (F-NKEY)
+    const tk = NORM(p.team);
+    const team = roster.get(tk);
+    if (!team) return {ok:false, verdict:"team not in roster", team:p.team, round:0, holes:null};
+    const round = parseInt(p.round, 10), hole = parseInt(p.hole, 10), score = parseInt(p.score, 10);
+    if (round !== 1 && round !== 2) return {ok:false, verdict:"invalid round", team:team, round:round || 0, holes:null};
+    if (!(hole >= 1 && hole <= 18)) return {ok:false, verdict:"invalid hole", team:team, round:round, holes:null};
+    if (!(score >= 1 && score <= 19)) return {ok:false, verdict:"invalid score", team:team, round:round, holes:null};
+    return writeScore_(ss, year, team, round, hole, score);    // {ok, verdict, team, round, holes}
   } finally { lock.releaseLock(); }
+}
+
+/* ---------- form writer (F-WRITE, F-YEAR, F-NKEY) ---------- */
+function onScoreFormSubmit(e){
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ans = namedAnswers_(e);                              // {team, round, hole, score} by header prefix
+    const r = applyScore_(ss, ans);                            // shared validator+writer; owns its own lock
+    markResponse_(e, r.ok ? "applied" : "rejected: " + r.verdict);
+  } catch(err) { markResponse_(e, "rejected: internal error — " + String(err).slice(0, 80)); }
 }
 function namedAnswers_(e){
   // e.namedValues: {questionTitle: [answer]} — match by title prefix so cosmetic renames survive
@@ -81,15 +87,34 @@ function writeScore_(ss, year, team, round, hole, score){
   const vals = sh.getDataRange().getValues(); const head = vals[0].map(h => NORM(h));
   const yc = head.indexOf("year"), tc = head.indexOf("team"), rc = head.indexOf("round"), hc = head.indexOf("h" + hole);
   if (yc < 0 || tc < 0 || rc < 0 || hc < 0) throw new Error("Scores tab headers missing (need year/team/round/h" + hole + ")");
+  const roundNum = parseInt(round, 10);
+  const rTotalCol = head.indexOf("r" + roundNum);            // r1/r2 round-total column for THIS row's round, if present
   for (let i = 1; i < vals.length; i++){
     if (String(vals[i][yc]) === String(year) && NORM(vals[i][tc]) === NORM(team)
-        && String(parseInt(vals[i][rc], 10)) === round){
-      sh.getRange(i + 1, hc + 1).setValue(score); return;
+        && parseInt(vals[i][rc], 10) === roundNum){
+      if (rTotalCol >= 0 && String(vals[i][rTotalCol] || "").trim() !== ""){
+        // §18 SC-VALIDATE totals guard: a round total already lives on this row — never silently
+        // convert it to hole-scoring. Row is left untouched; caller must clear r1/r2 first.
+        return {ok:false, verdict:"round total already entered — clear r1/r2 first", team:team, round:roundNum, holes:null};
+      }
+      sh.getRange(i + 1, hc + 1).setValue(score);
+      const updated = sh.getRange(i + 1, 1, 1, head.length).getValues()[0];
+      return {ok:true, verdict:"applied", team:team, round:roundNum, holes:holesMap_(head, updated)};
     }
   }
   const row = new Array(head.length).fill("");
-  row[yc] = year; row[tc] = team; row[rc] = parseInt(round, 10); row[hc] = score;
+  row[yc] = year; row[tc] = team; row[rc] = roundNum; row[hc] = score;
   sh.appendRow(row);
+  return {ok:true, verdict:"applied", team:team, round:roundNum, holes:holesMap_(head, row)};
+}
+function holesMap_(head, rowValues){
+  // builds {h1:…, …, h18:…} from a Scores row — the "team's full current round row" the client paints as truth
+  const out = {};
+  for (let h = 1; h <= 18; h++){
+    const idx = head.indexOf("h" + h);
+    out["h" + h] = idx >= 0 ? rowValues[idx] : "";
+  }
+  return out;
 }
 function markResponse_(e, status){
   // audit trail on the response row: writes/extends a "status" column on the responses sheet
@@ -99,6 +124,37 @@ function markResponse_(e, status){
     if (!col){ col = sh.getLastColumn() + 1; sh.getRange(1, col).setValue("status"); }
     sh.getRange(range.getRow(), col).setValue(status);
   } catch(_) { Logger.log("markResponse failed: " + status); }
+}
+
+/* ---------- JSON endpoint (§18 SC-WRITE) + idempotency ring (SC-IDEMPOTENT) ---------- */
+function doPost(e){
+  let p; try{ p = JSON.parse(e.postData.contents); }catch(err){ return jsonOut_({ok:false, verdict:"bad request", team:"", round:0, holes:null}); }
+  const key = "idem:" + String(p.client_id || "").slice(0, 40) + ":" + String(p.seq || "");
+  const props = PropertiesService.getScriptProperties();
+  if (p.client_id && p.seq != null){
+    const prior = props.getProperty(key);
+    if (prior) return ContentService.createTextOutput(prior).setMimeType(ContentService.MimeType.JSON);
+  }
+  const r = applyScore_(SpreadsheetApp.getActive(), p);
+  const out = JSON.stringify(r);
+  if (p.client_id && p.seq != null && r.verdict !== "busy — resubmit"){
+    props.setProperty(key, out);                             // bounded: cleanupIdem_ below
+    cleanupIdem_(props);
+  }
+  return ContentService.createTextOutput(out).setMimeType(ContentService.MimeType.JSON);
+}
+function doGet(){
+  const ss = SpreadsheetApp.getActive();
+  const year = firstTeeYear_(ss);
+  return jsonOut_({ok:true, year:year, teams:Array.from(rosterTeams_(ss, year).values())});
+}
+function jsonOut_(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+// Keep at most 600 idem keys (15 teams x 2 rounds x 18 holes + retries headroom).
+// getKeys() order is unspecified by Apps Script — acceptable: the ring only bounds growth,
+// exact eviction order is NOT load-bearing (a replay racing eviction just re-executes once more).
+function cleanupIdem_(props){
+  const keys = props.getKeys().filter(k => k.indexOf("idem:") === 0);
+  if (keys.length > 600) keys.slice(0, keys.length - 600).forEach(k => props.deleteProperty(k));
 }
 
 /* ---------- paid_date stamp (F-STAMP-IMPL) — never erases, sheet timezone ---------- */
