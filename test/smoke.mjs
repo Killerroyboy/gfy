@@ -1358,19 +1358,28 @@ check("S5: S-NAV right-edge fade — .nav-inner::after gradient overlay present 
   /\.nav-inner::after\s*\{[^}]*gradient/i.test(html), "");
 
 {
-  // P-SHOTGUN (§14.1): fixtures/pairings.csv's three Round One/Two rows
-  // carry a start=1 / start=blank / start="TBD" spread across the group
-  // that already exercises the valid/blank/junk paths in one shared dom —
+  // P-SHOTGUN (§14.1): fixtures/pairings.csv's Round One/Two rows
+  // carry a start=1 / start=blank / start="TBD" / start=7.5 spread across the group
+  // that already exercises the valid/blank/junk/decimal paths in one shared dom —
   // no new variant dom needed since the fixture's year (2026) matches the
   // main dom's activeSeason().
   const pairGroups = [...doc.querySelectorAll("#pairBody .grp")];
   const grpText = who => pairGroups.find(g => (g.textContent || "").includes(who))?.textContent || "";
   const validGrp = grpText("Duck · Hammer · Sully");
   const blankGrp = grpText("Johnson, Wade · Moose · Tex");
+  const decimalGrp = grpText("Decimal test");
   const junkGrp = grpText("Leaders out last");
-  check("S6: P-SHOTGUN — Pairings optional start column: a parseable 1-18 value (start=1) renders 'Hole 1' beside the time, a blank start renders no 'Hole' text at all, and unparseable junk (start=TBD) renders as raw text verbatim",
-    /Hole 1/.test(validGrp) && !/Hole/.test(blankGrp) && /TBD/.test(junkGrp),
-    "valid=" + JSON.stringify(validGrp) + " blank=" + JSON.stringify(blankGrp) + " junk=" + JSON.stringify(junkGrp));
+
+  // Header-absent variant: CSV with no start column
+  const domHeaderAbsent = makeDom("?test=withOverride", "year,round,when,time,players\n2026,Round One,Saturday,9:00 am,Test Group");
+  await until(() => domHeaderAbsent.window.document.querySelectorAll("#pairBody .grp").length > 0);
+  await settle();
+  const headerAbsentHoles = [...domHeaderAbsent.window.document.querySelectorAll("#pairBody .grp-hole")].length;
+  domHeaderAbsent.window.close();
+
+  check("S6: P-SHOTGUN — Pairings optional start column: a parseable 1-18 value (start=1) renders 'Hole 1' beside the time, a blank start renders no 'Hole' text at all, decimals (start=7.5) render as raw text '7.5' (not truncated 'Hole 7'), unparseable junk (start=TBD) renders as raw text verbatim, and missing start column renders zero 'Hole' spans",
+    /Hole 1/.test(validGrp) && !/Hole/.test(blankGrp) && /7\.5/.test(decimalGrp) && !/Hole 7/.test(decimalGrp) && /TBD/.test(junkGrp) && headerAbsentHoles === 0,
+    "valid=" + JSON.stringify(validGrp) + " blank=" + JSON.stringify(blankGrp) + " decimal=" + JSON.stringify(decimalGrp) + " junk=" + JSON.stringify(junkGrp) + " headerAbsentHoles=" + headerAbsentHoles);
 }
 
 /* ---------------------------------------------------------------------

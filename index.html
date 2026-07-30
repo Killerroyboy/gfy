@@ -1443,10 +1443,10 @@ function renderPairings(){
     <div class="round">
       <h3>${esc(r.name)}</h3>
       <p class="when">${esc(r.when)}</p>
-      ${r.groups.map(g=>`<div class="grp">
-        <div class="grp-time">${esc(g.time||"—")}${startLabel(g.start) ? `<span class="grp-hole">${esc(startLabel(g.start))}</span>` : ""}</div>
+      ${r.groups.map(g=>{const sl=startLabel(g.start);return`<div class="grp">
+        <div class="grp-time">${esc(g.time||"—")}${sl ? `<span class="grp-hole">${esc(sl)}</span>` : ""}</div>
         <div class="grp-who">${esc(g.players)}</div>
-      </div>`).join("")}
+      </div>`}).join("")}
     </div>`).join("");
 }
 // P-SHOTGUN (§14.1): the Pairings tab's optional `start` column names the
@@ -1457,10 +1457,13 @@ function renderPairings(){
 // fabrication, no health flag (this is informational, not a data-integrity
 // signal).
 function startLabel(v){
-  const raw=String(v==null?"":v).trim();
-  if(!raw) return "";
-  const n=posInt(raw);
-  return (n!==null && n<=18) ? "Hole "+n : raw;
+  const t=String(v==null?"":v).trim();
+  if(!t) return "";
+  if(/^\d{1,2}$/.test(t)){
+    const n=parseInt(t,10);
+    if(n>=1&&n<=18) return "Hole "+n;
+  }
+  return t;
 }
 
 function calcuttaModel(year=STATE.year){
