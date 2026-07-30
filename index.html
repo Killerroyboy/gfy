@@ -952,7 +952,8 @@ const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,
   13:{x:81.5,y:22.8}, 14:{x:76.7,y:37.6}, 15:{x:67.1,y:64.0}, 16:{x:72.6,y:83.1},
   17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
 let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null,
-  scTeam:null, scSeason:null, scPadHole:null, scPadPending:null, scRoundOverride:null, scPadOtherOpen:false };
+  scTeam:null, scSeason:null, scPadHole:null, scPadPending:null, scRoundOverride:null,
+  scPadOtherOpen:false, scPadOtherVal:null };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -2943,7 +2944,8 @@ function scShowCard(seasonY,team){
   $("#scPicker").hidden=true;
   if(STATE.scTeam!==team||STATE.scSeason!==seasonY){
     // fresh team/season — don't let a stale open pad or round override leak across.
-    STATE.scPadHole=null; STATE.scPadPending=null; STATE.scRoundOverride=null; STATE.scPadOtherOpen=false;
+    STATE.scPadHole=null; STATE.scPadPending=null; STATE.scRoundOverride=null;
+    STATE.scPadOtherOpen=false; STATE.scPadOtherVal=null;
   }
   STATE.scTeam=team; STATE.scSeason=seasonY;
   renderScCard();
@@ -3036,10 +3038,16 @@ function scPadHTML(){
   const replaceHTML=(editMode&&pending!=null)
     ? `<button type="button" id="scPadReplace" class="sc-pad-replace">Replace ${existing.score} with ${pending}</button>`
     : "";
+  // R1-3: a periodic refresh (renderScorer -> renderScCard, every REFRESH_MS)
+  // rebuilds this whole innerHTML from scratch — STATE.scPadOtherVal is the
+  // persisted echo of whatever's been typed so far, restored into the fresh
+  // input's value= so an in-progress "Other" entry survives the rebuild
+  // instead of silently reverting to blank mid-keystroke.
+  const otherVal=STATE.scPadOtherVal!=null?esc(String(STATE.scPadOtherVal)):"";
   const otherHTML=`<div class="sc-pad-other">`+
     `<button type="button" class="sc-num sc-other" id="scPadOtherBtn">Other</button>`+
     (STATE.scPadOtherOpen
-      ? `<input type="number" min="1" max="19" id="scPadOtherInput"><button type="button" id="scPadOtherSend">Send</button>`
+      ? `<input type="number" min="1" max="19" id="scPadOtherInput" value="${otherVal}"><button type="button" id="scPadOtherSend">Send</button>`
       : "")+
     `</div>`;
   return `<div id="scPad">`+
@@ -3055,6 +3063,7 @@ function scPadOpen(hole){
   STATE.scPadHole=hole;
   STATE.scPadPending=null;
   STATE.scPadOtherOpen=false;
+  STATE.scPadOtherVal=null;
   renderScCard();
 }
 function scSubmitScore(hole,score){
@@ -3063,7 +3072,7 @@ function scSubmitScore(hole,score){
   try{ window.scJournalSave(entry); }catch{}
   window.scLocalCells[hole]={score,state:"local"};
   STATE.scRoundOverride=null; // momentary toggle — consumed on send (SC-ROUND spring)
-  STATE.scPadHole=null; STATE.scPadPending=null; STATE.scPadOtherOpen=false;
+  STATE.scPadHole=null; STATE.scPadPending=null; STATE.scPadOtherOpen=false; STATE.scPadOtherVal=null;
   renderScCard();
 }
 function scPadPick(hole,score){
@@ -3090,14 +3099,20 @@ function scWireCard(){
   if(replaceBtn) replaceBtn.addEventListener("click",()=>scSubmitScore(hole,STATE.scPadPending));
   const otherBtn=pad.querySelector("#scPadOtherBtn");
   if(otherBtn) otherBtn.addEventListener("click",()=>{ STATE.scPadOtherOpen=true; renderScCard(); });
+  const otherInput=pad.querySelector("#scPadOtherInput");
+  // R1-3: echo every keystroke into STATE so a periodic refresh's unconditional
+  // renderScCard() rebuild can restore the in-progress value instead of
+  // discarding it (the DOM node itself gets thrown away on every rebuild).
+  if(otherInput) otherInput.addEventListener("input",e=>{ STATE.scPadOtherVal=e.target.value; });
   const otherSend=pad.querySelector("#scPadOtherSend");
   if(otherSend) otherSend.addEventListener("click",()=>{
     const v=posInt(pad.querySelector("#scPadOtherInput")?.value);
-    if(v) scPadPick(hole,v);
+    if(v){ STATE.scPadOtherVal=null; scPadPick(hole,v); }
   });
   const closeBtn=pad.querySelector(".sc-pad-close");
   if(closeBtn) closeBtn.addEventListener("click",()=>{
-    STATE.scPadHole=null; STATE.scPadPending=null; STATE.scPadOtherOpen=false; renderScCard();
+    STATE.scPadHole=null; STATE.scPadPending=null; STATE.scPadOtherOpen=false; STATE.scPadOtherVal=null;
+    renderScCard();
   });
 }
 function renderScCard(){

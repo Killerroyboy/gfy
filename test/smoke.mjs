@@ -2230,20 +2230,32 @@ async function openScorer(dom) {
   // (actual MeadowCreek data, not a stand-in): hole 7 = par 3 (160 yds), hole 8 =
   // par 4 (415 yds) — the reverse of the brief's illustrative example, so this
   // uses the fixture's real holes per the controller's resolution.
+  // Review round 1 (finding 1): asserting only the Par label lets a regression
+  // that hardcodes scParLabel(delta) -> "Par" unconditionally pass silently
+  // (it would still pass X9 too, since X9 only checks the null-par holes have
+  // NO label). Now also asserts a non-Par label on each hole, AND the SAME
+  // raw score (2) reading as a DIFFERENT label across the two holes — Birdie
+  // on the par-3 (delta -1), Eagle on the par-4 (delta -2) — the strongest
+  // proof the label tracks each hole's own par rather than a hardcoded/global
+  // score->label table.
   const domX8 = makeDom("#score?team=" + encodeURIComponent("Duck"));
   const docX8 = await openScorer(domX8);
+  const labFor = (pad, score) => [...pad.querySelectorAll(".sc-num[data-score]")]
+    .find(b => b.dataset.score === score)?.querySelector(".sc-num-lab")?.textContent;
   docX8.querySelector('.sc-cell[data-hole="7"]').click();
   await until(() => (docX8.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 7"));
   const pad7 = docX8.querySelector("#scPad");
-  const lab7 = [...pad7.querySelectorAll(".sc-num[data-score]")]
-    .find(b => b.dataset.score === "3")?.querySelector(".sc-num-lab")?.textContent;
+  const lab7Par = labFor(pad7, "3");    // hole7 par3, delta 0
+  const lab7Birdie = labFor(pad7, "2"); // hole7 par3, delta -1
   docX8.querySelector('.sc-cell[data-hole="8"]').click();
   await until(() => (docX8.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 8"));
   const pad8 = docX8.querySelector("#scPad");
-  const lab8 = [...pad8.querySelectorAll(".sc-num[data-score]")]
-    .find(b => b.dataset.score === "4")?.querySelector(".sc-num-lab")?.textContent;
-  check("X8: SC-PAR — pad(7) [par 3] labels score 3 'Par'; pad(8) [par 4] labels score 4 'Par'",
-    lab7 === "Par" && lab8 === "Par", "h7:" + lab7 + " h8:" + lab8);
+  const lab8Par = labFor(pad8, "4");    // hole8 par4, delta 0
+  const lab8Birdie = labFor(pad8, "3"); // hole8 par4, delta -1
+  const lab8Eagle = labFor(pad8, "2");  // hole8 par4, delta -2 — same raw score as hole7's Birdie above
+  check("X8: SC-PAR — pad(7)[par3]/pad(8)[par4] both label their own par 'Par' AND their own par-1 'Birdie'; the SAME score (2) reads 'Birdie' on the par-3 but 'Eagle' on the par-4 (delta tracks each hole's real par, not a hardcoded label)",
+    lab7Par === "Par" && lab8Par === "Par" && lab7Birdie === "Birdie" && lab8Birdie === "Birdie" && lab8Eagle === "Eagle",
+    "h7Par:" + lab7Par + " h8Par:" + lab8Par + " h7Birdie:" + lab7Birdie + " h8Birdie:" + lab8Birdie + " h8Eagle:" + lab8Eagle);
   domX8.window.close();
 
   // X9/X10 variant: course fixture with hole 5's row entirely removed. courseMap()
@@ -2275,14 +2287,23 @@ async function openScorer(dom) {
     "labs5.length=" + labs5.length + " lab7b=" + lab7b);
   domX9.window.close();
 
-  // X10: same variant — the to-par tally can't honestly compute without all 18
-  // pars, so it degrades to strokes-only, flagged via data-mode="strokes".
+  // X10: to-par tally reflects courseMap()'s all-or-nothing rule in BOTH
+  // directions. Review round 1 (finding 2): only exercising the degraded
+  // branch let a regression that hardcodes data-mode="strokes" unconditionally
+  // pass 171/171 — now also asserts the happy path (complete course data ->
+  // data-mode="topar") on the standard fixture, alongside the h5-blanked
+  // variant degrading to strokes-only.
+  const domX10std = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  const docX10std = await openScorer(domX10std);
+  const tallyX10std = docX10std.querySelector("#scCard .sc-tally");
   const domX10 = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX9);
   const docX10 = await openScorer(domX10);
   const tallyX10 = docX10.querySelector("#scCard .sc-tally");
-  check("X10: to-par tally suppressed to strokes-only (data-mode='strokes') when courseMap() is null (all-18 rule)",
+  check("X10: to-par tally — complete course data renders data-mode='topar' (happy path); the h5-blanked variant degrades to strokes-only (data-mode='strokes') when courseMap() is null (all-18 rule)",
+    !!tallyX10std && tallyX10std.getAttribute("data-mode") === "topar" &&
     !!tallyX10 && tallyX10.getAttribute("data-mode") === "strokes",
-    "mode=" + tallyX10?.getAttribute("data-mode"));
+    "standard_mode=" + tallyX10std?.getAttribute("data-mode") + " degraded_mode=" + tallyX10?.getAttribute("data-mode"));
+  domX10std.window.close();
   domX10.window.close();
 
   // X11: SC-ROUND spring — toggling #scRound flips the chip for exactly ONE
@@ -2321,9 +2342,28 @@ async function openScorer(dom) {
   [...docX12.querySelectorAll("#scPad .sc-num[data-score]")].find(b => b.dataset.score === "6").click();
   await until(() => /Replace 4 with 6/.test(docX12.querySelector("#scPad")?.textContent || ""));
   const replaceOkX12 = /Replace 4 with 6/.test(docX12.querySelector("#scPad")?.textContent || "");
-  check("X12: edit mode — re-tapping a filled cell shows 'currently N'; picking M arms 'Replace N with M' (no immediate send)",
-    currentOkX12 && replaceOkX12,
-    "currentOk=" + currentOkX12 + " replaceOk=" + replaceOkX12 + " text=" +
+
+  // Review round 1 (finding 3): the periodic refresh drives renderScorer() ->
+  // scShowCard() -> an UNCONDITIONAL renderScCard() rebuild (same path a
+  // 60s auto-refresh takes) which used to silently blank an in-progress
+  // "Other" entry — the typed value lived only in the DOM input node, not in
+  // STATE, so rebuilding #scPad's innerHTML from scratch discarded it.
+  // Proven here on a fresh hole (9, untouched by the edit-mode flow above):
+  // open Other, type "13", force a renderScCard() the same way a refresh
+  // would, and assert the input still reads "13" afterward.
+  docX12.querySelector('.sc-cell[data-hole="9"]').click();
+  await until(() => (docX12.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 9"));
+  docX12.querySelector("#scPadOtherBtn").click();
+  await until(() => !!docX12.querySelector("#scPadOtherInput"));
+  const otherInputX12 = docX12.querySelector("#scPadOtherInput");
+  otherInputX12.value = "13";
+  otherInputX12.dispatchEvent(new domX12.window.Event("input", { bubbles: true }));
+  domX12.window.renderScCard(); // simulate the periodic-refresh's unconditional rebuild
+  const otherSurvivedX12 = docX12.querySelector("#scPadOtherInput")?.value === "13";
+
+  check("X12: edit mode — re-tapping a filled cell shows 'currently N'; picking M arms 'Replace N with M' (no immediate send); an in-progress 'Other' entry survives a forced renderScCard() rebuild (periodic-refresh regression)",
+    currentOkX12 && replaceOkX12 && otherSurvivedX12,
+    "currentOk=" + currentOkX12 + " replaceOk=" + replaceOkX12 + " otherSurvived=" + otherSurvivedX12 + " text=" +
       (docX12.querySelector("#scPad")?.textContent || "").slice(0, 160));
   domX12.window.close();
 }
