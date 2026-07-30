@@ -20,6 +20,7 @@
 - The Google Form lane and its trigger behavior stay byte-compatible (Task 2 refactors `onScoreFormSubmit` to call `applyScore_` with identical semantics — proven by the existing form-lane behavior notes in the task).
 - Endpoint transport contract (SC-WRITE): request = POST, `Content-Type: text/plain;charset=utf-8`, body `JSON.stringify({team, round, hole, score, client_id, seq})`; response = JSON `{ok:boolean, verdict:string, team:string, round:number, holes:Object|null}`. Anything unparseable/mis-shaped = SC-LOUD-CONFIG state, never a guess.
 - SPIKE GATE note: the live CORS spike + draft-night drill are RILEY-GATED live steps (documented in Task 8's README rewrite). Build proceeds against stubbed transport; the transport module is isolated (Task 4) so a spike failure strands the minimum.
+- FIXTURE REALITY (corrected after Task-1 NEEDS_CONTEXT; binding): 2026 fixture teams are `Duck, Sully, Moose, Tex, Bear` (captains are same-named Field rows). Duck has COMPLETE r1 and r2 Scores rows natively (the r2 row's team cell is lowercase `duck` - free S-KEY exercise; r2 h1..h6 = 4,4,3,5,3,4). Sully r1 is split across two merge rows. Any test needing an EMPTY hole for Duck must drop the `duck,2` row via a scores `withOverride` - never edit base fixtures.
 - Screenshot binary: `/Users/riley/Library/Caches/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-mac-arm64/chrome-headless-shell`.
 
 ## File structure
@@ -53,7 +54,7 @@
    --------------------------------------------------------------------- */
 {
   // X1: hash query must not break routing (pressure-test Critical)
-  const domX1 = makeDom("#score?team=" + encodeURIComponent("Jake"));
+  const domX1 = makeDom("#score?team=" + encodeURIComponent("Duck"));
   await until(() => !domX1.window.document.querySelector("[data-view=score]")?.hidden);
   const scoreVisX1 = !domX1.window.document.querySelector("[data-view=score]")?.hidden;
   const homeHidX1 = domX1.window.document.querySelector("[data-view=home]")?.hidden === true;
@@ -61,9 +62,9 @@
     "scoreHidden=" + domX1.window.document.querySelector("[data-view=score]")?.hidden);
 
   // X2: matched team renders the identity confirm naming the team
-  await until(() => /Jake/.test(domX1.window.document.querySelector("#scConfirm")?.textContent || ""));
+  await until(() => /Duck/.test(domX1.window.document.querySelector("#scConfirm")?.textContent || ""));
   check("X2: matched team shows one-time identity confirm with team name",
-    /Jake/.test(domX1.window.document.querySelector("#scConfirm")?.textContent || ""),
+    /Duck/.test(domX1.window.document.querySelector("#scConfirm")?.textContent || ""),
     (domX1.window.document.querySelector("#scConfirm")?.textContent || "").slice(0, 120));
   domX1.window.close();
 
@@ -72,7 +73,7 @@
   await until(() => (domX3.window.document.querySelectorAll("#scPicker .sc-pick") || []).length > 0);
   const picksX3 = [...domX3.window.document.querySelectorAll("#scPicker .sc-pick")].map(b => b.textContent);
   check("X3: unmatched team renders picker with Field team values",
-    picksX3.some(t => /Jake/.test(t)) && picksX3.some(t => /Greg/.test(t)),
+    picksX3.some(t => /Duck/.test(t)) && picksX3.some(t => /Sully/.test(t)),
     JSON.stringify(picksX3).slice(0, 160));
   domX3.window.close();
 
@@ -86,12 +87,12 @@
   // X5: SC-YEAR — scorer season comes from first_tee, not Scores max-year.
   // Variant: Scores holds a rogue 2031 row; scorer must still resolve 2026 teams.
   const rogue = FIXTURES.scores + "2031,Ghost,1,4,,,,,,,,,,,,,,,,,\n";
-  const domX5 = makeDom("#score?team=Jake", withOverride({
+  const domX5 = makeDom("#score?team=Duck", withOverride({
     scores: () => Promise.resolve({ ok: true, status: 200, text: async () => rogue }),
   }));
-  await until(() => /Jake/.test(domX5.window.document.querySelector("#scConfirm")?.textContent || ""));
+  await until(() => /Duck/.test(domX5.window.document.querySelector("#scConfirm")?.textContent || ""));
   check("X5: SC-YEAR — first_tee season pins team matching despite rogue Scores year",
-    /Jake/.test(domX5.window.document.querySelector("#scConfirm")?.textContent || ""), "");
+    /Duck/.test(domX5.window.document.querySelector("#scConfirm")?.textContent || ""), "");
   domX5.window.close();
 
   // X6: nav has NO score link (link-only view)
@@ -278,7 +279,7 @@ git commit -m "feat(scorer): shared applyScore_ validator, doPost/doGet endpoint
 - Consumes: Task 1 shell + helpers; `courseMap()` (:1092), `scoreClass` (:1204), `buildPlayers` (season param arrives in Task 6 — until then the card renders journal-only cells; the sheet-value merge lands in Task 6 and X-tests for it live there).
 - Produces: `renderScCard()` (idempotent, in-place updates); `scPadOpen(hole)`; `scHolePar(hole)` → int>0 or null (courseMap when non-null, else per-hole raw parse with `par>0` guard); `scRoundDefault()` and the momentary toggle; DOM contract: 18 `button.sc-cell[data-hole]` in two 9-cell rows with `aria-label="Hole N"`, pad `#scPad` with `button.sc-num[data-score]`, round chip `#scRound`.
 
-- [ ] **Step 1: Failing tests X7–X12** (same placement pattern; all via `makeDom("#score?team=Jake")` + tapping `#scConfirm` button first — write a tiny local helper `openScorer(dom)` doing confirm-tap + `until` card visible):
+- [ ] **Step 1: Failing tests X7–X12** (same placement pattern; all via `makeDom("#score?team=Duck")` + tapping `#scConfirm` button first — write a tiny local helper `openScorer(dom)` doing confirm-tap + `until` card visible):
 
 ```js
 // X7: 18 cells, two rows, >=44px via class contract (jsdom has no layout: assert row split 9/9)
@@ -286,7 +287,7 @@ git commit -m "feat(scorer): shared applyScore_ validator, doPost/doGet endpoint
 //     opening pad(7) labels score 4 "Par" and pad(8) labels score 3 "Par" (query .sc-num[data-score] label spans)
 // X9: SC-PAR degrade — course variant with h5 par blank: pad(5) shows NO golf-term labels (plain numbers), other holes still labeled
 // X10: tally suppression — same variant: #scCard to-par tally element absent/strokes-only (data-mode="strokes")
-// X11: SC-ROUND spring — toggle to R1 (tap #scRound), enter a score via pad, toggle auto-returns to derived default (chip text back to "Round 2") — use a scores fixture where R1 is complete for Jake so derived default is R2
+// X11: SC-ROUND spring — toggle to R1 (tap #scRound), enter a score via pad, toggle auto-returns to derived default (chip text back to "Round 2") — Duck's fixture R1 is complete natively, so the derived default is already R2 - no variant needed
 // X12: tapping a filled cell opens pad in edit mode showing "currently N" and the send button labeled "Replace N with M" after picking M
 ```
 
@@ -304,7 +305,7 @@ Write each as a real `check()` following X1–X6's style — the six comments ab
 <div id="scPad" hidden><!-- hole header + par/yds + 8 sc-num buttons + Other numeric entry --></div>
 ```
 
-Cells: min-height 48px CSS, labels ≥13px; under/over pairing = `scoreClass` color + a `▾/▴` glyph next to the number (non-color cue). Pad numbers: range = par−2 … par+4 when `scHolePar(hole)` non-null (labels Eagle/Birdie/Par/Bogey/+2…), else 1–8; "Other" always opens `<input type="number" min="1" max="19">`. `scRoundDefault()`: if Jake's R1 board row (Task 6; until then journal) has 18 entries → 2; else date rule vs `first_tee` compared in the first_tee string's own offset (parse the ISO offset, compute "event day index" without local timezone: `Math.floor((Date.parse(now) - Date.parse(first_tee))/86400000)` clamped 0/1 → round 1/2). Toggle: tap flips for ONE submission (`scRoundOverride` consumed on send), then reverts; chip text always names the active target.
+Cells: min-height 48px CSS, labels ≥13px; under/over pairing = `scoreClass` color + a `▾/▴` glyph next to the number (non-color cue). Pad numbers: range = par−2 … par+4 when `scHolePar(hole)` non-null (labels Eagle/Birdie/Par/Bogey/+2…), else 1–8; "Other" always opens `<input type="number" min="1" max="19">`. `scRoundDefault()`: if the team's R1 board row (Task 6; until then journal) has 18 entries → 2; else date rule vs `first_tee` compared in the first_tee string's own offset (parse the ISO offset, compute "event day index" without local timezone: `Math.floor((Date.parse(now) - Date.parse(first_tee))/86400000)` clamped 0/1 → round 1/2). Toggle: tap flips for ONE submission (`scRoundOverride` consumed on send), then reverts; chip text always names the active target.
 
 Send-on-tap: Task 3 wires taps to `scJournalSave(entry)` (Task 5's function — until Task 5 lands, stub it as `window.scJournalSave = window.scJournalSave || (e => {})` so Task 3 is testable standalone; X11/X12 assert UI behavior, not persistence).
 
@@ -335,7 +336,7 @@ git commit -m "feat(scorer): card-first UI, per-hole par-labeled pad, momentary 
 // X13: absent score_endpoint -> scorer inert state: #scCard hidden, copy /scoring opens at the tournament/i,
 //      raw form link visible when Info form URL key exists (default fixture: absent -> no link, still no error)
 // X14: endpoint variant (info override adds "score_endpoint,https://script.example/exec") + stubbed fetch
-//      returning JSON {ok:true, verdict:"applied", team:"Jake", round:2, holes:{h13:6}} -> a pad send resolves
+//      returning JSON {ok:true, verdict:"applied", team:"Duck", round:2, holes:{h13:6}} - AND the variant MUST also drop the lowercase `duck,2` scores row via withOverride (else Task 6 sheet-merge later turns this into a conflict state and X14 would break) -> a pad send resolves
 //      and the cell for h13 shows 6 in the sent-family state
 // X15: SC-LOUD-CONFIG — stub returns an HTML string ("<html>Sign in</html>") -> view shows
 //      /scoring endpoint not reachable/i and NO cell claims sent-to-sheet
@@ -399,8 +400,8 @@ git commit -m "feat(scorer): endpoint transport with loud misconfig + debug ping
 // X17: drain on reconnect — flip the stub to succeed, dispatch window 'online' -> until cell state 'ok'; exactly ONE POST body seen for that hole (capture bodies in the stub)
 // X18: coalescing — while offline, tap 4 then 6 on the same hole: stub captures show at most one in-flight body for that hole and its score is 6
 // X19: ordered drain — offline taps on holes 2 then 3: captured POST order is [h2, h3]
-// X20: SC-NOCLOBBER — sheet value 5 for h14 (scores fixture variant), journal queued 4: NO POST for h14 on drain; cell renders conflict (contains "5" and "4"); pad(14) shows a replace-confirm labeled with both numbers
-// X21: rejected verdict — stub returns {ok:false, verdict:"team not in roster",...}: cell loud state contains the verbatim verdict
+// X20: SC-NOCLOBBER — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs), scores fixture UNMODIFIED: NO POST for h14 on drain; cell renders conflict (contains "5" and "4"); pad(14) shows a replace-confirm labeled with both numbers
+// X21: rejected verdict — stub returns {ok:false, verdict:"team not in roster",...} (team Duck, same dropped-row variant): cell loud state contains the verbatim verdict
 // X22: idempotent seq — the same entry retried (stub: first network-reject, then success) sends the SAME seq both times
 // X23: storage-dead degrade — makeDom variant where localStorage.setItem throws: tap still updates the cell in-memory and the header shows the "can't remember sends" copy; no uncaught errors (dom.pageErrors empty)
 ```
@@ -432,9 +433,9 @@ git commit -m "feat(scorer): offline-first journal, coalescing ordered queue, NO
 - [ ] **Step 1: Failing tests X24–X26**
 
 ```js
-// X24: sheet merge — scores fixture has Jake r2 h1..h6; card cells 1-6 render those values in on-sheet state
+// X24: sheet merge — scores fixture natively has duck r2 h1..h6 = 4,4,3,5,3,4; card cells 1-6 render those values in on-sheet state
 //      while STATE.year is poked to a different year via the year picker on #board first (SC-YEAR: card unaffected)
-// X25: glance honesty — with 3 of 5 teams having r2 rows, glance text matches /of 3 reporting/ and shows /thru/
+// X25: glance honesty — with the fixture's natural r2 coverage (verify the actual reporting count at implementation time and assert that number, stating it in the report), glance text matches /of 3 reporting/ and shows /thru/
 //      and pending-on-phone renders as its own line, absent from the board tally number
 // X26: render boundary — open pad(7), force a full load()/renderAll() cycle (dispatch the same path the 60s
 //      timer uses), assert the pad is still open and its hole is still 7
@@ -486,7 +487,7 @@ git commit -m "feat(scorer): admin blocks + pubbtn/SHEET_EDIT_URL removal + form
 
 - [ ] **Step 1: README rewrite** per above — no new promises beyond the spec; the drill section IS the pre-links gate and says so.
 - [ ] **Step 2: Full battery**: `git status --porcelain` empty; `npm test` → 187/187.
-- [ ] **Step 3: S11 renders**: homepage (unchanged check) + `#score?team=Jake` at 420×900 AND 900×900 with the endpoint absent (inert state) and via a local variant page if needed for the card state — judge cold: legible in the sun test (nothing under 13px), tap targets, honest copy. Read the PNGs.
+- [ ] **Step 3: S11 renders**: homepage (unchanged check) + `#score?team=Duck` at 420×900 AND 900×900 with the endpoint absent (inert state) and via a local variant page if needed for the card state — judge cold: legible in the sun test (nothing under 13px), tap targets, honest copy. Read the PNGs.
 - [ ] **Step 4: Commit**
 
 ```bash
