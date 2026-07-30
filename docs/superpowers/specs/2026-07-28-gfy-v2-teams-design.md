@@ -419,3 +419,10 @@ reproduces it, it does not redesign it. Durable references, both in-repo: mockup
   touching anything else.
 - Rollback: `git revert` of the crest commit(s) on `v2.1-invites`; prod gate unchanged (Riley
   push).
+
+## §17 — v2.5.1: canonical nav order (Riley ruled 2026-07-30)
+
+- **N-ORDER**: one canonical, story-shaped tab order year-round: Home, Field, Draft, Board, Pairings, Calcutta, Money, Next Year, Card, Rooms, Champions, Shame, Photos, Rules (view keys: home, field, draft, board, pairings, calcutta, money, nextyear, schedule, rooms, champions, shame, photos, rules). Next Year sits after Money — Calcutta → Money → Next Year is the money cluster (bets → settle up → next season's collections). The old OFF-SEASON priority shuffle (home/nextyear/field/draft/rooms-first) is RETIRED: off-season nav is exactly the canonical order.
+- The EVENT-WINDOW flip stays (Riley ratified): during first_tee ±3 days, board / draft / pairings / calcutta / rooms lead; the remainder follows canonical order. Fixed muscle memory 51 weeks a year, score-first while play is live.
+- "Card" keeps its label (Riley ruled; "Course" rename considered and declined).
+- Implementation pins: nav anchors reordered in the MARKUP too (initial-paint / no-JS order = canonical); a `NAV_ORDER` display constant + simplified `applyNavOrder`; `VIEWS` stays DOM-derived (S-VIEWS untouched); any view absent from NAV_ORDER falls back to DOM order at the END (future-tab resilience — never dropped). S3/S4 assert the FULL 14-key sequences, not prefixes.
