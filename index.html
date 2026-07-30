@@ -386,6 +386,15 @@
     .cd-unit{min-width:52px}
     .photo-frame{height:420px}
   }
+
+  /* §18 scorer shell — Task 1 (picker/confirm only; card comes later). */
+  .sc-pick{display:block;width:100%;text-align:left;font-family:var(--ui);font-size:1rem;
+    color:var(--bone);background:var(--pine-2);border:1px solid rgba(200,162,74,.22);
+    padding:14px 16px;margin:0 0 10px;cursor:pointer;transition:border-color .18s,background .18s}
+  .sc-pick:hover,.sc-pick:focus-visible{border-color:var(--brass-dim);background:rgba(200,162,74,.08)}
+  .sc-pick-roster{display:block;font-size:.85rem;color:var(--sage);margin-top:4px}
+  #scConfirm p{color:var(--sage);font-size:1rem}
+  #scConfirm .btn{margin-right:10px}
 </style>
 </head>
 <body>
@@ -817,6 +826,16 @@
   </div>
 </section>
 
+<section class="view" data-view="score" id="score" hidden>
+  <div class="wrap">
+    <div id="scHeader"></div>
+    <div id="scConfirm" hidden></div>
+    <div id="scPicker" hidden></div>
+    <div id="scCard"></div>
+    <div id="scGlance"></div>
+  </div>
+</section>
+
 <footer>
   <svg aria-hidden="true"><use href="#mark"/></svg>
   <p class="foot-name">GFY</p>
@@ -856,7 +875,8 @@ document.querySelector("#markKeyline path").setAttribute("d",MARK_PATH);
 const VIEWS=[...new Set([...document.querySelectorAll(".view")].map(s=>s.dataset.view))];
 const VIEW_ALIASES={leaderboard:"board",card:"schedule",grounds:"schedule"};
 function showView(name){
-  const aliased=VIEW_ALIASES[name]||name;
+  const bare=(name||"").split("?")[0];              // §18 SC-LINK router pin
+  const aliased=VIEW_ALIASES[bare]||bare;
   const v=VIEWS.includes(aliased)?aliased:"home";
   document.querySelectorAll(".view").forEach(s=>{ s.hidden=s.dataset.view!==v; });
   document.querySelectorAll(".nav a").forEach(a=>a.classList.toggle("active",a.hash==="#"+v));
@@ -1044,6 +1064,29 @@ function activeSeason(){
   if(ys.length) return String(Math.max(...ys));
   return String(teeYear===null?new Date().getFullYear():teeYear);
 }
+// §18 SC-YEAR: the scorer keys season off Info first_tee (the validator's source).
+function scorerSeason(){
+  const ft=String(INFO.first_tee||"");
+  const m=ft.match(/^(\d{4})/);
+  return m?m[1]:activeSeason();
+}
+// Distinct active-season Field team values (the set the trigger validates).
+function scorerTeams(seasonY){
+  const seen=new Map();
+  forYear(STATE.data.field,seasonY).forEach(r=>{
+    const t=String(r.team||"").trim();
+    if(t&&!seen.has(nkey(t))) seen.set(nkey(t),t);
+  });
+  return [...seen.values()];
+}
+function scorerTeamFromHash(){
+  const q=location.hash.split("?")[1]||"";
+  const m=/(?:^|&)team=([^&]*)/.exec(q);
+  if(!m) return null;
+  const want=nkey(decodeURIComponent(m[1]));
+  return scorerTeams(scorerSeason()).find(t=>nkey(t)===want)||null;
+}
+const scKey=(y,tk)=>"gfy-scorer:"+y+":"+tk;
 // A5 (I4+I5+M7): ONE nextSeason() helper — S-NEXT = activeSeason()+1 — used
 // everywhere "next year" is computed (nextYearModel, normalizeYears,
 // renderMoney). Previously each call site recomputed
@@ -2773,6 +2816,69 @@ function paintHome(){
     : "";
   statusEl.innerHTML=nyHTML+calHTML+needHTML;
 }
+
+/* ---------- §18 scorer (Task 1: routing + team resolution only) ----------
+   #scCard stays an empty shell for Task 3. Resolution order: hash team ->
+   remembered (localStorage-confirmed) team -> picker. */
+function scRoster(team,seasonY){
+  return forYear(STATE.data.field,seasonY).filter(r=>r.player&&nkey(r.team)===nkey(team)).map(r=>r.player);
+}
+function scConfirmedTeam(seasonY){
+  try{
+    return scorerTeams(seasonY).find(t=>{
+      try{ return !!JSON.parse(localStorage.getItem(scKey(seasonY,nkey(t)))||"{}").confirmed; }
+      catch{ return false; }
+    })||null;
+  }catch{ return null; }
+}
+function scShowCard(seasonY,team){
+  $("#scConfirm").hidden=true;
+  $("#scPicker").hidden=true;
+  // #scCard itself is Task 3's empty shell — nothing to paint into it yet.
+}
+function scShowPicker(seasonY){
+  const teams=scorerTeams(seasonY);
+  const pickerEl=$("#scPicker");
+  pickerEl.innerHTML=`<h2>Who's scoring?</h2>`+teams.map(t=>
+    `<button type="button" class="sc-pick" data-team="${esc(t)}">${esc(t)}`+
+    `<span class="sc-pick-roster">${esc(scRoster(t,seasonY).join(", "))}</span></button>`
+  ).join("");
+  pickerEl.hidden=false;
+  $("#scConfirm").hidden=true;
+  pickerEl.querySelectorAll(".sc-pick").forEach(b=>b.addEventListener("click",()=>{
+    scShowConfirm(seasonY,b.dataset.team);
+  }));
+}
+function scShowConfirm(seasonY,team){
+  const confirmEl=$("#scConfirm");
+  confirmEl.innerHTML=`<p>Scoring for <strong>${esc(team)}</strong> — ${esc(scRoster(team,seasonY).join(", "))}.</p>`+
+    `<button type="button" class="btn" id="scConfirmBtn">Confirm</button>`+
+    `<a href="#" id="scNotYou">Not your team?</a>`;
+  confirmEl.hidden=false;
+  $("#scPicker").hidden=true;
+  $("#scConfirmBtn").addEventListener("click",()=>{
+    try{ localStorage.setItem(scKey(seasonY,nkey(team)),JSON.stringify({confirmed:true})); }catch{}
+    scShowCard(seasonY,team);
+  });
+  $("#scNotYou").addEventListener("click",e=>{ e.preventDefault(); scShowPicker(seasonY); });
+}
+function renderScorer(){
+  const bare=location.hash.slice(1).split("?")[0];
+  if((VIEW_ALIASES[bare]||bare)!=="score") return;
+  const seasonY=scorerSeason();
+  const hashTeam=scorerTeamFromHash();
+  if(hashTeam){
+    let confirmed=false;
+    try{ confirmed=!!JSON.parse(localStorage.getItem(scKey(seasonY,nkey(hashTeam)))||"{}").confirmed; }catch{}
+    if(confirmed) scShowCard(seasonY,hashTeam); else scShowConfirm(seasonY,hashTeam);
+    return;
+  }
+  const remembered=scConfirmedTeam(seasonY);
+  if(remembered){ scShowCard(seasonY,remembered); return; }
+  scShowPicker(seasonY);
+}
+window.addEventListener("hashchange",renderScorer);
+
 function paint(data,results){
   HEALTH=[];
   STATE.data=data;
@@ -2791,6 +2897,7 @@ function paint(data,results){
   paintHome();
   applyNavOrder();
   renderHealth();
+  renderScorer();
 }
 async function load(){
   if(DEBUG) return loadDebug();

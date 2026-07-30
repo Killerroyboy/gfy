@@ -2140,6 +2140,60 @@ dom.window.close();
 }
 
 /* ---------------------------------------------------------------------
+   Group X: v2.6 captain live scorer (spec §18 rev 2).
+   X1-X6: routing + team resolution (SC-LINK, SC-YEAR).
+   --------------------------------------------------------------------- */
+{
+  // X1: hash query must not break routing (pressure-test Critical)
+  const domX1 = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  await until(() => !domX1.window.document.querySelector("[data-view=score]")?.hidden);
+  const scoreVisX1 = !domX1.window.document.querySelector("[data-view=score]")?.hidden;
+  const homeHidX1 = domX1.window.document.querySelector("[data-view=home]")?.hidden === true;
+  check("X1: #score?team=… routes to the score view, not home", scoreVisX1 && homeHidX1,
+    "scoreHidden=" + domX1.window.document.querySelector("[data-view=score]")?.hidden);
+
+  // X2: matched team renders the identity confirm naming the team
+  await until(() => /Duck/.test(domX1.window.document.querySelector("#scConfirm")?.textContent || ""));
+  check("X2: matched team shows one-time identity confirm with team name",
+    /Duck/.test(domX1.window.document.querySelector("#scConfirm")?.textContent || ""),
+    (domX1.window.document.querySelector("#scConfirm")?.textContent || "").slice(0, 120));
+  domX1.window.close();
+
+  // X3: unmatched team -> picker listing team values (never an error)
+  const domX3 = makeDom("#score?team=NoSuchTeam");
+  await until(() => (domX3.window.document.querySelectorAll("#scPicker .sc-pick") || []).length > 0);
+  const picksX3 = [...domX3.window.document.querySelectorAll("#scPicker .sc-pick")].map(b => b.textContent);
+  check("X3: unmatched team renders picker with Field team values",
+    picksX3.some(t => /Duck/.test(t)) && picksX3.some(t => /Sully/.test(t)),
+    JSON.stringify(picksX3).slice(0, 160));
+  domX3.window.close();
+
+  // X4: bare #score with no stored team -> picker too
+  const domX4 = makeDom("#score");
+  await until(() => (domX4.window.document.querySelectorAll("#scPicker .sc-pick") || []).length > 0);
+  check("X4: bare #score with no remembered team renders picker",
+    (domX4.window.document.querySelectorAll("#scPicker .sc-pick") || []).length >= 2, "");
+  domX4.window.close();
+
+  // X5: SC-YEAR — scorer season comes from first_tee, not Scores max-year.
+  // Variant: Scores holds a rogue 2031 row; scorer must still resolve 2026 teams.
+  const rogue = FIXTURES.scores + "2031,Ghost,1,4,,,,,,,,,,,,,,,,,\n";
+  const domX5 = makeDom("#score?team=Duck", withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => rogue }),
+  }));
+  await until(() => /Duck/.test(domX5.window.document.querySelector("#scConfirm")?.textContent || ""));
+  check("X5: SC-YEAR — first_tee season pins team matching despite rogue Scores year",
+    /Duck/.test(domX5.window.document.querySelector("#scConfirm")?.textContent || ""), "");
+  domX5.window.close();
+
+  // X6: nav has NO score link (link-only view)
+  const domX6 = makeDom("");
+  check("X6: nav carries no #score anchor",
+    ![...domX6.window.document.querySelectorAll(".nav a")].some(a => a.hash === "#score"), "");
+  domX6.window.close();
+}
+
+/* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
 const groupTally = {};
