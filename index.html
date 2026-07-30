@@ -123,6 +123,7 @@
   .card-drop{background:rgba(0,0,0,.22);border-bottom:1px solid rgba(200,162,74,.13);
              padding:20px 8px 24px}
   .card-drop[hidden]{display:none}
+  .card-roster{font-size:.85rem;color:var(--bone);margin:0 0 10px;padding:0;letter-spacing:.02em}
   .nine{margin-bottom:16px}
   .nine-lab{font-size:.56rem;letter-spacing:.24em;text-transform:uppercase;color:var(--brass);margin:0 0 8px}
   .holes{display:grid;grid-template-columns:repeat(10,1fr);gap:3px}
@@ -1009,6 +1010,14 @@ function teamLabel(key,rawFallback){
     text:names.join(" & ")
   };
 }
+// B-CAPTAIN (§15): board rows + grid sticky column show the captain only —
+// width-critical at 15 four-player teams. Full roster: card header + Field.
+// The hole panel keeps the joined form (vertical list, width not constrained).
+function captainLabel(key,rawFallback){
+  const t=rosterMap().get(key);
+  if(!t||!t.captain) return teamLabel(key,rawFallback);
+  return { html:`<span class="cap">${esc(t.captain)}</span>`, text:t.captain };
+}
 
 function yearsIn(rows){ return [...new Set((rows||[]).map(r=>r.year).filter(Boolean))].sort().reverse(); }
 function forYear(rows,y){
@@ -1143,7 +1152,9 @@ function cardHTML(p){
   const pars=courseMap();
   const rds=Object.keys(p.rounds).sort();
   if(!rds.length) return "";
-  return `<div class="card-drop" id="card-${esc(p.key).replace(/ /g,"-")}">` + rds.map(rd=>{
+  return `<div class="card-drop" id="card-${esc(p.key).replace(/ /g,"-")}">`
+    + `<p class="card-roster">${teamLabel(p.key,p.name).html}</p>`
+    + rds.map(rd=>{
     const r=p.rounds[rd];
     if(!r.holes) return `<div class="nine"><p class="nine-lab">Round ${esc(rd)} — total ${r.total}</p></div>`;
     return [[1,9,"Out"],[10,18,"In"]].map(([a,b,lab])=>{
@@ -1215,7 +1226,7 @@ function renderLeaderboard(){
     return `<button class="lb-row${lead}" type="button" data-player="${esc(p.key)}"
               aria-expanded="${open}" aria-controls="card-${id}">
         <span class="lb-pos">${pos??"—"}</span>
-        <span class="lb-name">${teamLabel(p.key, p.name).html}</span>
+        <span class="lb-name">${captainLabel(p.key, p.name).html}</span>
         <span class="lb-thru">${thru}${wdMarker}</span>
         <span class="lb-num lb-r1">${p.roundTotals["1"]??"—"}</span>
         <span class="lb-num lb-r2">${p.roundTotals["2"]??"—"}</span>
@@ -1270,7 +1281,7 @@ function renderScoreGrid(players){
     `<tr class="sg-yds"><th scope="row" class="sg-team">Yds</th>${HOLES.map(h=>`<td data-hole="${h}">${yds&&yds[h]?yds[h]:"—"}</td>`).join("")}</tr>`;
   const body=players.map(p=>{
     const r=p.rounds[rd];
-    const name=`<th scope="row" class="sg-team">${teamLabel(p.key,p.name).html}</th>`;
+    const name=`<th scope="row" class="sg-team">${captainLabel(p.key,p.name).html}</th>`;
     if(!r) return `<tr class="sg-teamrow">${name}<td colspan="18">no round ${rd} card</td></tr>`;
     if(!r.holes) // G-TOTALS: totals-only round — no fabricated cells
       return `<tr class="sg-teamrow">${name}<td colspan="18">round total ${r.total} — no hole-by-hole card</td></tr>`;

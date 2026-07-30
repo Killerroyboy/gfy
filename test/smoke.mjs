@@ -157,10 +157,10 @@ check("A1: board has exactly 5 rows (Hamer excluded, duck merged — not 6, not 
   rows.length === 5, "count=" + rows.length + " names=" + JSON.stringify(rows.map(r => r.name)));
 
 const expectedA = [
-  { id: "A2", pos: "1", name: "Duck & Hammer",          cap: "Duck",  thru: "F",      r1: "74", r2: "74", total: "148", toPar: "+4" },
-  { id: "A3", pos: "1", name: "Sully & Johnson, Wade",  cap: "Sully", thru: "F",      r1: "75", r2: "73", total: "148", toPar: "+4" },
-  { id: "A4", pos: "3", name: "Tex & Tank",             cap: "Tex",   thru: "R2 · 7", r1: "77", r2: "27", total: "104", toPar: "+5" },
-  { id: "A5", pos: "4", name: "Moose & Sock",           cap: "Moose", thru: "F",      r1: "76", r2: "74", total: "150", toPar: "+6" },
+  { id: "A2", pos: "1", name: "Duck",                   cap: "Duck",  thru: "F",      r1: "74", r2: "74", total: "148", toPar: "+4" },
+  { id: "A3", pos: "1", name: "Sully",                  cap: "Sully", thru: "F",      r1: "75", r2: "73", total: "148", toPar: "+4" },
+  { id: "A4", pos: "3", name: "Tex",                    cap: "Tex",   thru: "R2 · 7", r1: "77", r2: "27", total: "104", toPar: "+5" },
+  { id: "A5", pos: "4", name: "Moose",                  cap: "Moose", thru: "F",      r1: "76", r2: "74", total: "150", toPar: "+6" },
   { id: "A6", pos: "5", name: "Bear",                   cap: "Bear",  thru: "totals", r1: "76", r2: "76", total: "152", toPar: "+8" },
 ];
 expectedA.forEach((e, i) => {
@@ -1899,6 +1899,48 @@ dom.window.close();
     && ps.includes('"START HERE"') && ps.includes("inEventWindow_") && ps.includes("first_tee")
     && ps.includes("Scoring form URL") && /findIndex|indexOf\("Scoring form URL"\)|indexOf\('Scoring form URL'\)/.test(ps)
     && !/getRange\("B7"\)/.test(ps));
+}
+
+/* ---------- U: v2.5 tournament refinement (§15) ---------- */
+{
+  // 4-player team + a draft pool (B-CAPTAIN / D-DRAFT fixtures — synthetic)
+  const fieldU = [
+    "year,player,team,since,handicap,status,deposit,paid_date,strengths",
+    "2026,Duck,Duck,2019,8,In,TRUE,,steady putter",
+    "2026,Hammer,Duck,2019,10,In,TRUE,,",
+    "2026,Sully,Duck,2021,15,In,TRUE,,",
+    "2026,Tank,Duck,2026,20,In,TRUE,,",
+    "2026,Wade Boggs,,2022,9,In,TRUE,,long drives",
+    "2026,Jake,,2024,,In,TRUE,,",
+    "2026,Ghost,,2020,12,out,,,",
+    "2026,Blade,,2020,13,wd,,,",
+    "2026,Crash,,2020,14,declined,,,",
+  ].join("\n");
+  const fetchU = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldU }),
+  });
+  const domU = makeDom("", fetchU);
+  const docU = domU.window.document;
+  await until(() => docU.querySelectorAll("#lbBody .lb-row").length > 0);
+
+  const duckRow = [...docU.querySelectorAll("#lbBody .lb-row")]
+    .find(r => (r.querySelector(".lb-name")?.textContent || "").includes("Duck"));
+  const duckName = duckRow?.querySelector(".lb-name");
+  const gridTh = [...docU.querySelectorAll("#sgTable tr.sg-teamrow th.sg-team")]
+    .find(th => th.textContent.includes("Duck"));
+  check("U1: B-CAPTAIN — 4-player team's board row and grid sticky column show the captain ONLY (cap-marked), no partner names",
+    !!duckName && duckName.textContent.trim() === "Duck" && capMarked(duckName.innerHTML, "Duck")
+    && !!gridTh && gridTh.textContent.trim() === "Duck",
+    "board=" + JSON.stringify(duckName?.textContent) + " grid=" + JSON.stringify(gridTh?.textContent));
+
+  duckRow.click();
+  await until(() => !!docU.querySelector("#lbBody .card-drop"));
+  const rosterHead = docU.querySelector("#lbBody .card-drop .card-roster");
+  check("U2: B-CAPTAIN — tap-open card gains a roster header with ALL FOUR names, captain cap-marked",
+    !!rosterHead && ["Duck","Hammer","Sully","Tank"].every(n => rosterHead.textContent.includes(n))
+    && capMarked(rosterHead.innerHTML, "Duck"),
+    rosterHead ? rosterHead.textContent : "no .card-roster");
+  domU.window.close();
 }
 
 /* ---------------------------------------------------------------------
