@@ -467,9 +467,9 @@ The things an operator actually touches most years, in one place:
 | Change a team / its captain | **Field** tab, the `team` column — the captain's own row always has `player == team` |
 | Enter a Calcutta bid | **Calcutta** tab — one row per team lot: `team`, `owner`, `price`; tick `collected` once the pot's been paid |
 | Change the house rake | **Info** tab, `calcutta_rake` — a plain percentage number (`10` = 10%); if the real intent is "no rake," use `0` explicitly, don't leave it blank or type words |
-| Record a podium finish | **Champions** tab — place 1/2/3 (blank = 1st, old rows fine) + players = that team's roster, any separator. Backfill and the podium + draft badges light up. |
-| Add a scouting note | **Field** tab, strengths column — optional; shows on the public #draft board next to the player. |
-| Run draft night | **Field** tab, team column — filling a player's team cell IS drafting them; the site's Draft tab follows live. |
+| Record a podium finish | **Champions** tab — place 1/2/3 (blank = 1st, old rows fine) + players = that team's roster, any separator. Backfill history and the podium + draft badges light up. |
+| Add a scouting note | **Field** tab, `strengths` column — optional; shows on the public #draft board next to the player. |
+| Run draft night | **Field** tab, `team` column — filling a player's team cell IS drafting them; the site's Draft tab follows live; the pool empties as you type. |
 
 ## The GFY Admin vault
 

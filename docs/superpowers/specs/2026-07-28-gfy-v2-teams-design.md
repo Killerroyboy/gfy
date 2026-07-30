@@ -365,6 +365,7 @@ Context shift: teams are FOUR players (12–15 teams, ~48–60 attendees), not t
 - **U-POOL**: draft pool filter = year==activeSeason AND team blank AND status not in {out, wd}; current-season `declined` (legacy fallback) also excluded.
 - **B-CAPTAIN scope pin**: captain-only applies to the leaderboard rows AND the scorecard grid's sticky team column (width-critical at 15 teams); the tap-open card gains a roster header (all four names — currently missing); Calcutta/Money/Shame keep their existing joined labels (width acceptable, not §15 scope).
 - Tests: group U fixtures include at least one 4-player team; suite baseline at build time = 143.
+- **H-PLACE-PARSE (ratified at build)**: place parsing is parseInt-lenient — "1st"/"1 (tie)" count as that place (operator intent; ties still trip the dupe flag); only blank (=1st) and unparseable/out-of-range (flagged typo, never a win) differ in kind. Single-sourced in champPlace().
 
 ## §16 — crest v3: the Park Badge (Riley approved 2026-07-29 eve)
 

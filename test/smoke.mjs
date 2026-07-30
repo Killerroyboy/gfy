@@ -1933,7 +1933,7 @@ dom.window.close();
     && !!gridTh && gridTh.textContent.trim() === "Duck",
     "board=" + JSON.stringify(duckName?.textContent) + " grid=" + JSON.stringify(gridTh?.textContent));
 
-  duckRow.click();
+  duckRow?.click();
   await until(() => !!docU.querySelector("#lbBody .card-drop"));
   const rosterHead = docU.querySelector("#lbBody .card-drop .card-roster");
   check("U2: B-CAPTAIN — tap-open card gains a roster header with ALL FOUR names, captain cap-marked",
@@ -2081,7 +2081,7 @@ dom.window.close();
 {
   const py = readFileSync(path.join(ROOT, "tools", "make_template.py"), "utf8");
   check("U11: template generator carries the §15 columns — Champions place+players, Field strengths",
-    /"place",\s*"players"/.test(py.slice(py.indexOf('"Champions"')))
+    /"place",\s*"players"/.test(py.slice(py.indexOf('"Champions"'), py.indexOf('"Shame"')))
     && /"strengths"/.test(py.slice(py.indexOf('"Field"'), py.indexOf('"Scores"'))),
     "");
   const gsPolish = readFileSync(path.join(ROOT, "tools", "sheet-polish.gs"), "utf8");

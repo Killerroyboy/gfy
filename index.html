@@ -1410,7 +1410,7 @@ function renderField(){
       <div>${esc(r.player)}${badge}</div>
       <div class="fld-meta ${inField?"yes":""}">${st}</div>
       <div class="fld-meta ${paid?"yes":"no"}">${paid?"Paid":"Owing"}</div>
-      <div class="fld-num fld-hcp">${r.handicap||"—"}</div>
+      <div class="fld-num fld-hcp">${r.handicap?esc(r.handicap):"—"}</div>
     </div>`;
   };
 
