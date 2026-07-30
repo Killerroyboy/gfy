@@ -29,6 +29,7 @@ function onScoreFormSubmit(e){
     try {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const ans = namedAnswers_(e);                            // {team, round, hole, score} by header prefix
+      if (!ans.team){ markResponse_(e, "rejected: no Team answer — check the form's question titles"); return; }
       const year = firstTeeYear_(ss);                          // F-YEAR: the form serves the current event only
       if (!year){ markResponse_(e, "rejected: Info first_tee unreadable — check sheet setup"); return; }
       const roster = rosterTeams_(ss, year);                   // Map NORM(team) -> canonical casing, scoped to this year
@@ -36,12 +37,12 @@ function onScoreFormSubmit(e){
       const round = String(parseInt(ans.round, 10));
       const hole = parseInt(ans.hole, 10);
       const score = parseInt(ans.score, 10);
-      if (!team){ markResponse_(e, "rejected: team not in roster"); return; }
+      if (!team){ markResponse_(e, "rejected: team not in roster for " + year); return; }
       if (!(round === "1" || round === "2")){ markResponse_(e, "rejected: invalid round"); return; }
       if (!(hole >= 1 && hole <= 18)){ markResponse_(e, "rejected: invalid hole"); return; }
       if (!(score >= 1 && score <= 19)){ markResponse_(e, "rejected: invalid score"); return; }
-      writeScore_(ss, year, team, round, hole, score);
-      markResponse_(e, "applied");
+      const replaced = writeScore_(ss, year, team, round, hole, score);
+      markResponse_(e, replaced !== null ? "applied (replaced " + replaced + ")" : "applied");
     } catch(err) { markResponse_(e, "rejected: internal error — " + String(err).slice(0, 80)); }
   } finally { lock.releaseLock(); }
 }
@@ -84,12 +85,20 @@ function writeScore_(ss, year, team, round, hole, score){
   for (let i = 1; i < vals.length; i++){
     if (String(vals[i][yc]) === String(year) && NORM(vals[i][tc]) === NORM(team)
         && String(parseInt(vals[i][rc], 10)) === round){
-      sh.getRange(i + 1, hc + 1).setValue(score); return;
+      const cell = sh.getRange(i + 1, hc + 1);
+      const prev = cell.getValue();
+      cell.setValue(score);
+      // O-REPLACED (§19): record the displaced value, never arbitrate —
+      // last-write-wins stands; the mark is the mid-round audit trail.
+      // Number.isFinite guard: a hand-typed non-numeric cell must not
+      // produce "applied (replaced NaN)" — the spec says a different NUMBER.
+      const prevN = Number(prev);
+      return (prev !== "" && prev !== null && Number.isFinite(prevN) && prevN !== score) ? prevN : null;
     }
   }
   const row = new Array(head.length).fill("");
   row[yc] = year; row[tc] = team; row[rc] = parseInt(round, 10); row[hc] = score;
-  sh.appendRow(row);
+  sh.appendRow(row); return null;
 }
 function markResponse_(e, status){
   // audit trail on the response row: writes/extends a "status" column on the responses sheet

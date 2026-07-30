@@ -1,3 +1,4 @@
+/** @OnlyCurrentDoc */
 /**
  * GFY sheet polish — spec §13 E-SCRIPT/E-REPAIR/E-IDEM/E-VOCAB.
  * Paste into Extensions → Apps Script ON THE LIVE GFY SHEET and run polish().
@@ -115,6 +116,36 @@ function autofillCourse_(sh){
   }
 }
 function colLetter_(i){ let s = ""; while (i > 0){ s = String.fromCharCode(65 + ((i - 1) % 26)) + s; i = Math.floor((i - 1) / 26); } return s; }
+function seasonYear_(ss){
+  const info = ss.getSheetByName("Info"); if (!info) return null;
+  for (const r of info.getDataRange().getValues()){
+    if (String(r[0]).trim().toLowerCase() === "first_tee"){
+      const v = r[1];
+      const y = v instanceof Date ? v.getFullYear() : parseInt(String(v).slice(0, 4), 10);
+      return (y > 2000 && y < 2100) ? y : null;
+    }
+  }
+  return null;
+}
+function teamList_(ss){
+  // O-TEAMLIST (§19): distinct current-season Field.team values, sheet order,
+  // raw casing — paste-ready for the Form's Team dropdown. Blank team is
+  // normal pre-draft (E-TEAM): empty result is an honest state, never a flag.
+  const f = ss.getSheetByName("Field"); if (!f) return [];
+  const vals = f.getDataRange().getValues(); if (vals.length < 2) return [];
+  const head = vals[0].map(h => String(h).trim().toLowerCase());
+  const t = head.indexOf("team"), y = head.indexOf("year");
+  if (t < 0) return [];
+  const season = seasonYear_(ss);
+  const seen = {}; const out = [];
+  for (let i = 1; i < vals.length; i++){
+    if (y >= 0 && season !== null && String(vals[i][y]) !== String(season)) continue;
+    const raw = String(vals[i][t] || "").trim();
+    const k = raw.replace(/\s+/g, " ").toLowerCase();
+    if (raw && !seen[k]){ seen[k] = 1; out.push(raw); }
+  }
+  return out;
+}
 function buildStartHere_(ss){
   const name = "START HERE";
   let sh = ss.getSheetByName(name); if (!sh) sh = ss.insertSheet(name, 0);
@@ -135,6 +166,12 @@ function buildStartHere_(ss){
       : [["Collections: tick deposits on", link("Field")], ["Invites: tick invited/responded on", link("Invites")], ["Rooms:", link("Rooms")]]),
     ["", ""],
     ["Scoring form URL (paste once):", ""],
+    ["", ""],
+    ["FORM TEAM LIST — copy the lines below into the scoring form's Team dropdown (a multi-line paste becomes one option per line):", ""],
+    ...(function(){ const t = teamList_(ss);
+      return t.length ? t.map(function(n){ return [n, ""]; })
+                      : [["(no teams yet — the draft fills this in; re-run polish() after)", ""]]; })(),
+    ["Team list derived from Field when polish() last ran — re-run polish() after the draft to refresh.", ""],
     ["", ""],
     ["COLOR LEGEND", ""],
     ["Red row = deposit unpaid", ""], ["Gold tint = rookie (since == this season)", ""], ["Orange tint = Rooms name not on Field", ""],

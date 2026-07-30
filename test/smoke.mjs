@@ -2090,6 +2090,22 @@ dom.window.close();
     "");
 }
 
+/* ---------- J: ops hardening (§19) ---------- */
+{
+  const polishSrc = readFileSync(path.join(ROOT, "tools", "sheet-polish.gs"), "utf8");
+  const trigSrc = readFileSync(path.join(ROOT, "tools", "sheet-triggers.gs"), "utf8");
+  check("J1: O-SCOPE — BOTH .gs files carry @OnlyCurrentDoc (repo copies are paste-safe)",
+    polishSrc.includes("@OnlyCurrentDoc") && trigSrc.includes("@OnlyCurrentDoc"), "");
+  check("J2: O-REJECT — rejections name their real cause: missing-Team-answer message + year-scoped roster miss",
+    trigSrc.includes('rejected: no Team answer') && /rejected: team not in roster for " \+ year/.test(trigSrc), "");
+  check("J3: O-REPLACED — overwrite audit: prior value read before setValue, applied (replaced N) mark, semantics recorded not arbitrated",
+    /getValue\(\)[^]*setValue\(score\)/.test(trigSrc.split("function writeScore_")[1] || "")
+    && trigSrc.includes('"applied (replaced " + replaced + ")"'), "");
+  check("J4: O-TEAMLIST — polish writes the FORM TEAM LIST block: derived label, honest empty state, Field-derived, anchor row untouched",
+    polishSrc.includes("FORM TEAM LIST") && polishSrc.includes("no teams yet")
+    && polishSrc.includes("Scoring form URL (paste once):") && /function teamList_/.test(polishSrc), "");
+}
+
 /* ---------------------------------------------------------------------
    Group Y: crest v3 Park Badge (spec §16). Y1 = outline enforcement (the
    hero's only <text> is the live EST ribbon), Y2 = MARK_PATH single
