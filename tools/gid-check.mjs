@@ -34,6 +34,11 @@ export function parseTabMap(html){
 async function main(){
   const { pub, gids } = readConfig(readFileSync(path.join(REPO, "config.js"), "utf8"));
   if (!pub){ console.log("config.js has no PUB_ID — is the sheet wired?"); process.exitCode = 2; return; }
+  const cfgKeys = Object.keys(gids);
+  if (!cfgKeys.length){
+    console.log("config.js GID block did not parse — nothing verified (this is a tool failure, not a clean result)");
+    process.exitCode = 2; return;
+  }
   let html;
   try {
     const res = await fetch(`https://docs.google.com/spreadsheets/d/e/${pub}/pubhtml`);
@@ -49,7 +54,7 @@ async function main(){
     process.exitCode = 2; return;
   }
   let bad = 0;
-  console.log(`pubhtml tabs found: ${live.size}`);
+  console.log(`pubhtml tabs found: ${live.size} · config gids: ${cfgKeys.length}`);
   for (const [tab, gid] of Object.entries(gids)){
     const liveGid = live.get(norm(tab)) ?? live.get(norm(tab.replace(/_/g, " ")));
     if (liveGid === undefined){ console.log(`  ${tab}: gid ${gid} — NO TAB of that name in pubhtml`); bad++; }

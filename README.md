@@ -39,7 +39,7 @@ tab has its own deep link (`yoursite.com/#calcutta`, `#nextyear`, `#rooms`,
    it up by mistake) — **without changing any cell values**. It also sets up
    the warn-mode status dropdowns, Field/Rooms coloring, and builds the
    START HERE tab, all in the same run. (Rooms has no checkbox columns —
-   nothing to do there.) Safe to re-run any time (see **Polish script**,
+   no checkbox step needed there.) Safe to re-run any time (see **Polish script**,
    below, for re-running after edits).
 
    **If the boxes come in unticked after `polish()` runs** — whether Sheets
@@ -157,8 +157,8 @@ Screen*. It installs like an app, icon and all.
 Everything published from the main GFY sheet is public — that's the whole
 mechanism this site runs on (see the warning under "The invite list,"
 below). Two kinds of information can never go on that sheet: **email
-addresses**, and **why someone isn't getting invited back**. Both live in a
-second, completely separate Google Sheet — the **GFY Admin** sheet (its
+addresses**, and **why someone isn't getting invited back**. Both live in
+**one place**: a second, completely separate Google Sheet — the **GFY Admin** sheet (its
 template: `tools/gfy-admin-template.xlsx` → Drive → Open as Google Sheet) —
 that is **never** published to the web, ever.
 
@@ -279,7 +279,9 @@ Set it up once before the event:
 2. **Link responses**: In the form settings, click **Responses** → link responses to the GFY spreadsheet (Responses → Link to Sheets → Select existing spreadsheet → pick the GFY sheet file).
 3. **Paste the triggers**: Extensions → Apps Script (on the LIVE sheet) →
    copy `tools/sheet-triggers.gs` from the repo and paste it into the script
-   editor (same project as the polish script is fine). Save, then run `setup()`
+   editor (same project as the polish script is fine) — use **File → New →
+   Script file** and paste there; do **not** clear or paste over `Code.gs`,
+   that's the polish script. Save, then run `setup()`
    from the function dropdown and click **Run**. Authorize when prompted.
 4. **Paste the form URL**: Get the form's shareable link (blue **Send** button
    in the form editor → copy the short URL). Paste it into the cell to the
@@ -309,7 +311,7 @@ the team by name, case-insensitive) and marks the response row with a status:
 - **rejected: busy — resubmit** — a submission collided with another (both
   sent at the exact same moment). Resubmit; the document lock ensures they
   serialize.
-- **rejected: internal error** — usually means a tab was renamed or is missing (the writer needs Scores, Field, and Info with their standard headers) — check those, and see Extensions → Apps Script → Executions for the exact error.
+- **rejected: internal error** — usually means a tab was renamed or is missing (the writer needs Scores, Field, and Info with their standard headers) — check those, and see Extensions → Apps Script → Executions for the exact error. The status cell itself carries the first 80 characters of the error.
 
 The responses sheet (auto-created by Google Forms) has a `status` column
 added by the trigger — open it to audit which submissions applied and which

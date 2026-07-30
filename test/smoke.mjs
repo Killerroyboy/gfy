@@ -2125,7 +2125,8 @@ dom.window.close();
   check("J8: O-GIDCHECK — print-only (no config write), fail-loud on unparseable pubhtml, shares presend's readConfig",
     gcSrc.length > 0 && !/writeFileSync|createWriteStream/.test(gcSrc)
     && /could not parse the tab map/.test(gcSrc)
-    && /import\s*\{[^}]*readConfig[^}]*\}\s*from/.test(gcSrc), "");
+    && /import\s*\{[^}]*readConfig[^}]*\}\s*from/.test(gcSrc)
+    && /GID block did not parse/.test(gcSrc), "");
   check("J9: O-ADMINPATH — __file__-resolved output, __main__ guard, READ ME teaches --vault-url",
     /__file__/.test(adminSrc) && /__main__/.test(adminSrc) && adminSrc.includes("--vault-url"), "");
 }
