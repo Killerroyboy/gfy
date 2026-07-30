@@ -357,3 +357,11 @@ Context shift: teams are FOUR players (12–15 teams, ~48–60 attendees), not t
 - **B-CAPTAIN (Riley ruled — supersedes §5.2's all-names row label for team size > 2)**: the leaderboard row shows the CAPTAIN's name only (ᶜ style retained); the full roster lives in the tap-open card and Field view. Card header shows all four. teamLabel's joined form remains for surfaces where width allows (card, calcutta lots).
 - **Entry at scale**: no change needed — the scoring Form is per-team-per-hole; 12–15 scorekeepers submit independently (F-LOCK serializes).
 - Template: Champions + Field gain the new columns with obviously-sample rows; fixtures likewise (synthetic). Tests: new group U (podium render incl. legacy blank-place row; draft pool/drafted split; win-badge derivation; captain-only board label at 4-player fixture).
+
+### §15 hardening (pressure test 2026-07-29 eve + Riley naming rule)
+- **N-FULLNAMES (Riley ruled)**: Field.player, Invites.player, Rooms.player (and the vault's Contacts.player) carry FIRST + LAST names and must match each other exactly (S-KEY normalization applies). Scores.team and Pairings rows follow the team label, not player names — short forms fine there. README/START HERE state this convention.
+- **U-TOKENS**: Champions.players parsing = split on separators (comma, ·, /, &, |, " and "), nkey each token, EXACT token match — never substring (Jake must not match Jakeb).
+- **U-DUPES**: duplicate same-year places render ALL rows encountered + a health-strip flag; no silent de-dup, no fabricated podium.
+- **U-POOL**: draft pool filter = year==activeSeason AND team blank AND status not in {out, wd}; current-season `declined` (legacy fallback) also excluded.
+- **B-CAPTAIN scope pin**: captain-only applies to the leaderboard rows AND the scorecard grid's sticky team column (width-critical at 15 teams); the tap-open card gains a roster header (all four names — currently missing); Calcutta/Money/Shame keep their existing joined labels (width acceptable, not §15 scope).
+- Tests: group U fixtures include at least one 4-player team; suite baseline at build time = 143.
