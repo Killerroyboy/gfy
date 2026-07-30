@@ -2090,6 +2090,74 @@ dom.window.close();
     "");
 }
 
+/* ---------- J: ops hardening (§19) ---------- */
+{
+  const polishSrc = readFileSync(path.join(ROOT, "tools", "sheet-polish.gs"), "utf8");
+  const trigSrc = readFileSync(path.join(ROOT, "tools", "sheet-triggers.gs"), "utf8");
+  check("J1: O-SCOPE — BOTH .gs files carry @OnlyCurrentDoc (repo copies are paste-safe)",
+    polishSrc.includes("@OnlyCurrentDoc") && trigSrc.includes("@OnlyCurrentDoc"), "");
+  check("J2: O-REJECT — rejections name their real cause: missing-Team-answer message + year-scoped roster miss",
+    trigSrc.includes('rejected: no Team answer') && /rejected: team not in roster for " \+ year/.test(trigSrc), "");
+  check("J3: O-REPLACED — overwrite audit: prior value read before setValue, applied (replaced N) mark, semantics recorded not arbitrated",
+    /getValue\(\)[^]*setValue\(score\)/.test(trigSrc.split("function writeScore_")[1] || "")
+    && trigSrc.includes('"applied (replaced " + replaced + ")"'), "");
+  // J4 ADAPTED (v2.6 reconciliation merge, scorer-v26 x v2.1-invites): the target's
+  // O-TEAMLIST wrote a SECOND, redundant team-list block ("FORM TEAM LIST" +
+  // teamList_/seasonYear_) alongside the branch's pre-existing "FORM TEAM DROPDOWN"
+  // block (startHereRoster_/startHereYear_, typeof-guarded delegation to
+  // sheet-triggers.gs's canonical rosterTeams_/firstTeeYear_ when pasted into the
+  // same Apps Script project). Per the reconciliation checklist these collapse to
+  // ONE block — the branch's naming + derivation wins structurally. The original
+  // J4 also asserted the retired "Scoring form URL (paste once):" START HERE
+  // anchor, which the branch deliberately retired (config-home migration:
+  // score_endpoint/form_url now live on the Info tab, with a content-anchored
+  // value-preservation row carrying forward anything already pasted in the old
+  // slot). J4 is rewritten to assert that migration's replacement reality instead
+  // of the retired cell, and to assert the collapse actually happened (one
+  // surviving block, no leftover redundant derivation).
+  check("J4: (ADAPTED, v2.6 reconciliation) FORM TEAM DROPDOWN is the ONE surviving team-list block (O-TEAMLIST's FORM TEAM LIST + teamList_ collapsed into it); the retired 'Scoring form URL (paste once)' anchor was superseded by the config-home migration (moved-to-Info label + value-preservation row)",
+    polishSrc.includes("FORM TEAM DROPDOWN") && polishSrc.includes("Scoring config moved")
+    && polishSrc.includes("old value preserved below, copy it to Info")
+    && !polishSrc.includes("FORM TEAM LIST") && !/function teamList_/.test(polishSrc), "");
+}
+{
+  const preSrc = readFileSync(path.join(ROOT, "tools", "presend-check.mjs"), "utf8");
+  check("J5: O-EXTRAGID — repeatable --extra-gid name=gid, strict validation + collision guard exit 2, merged into the watchdog loop, exported readConfig",
+    preSrc.includes('"--extra-gid"') && /--extra-gid needs name=gid/.test(preSrc)
+    && /collides with a config GID key/.test(preSrc)
+    && /\{\s*\.\.\.gids,\s*\.\.\.extraGids\s*\}/.test(preSrc)
+    && preSrc.includes("export function readConfig"), "");
+  check("J6: O-VPROBE-LOUD — missing --vault-url prints the NOT-proven-unpublished warning (in the else of the vaultUrl gate)",
+    preSrc.includes("V-PROBE SKIPPED — no --vault-url given; the vault is NOT proven unpublished this run.")
+    && /\}\s*else\s*\{[^{}]*V-PROBE SKIPPED/.test(preSrc), "");
+}
+{
+  let ctSrc = ""; try { ctSrc = readFileSync(path.join(ROOT, "tools", "check_template.py"), "utf8"); } catch {}
+  let gcSrc = ""; try { gcSrc = readFileSync(path.join(ROOT, "tools", "gid-check.mjs"), "utf8"); } catch {}
+  const adminSrc = readFileSync(path.join(ROOT, "tools", "make_admin_template.py"), "utf8");
+  check("J7: O-TEMPLATECHECK — read-only content diff (no xlsx write anywhere in the checker)",
+    ctSrc.length > 0 && !ctSrc.includes(".save(") && /load_workbook/.test(ctSrc), "");
+  check("J8: O-GIDCHECK — print-only (no config write), fail-loud on unparseable pubhtml, shares presend's readConfig",
+    gcSrc.length > 0 && !/writeFileSync|createWriteStream/.test(gcSrc)
+    && /could not parse the tab map/.test(gcSrc)
+    && /import\s*\{[^}]*readConfig[^}]*\}\s*from/.test(gcSrc)
+    && /GID block did not parse/.test(gcSrc), "");
+  check("J9: O-ADMINPATH — __file__-resolved output, __main__ guard, READ ME teaches --vault-url",
+    /__file__/.test(adminSrc) && /__main__/.test(adminSrc) && adminSrc.includes("--vault-url"), "");
+}
+{
+  const readme = readFileSync(path.join(ROOT, "README.md"), "utf8");
+  // J10 ADAPTED (v2.6 reconciliation merge): same collapse as J4 above — README's
+  // operational instructions must point at the block that actually exists on the
+  // sheet (FORM TEAM DROPDOWN), not the superseded "FORM TEAM LIST" name from
+  // O-TEAMLIST, which would otherwise send an operator hunting START HERE for a
+  // block that no longer exists.
+  check("J10: (ADAPTED, v2.6 reconciliation) §19 docs — README teaches --extra-gid responses scan, check-template, check-gids, the surviving FORM TEAM DROPDOWN block, and has ONE vault section with a pointer",
+    readme.includes("--extra-gid responses=") && readme.includes("npm run check-template")
+    && readme.includes("npm run check-gids") && readme.includes("FORM TEAM DROPDOWN")
+    && (readme.match(/^## .*[Vv]ault/gm) || []).length === 1, "");
+}
+
 /* ---------------------------------------------------------------------
    Group Y: crest v3 Park Badge (spec §16). Y1 = outline enforcement (the
    hero's only <text> is the live EST ribbon), Y2 = MARK_PATH single

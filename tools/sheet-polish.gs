@@ -1,3 +1,4 @@
+/** @OnlyCurrentDoc */
 /**
  * GFY sheet polish — spec §13 E-SCRIPT/E-REPAIR/E-IDEM/E-VOCAB.
  * Paste into Extensions → Apps Script ON THE LIVE GFY SHEET and run polish().

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* GFY pre-send checker — spec §13 V-MATCH/V-PATH/V-PROBE.
-   Usage:  npm run presend -- <vault-contacts.csv> [--vault-url <admin sheet url>]
+   Usage:  npm run presend -- <vault-contacts.csv> [--vault-url <url>] [--extra-gid name=gid ...]
    Output: stdout ONLY. This output can contain real addresses — never redirect
    it to a file, paste it into an issue/PR, or commit it anywhere. */
 import fs, { readFileSync, realpathSync } from "node:fs";
@@ -113,6 +113,17 @@ export function scanHeaderLine(tabName, text){
   return EMAILISH.test(firstLine) ? [`${tabName} HEADER contains email-like text`] : [];
 }
 
+// Shared with tools/gid-check.mjs (§19 O-GIDCHECK). Strips // line-comments
+// FIRST (MINOR-9: config.js's own comments carry worked examples that a
+// naive first-match would grab), then extracts PUB_ID and the GID block.
+export function readConfig(cfgText){
+  const cfgCode = String(cfgText).replace(/\/\/[^\n]*/g, "");
+  const pub = (cfgCode.match(/PUB_ID:\s*"([^"]+)"/) || [])[1];
+  const gidBlock = (cfgCode.match(/GID:\s*\{[^}]*\}/) || [])[0] || "";
+  const gids = {}; [...gidBlock.matchAll(/(\w+):\s*"(\d+)"/g)].forEach(m => gids[m[1]] = m[2]);
+  return { pub, gids };
+}
+
 // CRITICAL-2: a fetch that 400s (or otherwise fails) but still returns a body
 // that happens to parse as CSV-shaped rows must never be treated as data.
 // Check res.ok AND that the content-type is actually text/csv; throw with the
@@ -141,8 +152,26 @@ async function main(){
     vaultUrl = args.splice(urlIx, 2)[1];
   }
 
+  // O-EXTRAGID (§19): scan extra published tabs the config deliberately does
+  // not know about (the Form-responses tab). CLI-only by design — a 14th GID
+  // key would break the site's 13-tab contract. Names colliding with real
+  // config keys are REFUSED: the spread would silently replace that tab's
+  // scan, which violates skipped-is-never-clean.
+  const extraGids = {};
+  for (let ix; (ix = args.indexOf("--extra-gid")) >= 0; ){
+    const val = args[ix + 1];
+    if (!val || val.startsWith("-") || !/^[a-z_]\w*=\d+$/i.test(val)){
+      console.log("ERROR: --extra-gid needs name=gid (e.g. --extra-gid responses=590385167)");
+      process.exitCode = 2;
+      return;
+    }
+    const [n, g] = val.split("=");
+    extraGids[n] = g;
+    args.splice(ix, 2);
+  }
+
   const vaultFile = args[0];
-  if (!vaultFile){ console.log("usage: npm run presend -- <vault-contacts.csv> [--vault-url <url>]"); process.exitCode = 2; return; }
+  if (!vaultFile){ console.log("usage: npm run presend -- <vault-contacts.csv> [--vault-url <url>] [--extra-gid name=gid ...]"); process.exitCode = 2; return; }
   if (insideRepo(vaultFile)){
     console.log("REFUSED: " + vaultFile + " is inside the public repo working tree.");
     console.log("A stray `git add` would publish every address. Download the vault export somewhere else (e.g. ~/Downloads) and re-run.");
@@ -161,19 +190,16 @@ async function main(){
     process.exitCode = 1;
     return;
   }
-  const cfg = readFileSync(path.join(REPO, "config.js"), "utf8");
-  // MINOR-9 (+ same defect on PUB_ID, found live): config.js's own comments
-  // show a worked "Example: PUB_ID: ..." / "Example: GID: { ... }" line
-  // BEFORE the real assignment. A naive match() grabs the FIRST occurrence —
-  // i.e. the comment's example token/gids, not the real ones. Strip //
-  // line-comments before extracting anything, then scope the gid-pair regex
-  // to just the GID:{...} block so it can't pick up a stray pair from a
-  // different comment either.
-  const cfgCode = cfg.replace(/\/\/[^\n]*/g, "");
-  const pub = (cfgCode.match(/PUB_ID:\s*"([^"]+)"/) || [])[1];
-  const gidBlock = (cfgCode.match(/GID:\s*\{[^}]*\}/) || [])[0] || "";
-  const gids = {}; [...gidBlock.matchAll(/(\w+):\s*"(\d+)"/g)].forEach(m => gids[m[1]] = m[2]);
+  const { pub, gids } = readConfig(readFileSync(path.join(REPO, "config.js"), "utf8"));
   if (!pub || !gids.invites){ console.log("config.js has no PUB_ID / invites gid — is the sheet wired?"); process.exitCode = 1; return; }
+
+  for (const n of Object.keys(extraGids)){
+    if (n in gids || n === "PUB_ID"){
+      console.log(`ERROR: --extra-gid ${n} collides with a config GID key — it would replace that tab's scan, not add one`);
+      process.exitCode = 2;
+      return;
+    }
+  }
   const csvUrl = g => `https://docs.google.com/spreadsheets/d/e/${pub}/pub?gid=${g}&single=true&output=csv`;
 
   // CRITICAL-2: the Invites fetch is load-bearing for the whole diff — if it
@@ -206,7 +232,7 @@ async function main(){
   console.log("\n== published-content watchdog ==");
   let dirty = 0;
   let skipped = 0;
-  for (const [tab, gid] of Object.entries(gids)){
+  for (const [tab, gid] of Object.entries({ ...gids, ...extraGids })){
     if (!gid || tab === "PUB_ID") continue;
     try {
       const text = await fetchCsv(csvUrl(gid));
@@ -256,6 +282,8 @@ async function main(){
         vProbeFailed = true;
       }
     }
+  } else {
+    console.log("\nV-PROBE SKIPPED — no --vault-url given; the vault is NOT proven unpublished this run.");
   }
 
   process.exitCode = (d.dniViolations.length || d.dniUnpaired.length || dirty || skipped || vProbeFailed) ? 1 : 0;

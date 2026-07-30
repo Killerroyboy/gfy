@@ -24,17 +24,29 @@ tab has its own deep link (`yoursite.com/#calcutta`, `#nextyear`, `#rooms`,
    `tools/gfy-template.xlsx` (drag it into the window).
 2. Double-click the uploaded file, then **File > Save as Google Sheets**.
    Work in the Google Sheets copy from here on; the .xlsx can be deleted.
-3. **Turn the sample TRUE/FALSE cells into real checkboxes** (one-time, and
-   only possible now that you're in a Google Sheet — an xlsx file can't hold
-   a Sheets checkbox, so the template ships the text values instead). Select
-   the `deposit` column on Field, the `settled` column on Ledger, the
+3. **Run the polish script** to set up checkboxes, dropdowns, and colors —
+   the template ships its checkbox columns as plain TRUE/FALSE text (only
+   possible to fix now that you're in a Google Sheet; an xlsx file can't
+   hold a real Sheets checkbox). In the Google Sheet: **Extensions > Apps
+   Script**, clear the placeholder code, paste in the full contents of
+   `tools/sheet-polish.gs` from this repo as `Code.gs`, then run `polish()`
+   from the function dropdown and click **Run**. Authorize when prompted.
+   `polish()` **applies checkbox validation** to the checkbox columns — the
+   `deposit` column on Field, the `settled` column on Ledger, the
    `collected` column on Calcutta, and the `invited`/`responded` columns on
-   Invites, one at a time: **Insert > Checkbox**. Sheets converts the
-   existing TRUE/FALSE values into checked/unchecked boxes in place —
-   nothing else to redo. (Rooms has no checkbox columns — skip it here.
-   **NOT `handicap`** either — that column is a typed number, not a
-   checkbox; the polish script repairs it if a broad column-conversion
-   swept it up by mistake.)
+   Invites (**NOT `handicap`** — that column is a typed number, not a
+   checkbox; the polish script repairs it if a broad column-conversion swept
+   it up by mistake) — **without changing any cell values**. It also sets up
+   the warn-mode status dropdowns, Field/Rooms coloring, and builds the
+   START HERE tab, all in the same run. (Rooms has no checkbox columns —
+   no checkbox step needed there.) Safe to re-run any time (see **Polish script**,
+   below, for re-running after edits).
+
+   **If the boxes come in unticked after `polish()` runs** — whether Sheets
+   renders an imported TRUE/FALSE string as a ticked box depends on the
+   xlsx→Sheets import and hasn't been checked against the real thing — select
+   the data cells of the affected column(s), one at a time, and **Insert >
+   Checkbox** by hand. **Never** the `handicap` column.
 4. The sheet has 13 tabs along the bottom (Info, Course, Field, Scores, …,
    Invites, Rooms). Each has a bold header row and a few sample rows showing
    the shape.
@@ -140,8 +152,23 @@ Screen*. It installs like an app, icon and all.
 
 ## The Admin vault (emails)
 
-Email addresses live in ONE place: the **GFY Admin** sheet (its template:
-`tools/gfy-admin-template.xlsx` → Drive → Open as Google Sheet). Three rules:
+Everything published from the main GFY sheet is public — that's the whole
+mechanism this site runs on (see the warning under "The invite list,"
+below). Two kinds of information can never go on that sheet: **email
+addresses**, and **why someone isn't getting invited back**. Both live in
+**one place**: a second, completely separate Google Sheet — the **GFY Admin** sheet (its
+template: `tools/gfy-admin-template.xlsx` → Drive → Open as Google Sheet) —
+that is **never** published to the web, ever.
+
+The GFY Admin sheet holds:
+
+- Every email address you have for everyone, one row per person — as many
+  addresses per person as you have (`email_alt` for a second one, work,
+  personal, whatever).
+- A do-not-invite (DNI) list: name + the reason, in plain language, so
+  future-you remembers why next year.
+
+Three rules:
 
 1. **Never** click File → Share → Publish to web on the Admin sheet. Doing so
    makes every address and do-not-invite reason public.
@@ -150,15 +177,31 @@ Email addresses live in ONE place: the **GFY Admin** sheet (its template:
 3. The public Invites tab tracks *who/when/status* — names only, never an
    email address in any cell (the checker below watches for this).
 
+**The pairing rule.** Whenever you add someone to the DNI list in GFY Admin,
+also set `status` to `out` on their Invites row in the public sheet, in the
+same sitting. The two rows are a pair: GFY Admin says *why* (privately), the
+public Invites row says *that* (so the site actually suppresses them). One
+without the other is a gap — DNI-only means the site still quietly counts
+them as needing an invite; Invites-only means next year's operator has an
+exclusion with no memory of why.
+
 ### Before every send round
 
 1. Admin sheet → Contacts tab → File → Download → **CSV**. Save it OUTSIDE
    this repo folder (e.g. Downloads — the checker refuses in-repo paths).
-2. `npm run presend -- ~/Downloads/<the file>.csv --vault-url <admin sheet URL>`
+2. `npm run presend -- ~/Downloads/<the file>.csv --vault-url <admin sheet URL> [--extra-gid responses=<gid>]`
+   — the optional `--extra-gid` scans an extra published tab (e.g. the
+   Form's responses tab) for leaked addresses; `npm run check-gids` prints
+   that gid on its "no config entry" line if you don't have it handy.
 3. Fix anything it lists (do-not-invite violations block. Unpaired
    do-not-invite names block too — give them their `out` row on Invites
    first so the site suppresses them; "missing from vault" means collect
    that address first). Log each send in SendLog.
+
+The pre-send checker automates the DNI cross-check for you: everyone marked
+DNI in GFY Admin should be `out` in Invites, and nobody about to get an
+invite email should be sitting on the DNI list — it flags DNI names with
+active invite rows AND unpaired DNI names missing their `out` row.
 
 Skipped the checker? Then at minimum re-read the do_not_invite column
 before sending. That list exists because someone once had a reason.
@@ -266,7 +309,9 @@ runs through a captain's link or the form now.)
 ### One-time setup
 
 1. **Create the form** with these four questions, in order:
-   - **Team** (dropdown, menu items hand-filled at draft night — one item per team captain)
+   - **Team** (dropdown, menu items hand-filled at draft night — one item per
+     team captain; copy the FORM TEAM DROPDOWN block from START HERE, built by
+     `polish()` from the season's Field tab, one line per option)
    - **Round** (dropdown, menu items: `1`, `2`)
    - **Hole** (dropdown, menu items: `1`, `2`, `3`, …, `18`)
    - **Team score** (Number, validation: "Between 1 and 19")
@@ -274,11 +319,15 @@ runs through a captain's link or the form now.)
    In the form's Settings, make sure **Collect email addresses is set to
    'Do not collect'** and 'Restrict to users in your organization / require
    sign-in' stays OFF — collecting emails would publish every submitter's
-   address on the public responses tab, which no checker scans.
+   address on the public responses tab. The 'Do not collect' setting stays
+   the primary defense; `npm run presend -- … --extra-gid responses=<gid>`
+   can now scan that tab after the fact (detection, not prevention).
 2. **Link responses**: In the form settings, click **Responses** → link responses to the GFY spreadsheet (Responses → Link to Sheets → Select existing spreadsheet → pick the GFY sheet file).
 3. **Paste the triggers**: Extensions → Apps Script (on the LIVE sheet) →
    copy `tools/sheet-triggers.gs` from the repo and paste it into the script
-   editor (same project as the polish script is fine). Save, then run `setup()`
+   editor (same project as the polish script is fine) — use **File → New →
+   Script file** and paste there; do **not** clear or paste over `Code.gs`,
+   that's the polish script. Save, then run `setup()`
    from the function dropdown and click **Run**. Authorize when prompted.
    `setup()` checks the Scores tab's headers first and refuses to install
    anything (throws, no triggers touched) if it's shaped wrong — a `team`
@@ -370,13 +419,23 @@ the team by name, case-insensitive) — the form trigger marks its response row
 with a status, and the site scorer reads the equivalent verdict back straight
 from the server response:
 - **applied** / **ok** — score was valid and written to Scores.
-- **rejected: …** — the submission failed (team not found, hole out of range,
-  invalid score, a round total already on that row, etc.). Resubmit the hole
-  with corrections — last write wins, so a resubmit overwrites the old one.
+- **`applied (replaced <old>)`** — same as above, but a DIFFERENT number
+  was already sitting in that cell; the mark preserves the value it
+  displaced. Last write still wins — this is an audit trail, not a block.
+- **`rejected: no Team answer — check the form's question titles`** — the
+  writer couldn't match a "Team" question in the submission at all, usually
+  because a question title got renamed.
+- **`rejected: team not in roster for <year>`** — the Team answer didn't
+  match any captain in that year's Field tab. This also self-diagnoses a
+  stale `first_tee` in Info: if the wrong year is scoping the roster lookup,
+  every submission rejects this way — check **Info** first.
+- **rejected: …** — other validation failures (invalid round, hole out of
+  range, invalid score, a round total already on that row, Info first_tee
+  unreadable, etc.). Resubmit the hole
 - **rejected: busy — resubmit** — a submission collided with another (both
   sent at the exact same moment). Resubmit; the document lock ensures they
   serialize.
-- **rejected: internal error** — usually means a tab was renamed or is missing (the writer needs Scores, Field, and Info with their standard headers) — check those, and see Extensions → Apps Script → Executions for the exact error.
+- **rejected: internal error** — usually means a tab was renamed or is missing (the writer needs Scores, Field, and Info with their standard headers) — check those, and see Extensions → Apps Script → Executions for the exact error. The status cell itself carries the first 80 characters of the error.
 
 The responses sheet (auto-created by Google Forms) has a `status` column
 added by the trigger — open it to audit which submissions applied and which
@@ -579,7 +638,7 @@ their partial card and their Calcutta lot both stay exactly as they were.
 | Symptom | Likely cause |
 |---|---|
 | Empty leaderboard, sheet has data | Wrong PUB_ID (edit-URL id instead of the published `2PACX-…` id) — see step 3 |
-| One section empty, rest fine | That tab's gid is wrong or missing in `config.js` |
+| One section empty, rest fine | That tab's gid is wrong or missing in `config.js` — run `npm run check-gids` to diff `config.js` against the live sheet's tabs |
 | Team missing from board | The captain's name in Scores' `team` column doesn't match any team in Field — check the health strip, it names the mismatch |
 | Edits don't show up | Google republishes on a short delay — wait ~5 min; also check File > Share > Publish to web is still active |
 | Album shows a permission error | Drive folder not shared "Anyone with the link" — step 5 |
@@ -599,39 +658,10 @@ The things an operator actually touches most years, in one place:
 | Change the house rake | **Info** tab, `calcutta_rake` — a plain percentage number (`10` = 10%); if the real intent is "no rake," use `0` explicitly, don't leave it blank or type words |
 | Record a podium finish | **Champions** tab — place 1/2/3 (blank = 1st, old rows fine) + players = that team's roster, any separator. Backfill history and the podium + draft badges light up. |
 | Add a scouting note | **Field** tab, `strengths` column — optional; shows on the public #draft board next to the player. |
-| Run draft night | **Field** tab, `team` column — filling a player's team cell IS drafting them; the site's Draft tab follows live; the pool empties as you type. |
+| Run draft night | **Field** tab, `team` column — filling a player's team cell IS drafting them; the site's Draft tab follows live; the pool empties as you type. Afterward, re-run `polish()` and copy the FORM TEAM DROPDOWN block from START HERE into the Form's Team dropdown. |
 
-## The GFY Admin vault
-
-Everything published from the main GFY sheet is public — that's the whole
-mechanism this site runs on (see the warning under "The invite list,"
-above). Two kinds of information can never go on that sheet: **email
-addresses**, and **why someone isn't getting invited back**. Both live in a
-second, completely separate Google Sheet — call it "GFY Admin" — that is
-**never** published to the web, ever.
-
-The GFY Admin sheet holds:
-
-- Every email address you have for everyone, one row per person — as many
-  addresses per person as you have (work, personal, whatever).
-- A do-not-invite (DNI) list: name + the reason, in plain language, so
-  future-you remembers why next year.
-
-**The pairing rule.** Whenever you add someone to the DNI list in GFY
-Admin, also set `status` to `out` on their Invites row in the public
-sheet, in the same sitting. The two rows are a pair: GFY Admin says *why*
-(privately), the public Invites row says *that* (so the site actually
-suppresses them). One without the other is a gap — DNI-only means the
-site still quietly counts them as needing an invite; Invites-only means
-next year's operator has an exclusion with no memory of why.
-
-**Before sending invites**, cross-check the two sheets against each other
-— `npm run presend` does this for you (see "Before every send round"
-above): everyone marked DNI in GFY Admin should be `out` in Invites, and
-nobody about to get an invite email should be sitting on the DNI list.
-The pre-send checker automates this cross-check — see "Before every send
-round" above; it flags DNI names with active invite rows AND unpaired DNI
-names missing their `out` row.
+**Vault:** see "The Admin vault (emails)" further up — one authoritative
+section.
 
 ## For whoever maintains this
 
@@ -641,7 +671,10 @@ config.js                     the only file you edit routinely
 tools/make_template.py        regenerates tools/gfy-template.xlsx
 tools/make_admin_template.py  regenerates tools/gfy-admin-template.xlsx (the never-published vault template)
 tools/sheet-polish.gs         Apps Script sheet hygiene — checkboxes, dropdowns, Course autofill (see above)
+tools/sheet-triggers.gs       Apps Script live-scoring triggers — form writer + paid_date stamp (see above)
 tools/presend-check.mjs       the pre-send checker — vault diff, DNI check, email-leak watchdog (see above)
+tools/check_template.py       drift check: xlsx templates vs their generators (npm run check-template)
+tools/gid-check.mjs           drift check: config.js gids vs the live published sheet (npm run check-gids)
 fixtures/                     sample CSVs mirroring the 13 tabs, incl. edge cases
 test/smoke.mjs                headless render test against the fixtures
 ```

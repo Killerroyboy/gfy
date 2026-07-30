@@ -74,8 +74,23 @@ function onScoreFormSubmit(e){
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const ans = namedAnswers_(e);                              // {team, round, hole, score} by header prefix
+    // O-REJECT (§19): a blank Team answer means the form's question titles
+    // drifted (namedAnswers_ matches by title prefix) — say so directly,
+    // rather than falling through to applyScore_'s generic roster-miss path.
+    if (!ans.team){ markResponse_(e, "rejected: no Team answer — check the form's question titles"); return; }
     const r = applyScore_(ss, ans);                            // shared validator+writer; owns its own lock
-    markResponse_(e, r.ok ? "applied" : "rejected: " + r.verdict);
+    if (!r.ok && r.verdict === "team not in roster"){
+      // O-REJECT (§19): name the real cause WITH the scoping year — a captain
+      // reusing a stale link/QR needs to know it's THIS year's roster that
+      // rejected them, not just "not in roster" (which reads like a typo).
+      const year = firstTeeYear_(ss);
+      markResponse_(e, "rejected: team not in roster for " + year);
+      return;
+    }
+    // O-REPLACED (§19): on success, r.verdict already carries "applied" or
+    // "applied (replaced N)" from writeScore_ below — pass it through
+    // instead of hardcoding "applied".
+    markResponse_(e, r.ok ? r.verdict : "rejected: " + r.verdict);
   } catch(err) { markResponse_(e, "rejected: internal error — " + String(err).slice(0, 80)); }
 }
 function namedAnswers_(e){
@@ -134,9 +149,17 @@ function writeScore_(ss, year, team, round, hole, score){
         // convert it to hole-scoring. Row is left untouched; caller must clear r1/r2 first.
         return {ok:false, verdict:"round total already entered — clear r1/r2 first", team:team, round:roundNum, holes:null};
       }
-      sh.getRange(i + 1, hc + 1).setValue(score);
+      const cell = sh.getRange(i + 1, hc + 1);
+      const prev = cell.getValue();
+      cell.setValue(score);
+      // O-REPLACED (§19): record the displaced value, never arbitrate —
+      // last-write-wins stands; the mark is the mid-round audit trail.
+      // Number.isFinite guard: a hand-typed non-numeric cell must not
+      // produce "applied (replaced NaN)" — the spec says a different NUMBER.
+      const prevN = Number(prev);
+      const replaced = (prev !== "" && prev !== null && Number.isFinite(prevN) && prevN !== score) ? prevN : null;
       const updated = sh.getRange(i + 1, 1, 1, head.length).getValues()[0];
-      return {ok:true, verdict:"applied", team:team, round:roundNum, holes:holesMap_(head, updated)};
+      return {ok:true, verdict: replaced !== null ? "applied (replaced " + replaced + ")" : "applied", team:team, round:roundNum, holes:holesMap_(head, updated)};
     }
   }
   const row = new Array(head.length).fill("");

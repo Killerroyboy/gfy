@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "test": "node test/smoke.mjs",
-    "presend": "node tools/presend-check.mjs"
+    "presend": "node tools/presend-check.mjs",
+    "check-template": "python3 tools/check_template.py",
+    "check-gids": "node tools/gid-check.mjs"
   },
   "devDependencies": {
     "jsdom": "^29.1.1"
