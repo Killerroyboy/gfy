@@ -202,6 +202,7 @@
   .grp{padding:12px 0;border-top:1px solid rgba(200,162,74,.16);display:grid;
        grid-template-columns:4.2rem 1fr;gap:12px;align-items:baseline}
   .grp-time{font-family:var(--display);color:var(--brass);font-size:.95rem}
+  .grp-hole{display:block;font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);margin-top:3px}
   .grp-who{font-size:.95rem;color:var(--bone)}
 
   /* money */
@@ -1443,10 +1444,23 @@ function renderPairings(){
       <h3>${esc(r.name)}</h3>
       <p class="when">${esc(r.when)}</p>
       ${r.groups.map(g=>`<div class="grp">
-        <div class="grp-time">${esc(g.time||"—")}</div>
+        <div class="grp-time">${esc(g.time||"—")}${startLabel(g.start) ? `<span class="grp-hole">${esc(startLabel(g.start))}</span>` : ""}</div>
         <div class="grp-who">${esc(g.players)}</div>
       </div>`).join("")}
     </div>`).join("");
+}
+// P-SHOTGUN (§14.1): the Pairings tab's optional `start` column names the
+// hole a group starts on for shotgun rounds. Blank/absent = "" so the row
+// renders byte-identical to a sheet with no column at all (S5 additive,
+// zero migration). 1-18 (via the existing posInt helper) reads as a real
+// hole -> "Hole N"; anything else non-blank is display-only raw text — no
+// fabrication, no health flag (this is informational, not a data-integrity
+// signal).
+function startLabel(v){
+  const raw=String(v==null?"":v).trim();
+  if(!raw) return "";
+  const n=posInt(raw);
+  return (n!==null && n<=18) ? "Hole "+n : raw;
 }
 
 function calcuttaModel(year=STATE.year){

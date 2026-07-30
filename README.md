@@ -202,6 +202,10 @@ form URL pasted in the "Scoring form URL" cell) and reorders the sheet
 tabs by season — during the event week, tabs appear as START HERE, Scores,
 Field, Pairings; off-season shows START HERE, Field, Invites, Rooms.
 
+Pairings also has an optional `start` column — the hole a group starts on
+for a shotgun round; leave it blank for tee-time rounds and the site
+renders exactly as it always has.
+
 The polish script also OWNS conditional formatting on Field and Rooms — it
 replaces all conditional-format rules on those two tabs each run. Don't
 hand-add your own coloring there; it will be erased.

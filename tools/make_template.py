@@ -86,11 +86,15 @@ SHEETS = {
         ],
     },
     "Pairings": {
-        "headers": ["year", "round", "when", "time", "players"],
+        # `start` (P-SHOTGUN, §14.1) is optional — the hole a group starts on
+        # for shotgun rounds. Blank is fine (tee-time rounds, like Round Two
+        # here) — the site renders exactly as it did before the column
+        # existed.
+        "headers": ["year", "round", "when", "time", "players", "start"],
         "rows": [
-            [2026, "Round One", "Saturday · Shotgun", "9:00 am", "Duck · Hammer"],
-            [2026, "Round One", "Saturday · Shotgun", "9:00 am", "Sully · Tank"],
-            [2026, "Round Two", "Sunday · Tee times", "8:30 am", "Leaders out last"],
+            [2026, "Round One", "Saturday · Shotgun", "9:00 am", "Duck · Hammer", 1],
+            [2026, "Round One", "Saturday · Shotgun", "9:00 am", "Sully · Tank", 4],
+            [2026, "Round Two", "Sunday · Tee times", "8:30 am", "Leaders out last", ""],
         ],
     },
     "Calcutta": {

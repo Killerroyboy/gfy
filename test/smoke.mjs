@@ -1357,6 +1357,22 @@ check("S2: S-VIEWS — VIEWS is derived from the [data-view] DOM (deduped), not 
 check("S5: S-NAV right-edge fade — .nav-inner::after gradient overlay present in the stylesheet",
   /\.nav-inner::after\s*\{[^}]*gradient/i.test(html), "");
 
+{
+  // P-SHOTGUN (§14.1): fixtures/pairings.csv's three Round One/Two rows
+  // carry a start=1 / start=blank / start="TBD" spread across the group
+  // that already exercises the valid/blank/junk paths in one shared dom —
+  // no new variant dom needed since the fixture's year (2026) matches the
+  // main dom's activeSeason().
+  const pairGroups = [...doc.querySelectorAll("#pairBody .grp")];
+  const grpText = who => pairGroups.find(g => (g.textContent || "").includes(who))?.textContent || "";
+  const validGrp = grpText("Duck · Hammer · Sully");
+  const blankGrp = grpText("Johnson, Wade · Moose · Tex");
+  const junkGrp = grpText("Leaders out last");
+  check("S6: P-SHOTGUN — Pairings optional start column: a parseable 1-18 value (start=1) renders 'Hole 1' beside the time, a blank start renders no 'Hole' text at all, and unparseable junk (start=TBD) renders as raw text verbatim",
+    /Hole 1/.test(validGrp) && !/Hole/.test(blankGrp) && /TBD/.test(junkGrp),
+    "valid=" + JSON.stringify(validGrp) + " blank=" + JSON.stringify(blankGrp) + " junk=" + JSON.stringify(junkGrp));
+}
+
 /* ---------------------------------------------------------------------
    GROUP R — Rooms (§12 R-DERIVE, R-PUBLIC, R-FILTER, A-NEXT2)
 
