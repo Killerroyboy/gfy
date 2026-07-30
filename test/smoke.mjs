@@ -2036,7 +2036,8 @@ dom.window.close();
   check("U7: U-TOKENS — Wade Boggs gets 🏆 2024 (messy token normalized), Jake gets a lighter 2nd '23 and NO trophy (Jakeb must not match Jake); strengths render",
     !!wade && /🏆/.test(wade.textContent) && /2024/.test(wade.querySelector(".pod-win")?.textContent || "")
     && /long drives/.test(wade.textContent)
-    && !!jake && !/🏆/.test(jake.textContent) && /2nd/.test(jake.querySelector(".pod-minor")?.textContent || ""),
+    && !!jake && !/🏆/.test(jake.textContent) && /2nd/.test(jake.querySelector(".pod-minor")?.textContent || "")
+    && /2nd ’23/.test(jake.querySelector(".pod-minor")?.textContent || ""),
     "wade=" + (wade?.textContent || "").slice(0, 120) + " jake=" + (jake?.textContent || "").slice(0, 120));
 
   const teamGroups = [...docU2.querySelectorAll("#draftTeams .draft-team")];
@@ -2044,7 +2045,8 @@ dom.window.close();
     ? [...teamGroups[0].querySelectorAll(".drow-player")].map(e => e.textContent.trim()) : [];
   check("U8: D-DRAFT — drafted column groups by team, captain FIRST, all four members listed",
     teamGroups.length === 1 && duckNames[0] === "Duck"
-    && ["Hammer","Sully","Tank"].every(n => duckNames.includes(n)),
+    && ["Hammer","Sully","Tank"].every(n => duckNames.includes(n))
+    && duckNames.length === 4,
     JSON.stringify(duckNames));
   domU2.window.close();
 }
