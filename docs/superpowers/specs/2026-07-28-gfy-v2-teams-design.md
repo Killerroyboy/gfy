@@ -28,8 +28,11 @@ wrong money and silently stale data**. Every ambiguity below resolves toward
 
 ## 2. Non-goals
 
-- No write path to the Sheet (unchanged v1 decision).
-- No service worker / offline queue (localStorage cache stays).
+- No write path to the Sheet (v1 decision — **superseded 2026-07-29/30**: §14 added the
+  Form+trigger write lane; §18 rev 2 adds the endpoint lane sharing the same validator. The
+  SITE's published-CSV read path remains read-only.)
+- No service worker (**still true — §18 rev 2 keeps it out**); §18's localStorage send-journal
+  supersedes the "no offline queue" half for the scorer view only.
 - **No buyback.** Riley's ruling 2026-07-28: the tournament has no buyback rule.
   Each Calcutta lot is exactly one debt (owner → pot, full price) and one
   payee (owner receives that lot's winnings in full). The v1 copy about buying
@@ -427,91 +430,138 @@ reproduces it, it does not redesign it. Durable references, both in-repo: mockup
 - "Card" keeps its label (Riley ruled; "Course" rename considered and declined).
 - Implementation pins: nav anchors reordered in the MARKUP too (initial-paint / no-JS order = canonical); a `NAV_ORDER` display constant + simplified `applyNavOrder`; `VIEWS` stays DOM-derived (S-VIEWS untouched); any view absent from NAV_ORDER falls back to DOM order at the END (future-tab resilience — never dropped). S3/S4 assert the FULL 14-key sequences, not prefixes.
 
-## §18 — v2.6: captain live scorer (Riley approved design 2026-07-30; mockup artifact 047ccc2c-8c71-46bc-95de-878daf101831)
+## §18 rev 2 — v2.6: captain live scorer, pressure-test hardened (Riley approved 2026-07-30)
 
-Riley's binding emphasis: **accurate tracking** — a tapped score must land in the sheet and
-render on the site, and the scorer must never claim more than the pipeline has proven.
+Provenance: rev 1 design + mockup approved, then 3-reviewer adversarial pressure test (field-UX /
+architecture / failure-mode; 60+ findings), then Riley blessed the two resulting changes:
+**card-first UI** and **endpoint-confirmed writes**. Mockup artifact (revised, card-first on top):
+`047ccc2c-8c71-46bc-95de-878daf101831`. Binding emphasis unchanged: **accurate tracking** — and
+rev 2's core inversion: confirmation is a **returned fact** (the sheet answers), never an
+inference from the lagging published CSV.
 
-- **SC-LINK**: new `#score` view in index.html (single-file, link-only — NO nav tab; VIEWS
-  picks it up via `[data-view]`, nav anchor list deliberately unchanged). Team comes from the
-  hash query (`#score?team=duck`), matched via S-KEY normalization against active-season Field
-  captains; missing/unmatched team renders a team picker, never an error. No tokens/auth —
-  DISCLOSED: the raw form is already open to anyone, so a guessable link adds zero new exposure.
-- **SC-WRITE (write path unchanged)**: the scorer submits by POSTing the EXISTING Google Form's
-  `formResponse` endpoint (no-cors, fire-and-forget). Form id + the four `entry.N` field ids are
-  parsed at runtime from ONE Info-tab key `score_prefill` = a "Get pre-filled link" URL Riley
-  pastes once (public data; the form URL is already public). No Apps Script changes to the write
-  side; triggers/validation/applied-rejected audit/S-MERGE last-write-wins all untouched. Raw
-  form link stays visible as the no-JS fallback.
-- **SC-HONEST (the core rule — S2/S12 applied to scoring)**: per (round, hole) the scorer
-  tracks THREE distinct states, visually distinct, never blurred: (a) **sent** — submitted from
-  this phone (localStorage journal, timestamped); (b) **on the board** — the score appears in
-  the PUBLISHED Scores CSV (same fetch pipeline the public board uses; this is the ONLY source
-  of confirmation — an opaque no-cors POST is never treated as success); (c) **not on the board
-  after ~8 min** — loud state with one-tap resend. Board-lag copy ("board updates in a few
-  minutes") is honest about the publish delay. A resent hole overwrites per existing semantics.
-- **SC-QUEUE (Riley ruling 2026-07-30 — offline-first is the architecture, not a fallback)**:
-  EVERY save is local-first: tapping a score writes the localStorage journal and succeeds
-  instantly, with zero network dependency — the captain moves to the next hole immediately, in
-  any dead zone. A background uploader drains the journal opportunistically: on save when
-  online, on the `online` event, on view open/visibility return, and on each poll tick. Save
-  NEVER blocks, errors, or spins on signal. The visible chain is "Saved · waiting for signal"
-  (with a queue count when >0) → "Sent" → "On the board" — the first state is a success state,
-  worded as one. Journal is per-team+season keyed; entries clear only on board-confirmation.
-- **SC-UX**: hole strip 1–18 (done = score colored via the site's scoreClass idiom, next =
-  highlighted, any chip tappable for backfill/fix); big next-hole card with par+yards from the
-  Course tab; score grid labeled relative to par (Eagle/Birdie/Par/Bogey/+2…), `9+` opens
-  numeric entry clamped 1–19 (the form's own validation range); 10-second undo before send;
-- **SC-PAR (Riley emphasis 2026-07-30 — labels must match the course hole)**: every golf term
-  the scorer shows — button labels, the confirmation line ("Hole 7 — Birdie 3"), hole-strip
-  coloring, the running to-par tally — derives from **that hole's par in the Course tab**
-  (eagle = par−2, birdie = par−1, bogey = par+1, …), the same checksum-guarded MeadowCreek
-  data the scorecard grid uses; ONE derivation shared with the site's existing scoreClass
-  idiom, never a second par table. Selecting a different hole re-labels the grid. If a hole's
-  par is missing/unparseable: **degrade to plain numbers with no golf terms** (S1
-  NULL-over-guess — never guess par) and show yards/par as "—". Smoke coverage: two fixture
-  holes with different pars produce correspondingly shifted labels; a par-less fixture hole
-  renders unlabeled numbers; the confirmation term for a score equals the button label tapped.
-  post-send confirmation shows the golf-term result + running today/tournament tally from
-  published data (labeled as of holes-in). Round defaults by date vs Info `first_tee` (day 1 →
-  R1, else R2) with a visible one-tap round toggle; expected next hole respects Pairings
-  `start` (P-SHOTGUN) when present, else first un-scored hole.
-- **SC-LINKS-ADMIN**: START HERE gains a generated per-captain links block (site URL +
-  `#score?team=<captain>` for each active-season captain) via the existing polish/START-HERE
-  .gs surface — copy-paste ready for texting captains.
-- **SC-E2E (acceptance teeth — Riley's emphasis)**: the round is DONE only with (a) smoke
-  coverage: payload construction from a parsed prefill URL, three-state rendering from fixture
-  CSVs (sent/board/missing), queue drain on reconnect, round/next-hole derivation incl.
-  shotgun, unmatched-team picker (all jsdom, stubbed fetch — no real form hit in tests); and
-  (b) a LIVE end-to-end proof on the real sheet before Riley shares links: scorer tap →
-  responses tab `applied` → Scores tab cell → published CSV → public board renders it —
-  witnessed and recorded in the ledger (test row cleaned per S15).
-- **SC-GLANCE (Riley add 2026-07-30)**: the scorer includes a compact live-board panel —
-  your team's row in context (position, total, plus the 2–3 teams around you and the leader),
-  derived from the SAME published Scores CSV as the public board, with one tap through to the
-  full `#board`. Read-only; labeled with holes-in so partial rounds read honestly (S12).
-  **SC-POLL**: while the `#score` view is visible, the scorer polls the Scores CSV on its own
-  fast cadence (90s) — the site default (`REFRESH_MS` = 1h) cannot carry board-confirmation or
-  the 8-minute resend nudge; poll stops when the view is hidden (visibility/hash change), so
-  the public site's request profile is unchanged for everyone else.
-- **SC-ACCESS (Riley ruling 2026-07-30 — stated honestly, not oversold)**: WRITES are
-  captain-only **by distribution and validation, not by authentication**: scorer links are
-  handed only to captains; the public site renders NO path to the form or the scorer
-  (see SC-PUBBTN); trigger-side validation keeps rejecting unknown teams/holes/scores; the
-  audit trail (responses tab + applied/rejected marks) records every write. DISCLOSED: anyone
-  who *obtains* a link can submit — same exposure class as the existing open form; accepted
-  for a friends' event, tokens only if ever abused. READS are universal: the website
-  (`#board` and every other view) stays fully public — unchanged.
-- **SC-PUBBTN**: the public hero's "Enter scores" button currently appears whenever
-  `SHEET_EDIT_URL` is configured (index.html ~:524/:2598) and links the full spreadsheet EDIT
-  URL on the public homepage — contradicts SC-ACCESS. v2.6 removes that public affordance
-  (button + its config wiring); the sheet edit link remains Riley's private bookmark, not site
-  UI. **RILEY CHECK (setup, blocking before links go out): confirm the Google Sheet's sharing
-  setting is restricted (specific editors only — NOT "anyone with the link can edit"); the
-  sheet's share setting, not the site, is the real write gate on the spreadsheet itself.**
-- **SC-SCOPE-OUT**: no direct sheet writes, no accounts, no board/other-view changes beyond
-  SC-PUBBTN's removal, no nav changes, no service worker (queue = localStorage + online-event
-  retry only).
-- Rollback: git revert on the preview lane; prod exposure only via Riley's push gate, and the
-  scorer is inert until `score_prefill` exists in the live Info tab (absent key → view shows
-  "scoring opens at the tournament" + the raw form link if configured).
+### Access & entry
+- **SC-LINK**: `#score?team=<slug>` view in index.html; link-only (no nav tab). **Router pin
+  (pressure-test Critical): `showView` must strip the hash query (`name.split("?")[0]`) for BOTH
+  the VIEWS lookup and the nav active-state compare** — smoke-tested with a real
+  `#score?team=X` link. Team value percent-encoded/slugged in generated links, decoded on read,
+  matched via S-KEY against **active-season Field `team` values** (the same set the trigger
+  validates — NOT captain-named rows, which the live sheet lacks). First use shows a one-time
+  identity confirm ("Scoring for **<team>** — <roster>. Not your team?"), persisted; bare
+  `#score` resumes the last team; the team picker (full rosters shown) stays reachable from the
+  header always (multi-team scorer / Riley case).
+- **SC-ACCESS** (unchanged from rev 1): writes captain-only by distribution + validation, not
+  auth — disclosed, accepted. Reads universal on the site.
+- **SC-PUBBTN rev 2**: remove the public hero "Enter scores" button AND **delete the
+  `SHEET_EDIT_URL` value from config.js** (+ its README instruction) — config.js is served
+  publicly; the URL is a document-ID leak even though it returns 401 to strangers (verified
+  2026-07-30). RILEY CHECK stays as a *confirmation*: sheet sharing = specific editors only.
+
+### The screen (card-first — pressure-test change 1)
+- **SC-UI**: the scorecard is the interface. 18 cells, two rows of 9 (Out/In, the site's
+  existing card idiom), every cell ≥44px tap target. Cell states: empty · **on the sheet**
+  (value, colored by the existing scoreClass idiom) · **saved on phone / sending** (distinct
+  mark) · **conflict** (both numbers shown). Tap a cell → the par-labeled pad for THAT hole
+  slides up; tap a number → **it sends immediately** (no confirmation screen, no undo timer —
+  a tap-to-pocket must never strand a send); the cell is the receipt; tapping a filled cell
+  enters an explicit edit mode ("Hole 8 · currently 6 → Replace 6 with 4?"). No next-hole
+  inference anywhere (shotgun-proof by construction; P-SHOTGUN not consulted). Sun-legibility
+  floor for this view: no text under 13px, over/under never carried by color alone.
+- **SC-PAR** (kept verbatim from rev 1) + two pins: per-hole degrade applies to labels/coloring
+  (a bad par cell degrades THAT hole to plain numbers, `par > 0` guarded); the running to-par
+  tally is **suppressed entirely (strokes only) unless all 18 pars parse** — never computed
+  against a partial par set. "9+" button is labeled "Other" (numeric entry 1–19).
+- **SC-ROUND**: default round derived team-state-first (R1 complete on the sheet → R2; else
+  date rule vs Info `first_tee` compared **in first_tee's own UTC offset**, never phone-local),
+  shown as a labeled chip; the manual toggle is **momentary** — auto-returns to the derived
+  default after one submission; every result line names the round it wrote.
+
+### The write path (endpoint-confirmed — pressure-test change 2)
+- **SC-WRITE rev 2**: primary transport = **Apps Script Web App `doPost`** on the live sheet's
+  existing script project. Client POSTs `Content-Type: text/plain;charset=utf-8` with a JSON
+  body `{team, round, hole, score, client_id, seq}` (CORS simple request — no preflight);
+  server `JSON.parse(e.postData.contents)`, returns ContentService JSON
+  `{ok, verdict, team, round, holes:{h1..h18}}` (the team's full current round row — the client
+  paints THIS as truth). Endpoint URL = Info tab key `score_endpoint` (ONE config home; the
+  START HERE form-URL cell is retired into the same Info surface). **SPIKE GATE (blocking,
+  before any other §18 work): prove the GitHub-Pages-origin POST → 302 → `ACAO:*` chain works
+  on Riley's account (~20 min). If it fails → the fallback plan is per-team PREFILLED form
+  links (no site scorer), NOT rev 1's form-riding transport.**
+- **SC-VALIDATE (one validator)**: extract `applyScore_(ss, {team, round, hole, score})` from
+  `onScoreFormSubmit`; both the form trigger AND `doPost` call it — same S-KEY roster check,
+  same DocumentLock, same upsert, same F-YEAR season keying. Plus one new guard (trigger-side,
+  both lanes): a target row carrying an `r1`/`r2` round total is REJECTED
+  ("round total already entered — clear it first"), never silently converted to hole-scoring.
+- **SC-IDEMPOTENT**: `client_id+seq` recorded in a bounded Script Properties ring; a replayed
+  key returns the prior verdict without a second write — retries and queue drains can never
+  double-apply or resurrect an older value over a newer one from the same phone.
+- **SC-LOUD-CONFIG**: the client treats anything but well-formed JSON (HTML, login page, CORS
+  failure) as "scoring endpoint not reachable — check the deployment", shows the raw form link,
+  and never guesses. A `doGet` ping returns `{ok, year, teams}` and is wired into the existing
+  `?debug=1` surface. README pins the redeploy rule: **Manage deployments → Edit → New version**
+  (URL preserved); a NEW deployment mints a new URL and orphans every captain link.
+
+### Truth states & offline (Riley's offline-first ruling preserved)
+- **SC-HONEST rev 2** — every state earned, none inferred: **saved on phone** (journal write —
+  instant, zero network; Riley ruling: save NEVER blocks on signal) → **sending** → **on the
+  sheet** (server verdict `ok` — THE confirmation) → *(cosmetic)* **on the public board** (CSV
+  caught up; labeled as lag, ~5 min, never gates anything) · **rejected: <server reason
+  verbatim>** with "text Riley" escalation after 2 failures · **conflict** (SC-NOCLOBBER).
+- **SC-NOCLOBBER (highest-value pressure-test rule)**: no automatic or one-tap resend ever
+  fires into a hole whose sheet value differs from this phone's — a differing value renders the
+  quiet conflict state ("sheet says 5 · this phone sent 4") whose ONLY action is an explicit
+  two-number replace-confirm. Kills the two-phone flip-flop, stale-queue reversion of Riley's
+  manual corrections, and day-2 ghost resends.
+- **SC-QUEUE rev 2**: journal-first always (per Riley's ruling); the queue holds **at most one
+  entry per (round, hole)** — a newer tap replaces the queued older one — drained strictly in
+  order via timer + `pageshow`/`visibilitychange`/`online` (never trusting `navigator.onLine`
+  alone), deduped server-side per SC-IDEMPOTENT. Storage wrapped in try/catch (degrade copy:
+  "this phone can't remember sends — the sheet is your record"). Unconfirmed entries older than
+  the current round age into a quiet informational line, never a resend prompt. Copy states the
+  truth: queued scores live on this phone and send **next time this page is open with signal**;
+  README names the paper scorecard as the tournament's system of record.
+- **SC-YEAR**: the scorer's season = Info `first_tee` year (the validator's own source) — for
+  team matching, journal keys, and the glance panel; never `STATE.year`, never max-year-in-Scores.
+- **SC-DERIVE**: one derivation everywhere — hole maps read from `buildPlayers()` merged output
+  (S-MERGE/S-ZERO semantics), never a second CSV parse; the pad's par labels from the same
+  `courseMap()` the grid uses. The scorer view is **exempt from `renderAll()`'s innerHTML
+  replacement** (render-boundary pin + smoke assertion): an open pad, a pending send, or a
+  conflict dialog survives the 60-second repaint; the glance strip updates in place.
+  *(Corrected fact from rev 1: live `REFRESH_MS` is 60s, not 1h — rev 1's SC-POLL and the
+  8-minute nudge are DELETED; server confirmation makes both unnecessary.)*
+- **SC-GLANCE** (kept): compact board context under the card — labeled honestly
+  ("2nd of 9 reporting · thru 6"; neighbors' thru shown); board tally strictly from published
+  data with pending-on-this-phone shown as its own labeled line, never blended.
+
+### Fallback lane & admin
+- **SC-FORMLANE**: the Google Form stays untouched as the no-JS/no-endpoint fallback, sharing
+  `applyScore_`. Hardening from the pressure test: README's Team-question setup says **paste
+  the generated list** (see SC-LINKS-ADMIN) — never retype; the "short team labels are fine on
+  Scores" guidance is DELETED from README + sheet-polish.gs (it teaches the failure); `setup()`
+  asserts the Scores tab headers (`team`, `h1..h18`) and logs loudly if legacy/missing.
+- **SC-LINKS-ADMIN rev 2**: START HERE generates (a) per-captain scorer links
+  (percent-encoded), (b) the exact Team dropdown item list for the form (same Field-derived
+  source), (c) the freeze note: "once links go out, team names are frozen — a rename must also
+  be applied to Scores".
+
+### Ship gates
+- **SC-TESTS**: smoke additions — hash-query routing; card states incl. conflict rendering and
+  the NOCLOBBER refusal; edit-mode two-number confirm; queue coalescing + ordered drain +
+  idempotent replay; SC-YEAR keying (fixture with rolled first_tee); payload construction;
+  endpoint-misconfig loud state (HTML response fixture); render-boundary survival; SC-PAR label
+  shift + par-less degrade + all-18 tally suppression. All jsdom, stubbed endpoint.
+- **SC-DRILL (live, ~25 min at draft night — BLOCKING before any link is texted)**:
+  (1) pre-flight (headers, first_tee year, timezone, `score_endpoint` pasted, sharing
+  restricted, SHEET_EDIT_URL gone from config.js); (2) **the 15-tap sweep** — one submission
+  per team, `round 2 / hole 13 / score 6` (hole ≠ score by design so a transposition cannot
+  pass), verify 15× `ok` verdicts AND 15× Scores h13=6, record the observed sheet→published-CSV
+  lag in the ledger; (3) pocket test (tap, lock screen 2 min — must land); (4) airplane test
+  (3 holes offline → all land exactly once); (5) clobber test (differing value from a second
+  browser → conflict state, NOT a resend; hand-fix in the sheet → no bounce-back); (6) round-
+  toggle spring test; (7) per-round canary: Riley submits one score at each round's first tee.
+  Cleanup per S15 (cells cleared AND sweep-created rows deleted — an emptied row still ghosts
+  on the board).
+- **SC-SCOPE-OUT**: no service worker, no accounts, no board/other-view changes beyond
+  SC-PUBBTN, form lane untouched, nav untouched.
+- Rollback: git revert on the preview lane; the scorer is inert until `score_endpoint` exists
+  in the live Info tab (absent → "scoring opens at the tournament" + raw form link if
+  configured); prod exposure only via Riley's push gate.
