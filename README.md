@@ -131,8 +131,9 @@ https://<your-pages-url>/?debug=1
 
 A panel appears listing every tab as `OK` (with a row count), `EMPTY`, or
 `FAILED` with the reason, plus the same health warnings as the strip above.
-Thirteen `OK` lines means the plumbing is done. Remove `?debug=1` and hand out
-the link.
+Thirteen `OK` lines means the plumbing is done (the site reads its 13
+configured tabs; extra tabs like START HERE and Form Responses are ignored
+by it). Remove `?debug=1` and hand out the link.
 
 **Phones:** open the link in Safari/Chrome, then *Share > Add to Home
 Screen*. It installs like an app, icon and all.
@@ -219,15 +220,20 @@ Set it up once before the event:
    - **Round** (dropdown, menu items: `1`, `2`)
    - **Hole** (dropdown, menu items: `1`, `2`, `3`, …, `18`)
    - **Team score** (Number, validation: "Between 1 and 19")
+
+   In the form's Settings, make sure **Collect email addresses is set to
+   'Do not collect'** and 'Restrict to users in your organization / require
+   sign-in' stays OFF — collecting emails would publish every submitter's
+   address on the public responses tab, which no checker scans.
 2. **Link responses**: In the form settings, click **Responses** → link responses to the GFY spreadsheet (Responses → Link to Sheets → Select existing spreadsheet → pick the GFY sheet file).
 3. **Paste the triggers**: Extensions → Apps Script (on the LIVE sheet) →
    copy `tools/sheet-triggers.gs` from the repo and paste it into the script
    editor (same project as the polish script is fine). Save, then run `setup()`
    from the function dropdown and click **Run**. Authorize when prompted.
 4. **Paste the form URL**: Get the form's shareable link (blue **Send** button
-   in the form editor → copy the short URL). Paste it into the START HERE
-   tab's "Scoring form URL" cell. (The form URL stays in place when you
-   re-run `polish()`.)
+   in the form editor → copy the short URL). Paste it into the cell to the
+   RIGHT of the "Scoring form URL (paste once):" label (column B) — not over
+   the label itself. (The form URL stays in place when you re-run `polish()`.)
 5. **Check the timezone**: On the LIVE sheet, open **File → Settings** and
    confirm the time zone is set to **America/Boise** (used for `paid_date`
    stamps — see **Collecting for next year**, below).
