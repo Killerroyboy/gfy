@@ -138,6 +138,7 @@ function buildStartHere_(ss){
     ["", ""],
     ["COLOR LEGEND", ""],
     ["Red row = deposit unpaid", ""], ["Gold tint = rookie (since == this season)", ""], ["Orange tint = Rooms name not on Field", ""],
+    ["Names: FIRST + LAST on Field / Invites / Rooms (and the vault), spelled identically everywhere. Short team labels are fine on Scores / Pairings.", ""],
     ["", ""],
     ["Before ANY email send round: npm run presend (see repo README)", ""],
     ["Polish/repair the sheet: Extensions → Apps Script → run polish()", ""],

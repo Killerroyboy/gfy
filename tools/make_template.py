@@ -54,16 +54,17 @@ SHEETS = {
     "Field": {
         # team = captain's name of the player's team; the captain's own row
         # names himself (player == team). since = first GFY year (fill once).
-        "headers": ["year", "player", "team", "since", "handicap", "status", "deposit", "paid_date"],
+        # strengths (§15) = captain-facing scouting note, shows on the public #draft board
+        "headers": ["year", "player", "team", "since", "handicap", "status", "deposit", "paid_date", "strengths"],
         "rows": [
-            [2026, "Duck", "Duck", 2019, 8, "In", "TRUE", ""],       # captain
-            [2026, "Hammer", "Duck", 2019, 10, "In", "TRUE", ""],    # partner
-            [2026, "Sully", "Sully", 2021, 15, "In", "FALSE", ""],   # captain, deposit not in yet
-            [2026, "Tank", "Sully", 2026, 20, "In", "TRUE", ""],     # partner + rookie (since == this season)
-            [2026, "Tex", "Tex", 2019, 18, "In", "TRUE", ""],        # captain, third team
+            [2026, "Duck", "Duck", 2019, 8, "In", "TRUE", "", "steady off the tee"],  # captain
+            [2026, "Hammer", "Duck", 2019, 10, "In", "TRUE", "", ""],    # partner
+            [2026, "Sully", "Sully", 2021, 15, "In", "FALSE", "", ""],   # captain, deposit not in yet
+            [2026, "Tank", "Sully", 2026, 20, "In", "TRUE", "", ""],     # partner + rookie (since == this season)
+            [2026, "Tex", "Tex", 2019, 18, "In", "TRUE", "", "long drives"],  # captain, third team
             # A next-season payer: rooms go in the order people paid, so
             # paid_date matters more than the row's position on the sheet.
-            [2027, "Duck", "", "", "", "", "TRUE", "2026-08-20"],
+            [2027, "Duck", "", "", "", "", "TRUE", "2026-08-20", ""],
         ],
     },
     "Scores": {
@@ -124,11 +125,15 @@ SHEETS = {
         ],
     },
     "Champions": {
-        "headers": ["year", "champion", "score"],
+        # place (§15): 1/2/3 — BLANK means 1st (old rows keep working).
+        # players: the winning roster, any separator (comma, ·, &, "and").
+        "headers": ["year", "champion", "score", "place", "players"],
         "rows": [
-            [2025, "Duck", "151 (+7)"],
-            [2024, "Hammer", "149 (+5)"],
-            [2019, "Tex", "Inaugural"],
+            [2025, "Duck", "151 (+7)", "", "Duck · Hammer · Sully · Tank"],
+            [2025, "Tex", "153 (+9)", 2, "Tex · Sock · Bear · Crash"],
+            [2025, "Moose", "155 (+11)", 3, "Moose · Ghost · Blade · Zeke"],
+            [2024, "Hammer", "149 (+5)", "", ""],
+            [2019, "Tex", "Inaugural", "", ""],
         ],
     },
     "Shame": {

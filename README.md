@@ -264,6 +264,14 @@ the `paid_date` cell — only on the first tick; re-ticking never overwrites
 a date that's already there, and unticking never erases it. Paid order on
 the Next Year board follows `paid_date`.
 
+## Names — the one convention
+
+Field.player, Invites.player, Rooms.player (and the vault's Contacts.player)
+carry **first + last name**, spelled identically everywhere — the site matches
+them by exact normalized text, so "Wade B." on Rooms will not match
+"Wade Boggs" on Field. Scores.team and Pairings follow the **team label**
+(the captain's name), not player names — short forms are fine there.
+
 ## Year to year
 
 - New season: add rows with the new year in each tab — old years stay for
@@ -459,6 +467,9 @@ The five things an operator actually touches most years, in one place:
 | Change a team / its captain | **Field** tab, the `team` column — the captain's own row always has `player == team` |
 | Enter a Calcutta bid | **Calcutta** tab — one row per team lot: `team`, `owner`, `price`; tick `collected` once the pot's been paid |
 | Change the house rake | **Info** tab, `calcutta_rake` — a plain percentage number (`10` = 10%); if the real intent is "no rake," use `0` explicitly, don't leave it blank or type words |
+| Champions place/players | place 1/2/3 (blank = 1st, old rows fine); players = that team's roster, any separator. Backfill history and the podium + draft badges light up. |
+| Field strengths | optional scouting note; shows on the public #draft board next to the player. |
+| Draft night | the site's Draft tab reads the sheet live: filling a player's team cell on Field IS drafting them; the pool empties as you type. |
 
 ## The GFY Admin vault
 

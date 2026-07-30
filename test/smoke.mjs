@@ -2078,6 +2078,17 @@ dom.window.close();
     (docNone.querySelector("#draftBody")?.textContent || "").slice(0, 120));
   domNone.window.close();
 }
+{
+  const py = readFileSync(path.join(ROOT, "tools", "make_template.py"), "utf8");
+  check("U11: template generator carries the §15 columns — Champions place+players, Field strengths",
+    /"place",\s*"players"/.test(py.slice(py.indexOf('"Champions"')))
+    && /"strengths"/.test(py.slice(py.indexOf('"Field"'), py.indexOf('"Scores"'))),
+    "");
+  const gsPolish = readFileSync(path.join(ROOT, "tools", "sheet-polish.gs"), "utf8");
+  check("U12: START HERE states the N-FULLNAMES convention (first + last, matching everywhere)",
+    /first\s*\+\s*last/i.test(gsPolish),
+    "");
+}
 
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
