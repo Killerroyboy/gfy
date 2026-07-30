@@ -797,7 +797,7 @@ check("H5: deposit amount and payment handle rendered",
    Fixture re-derivation (fixtures/field.csv + fixtures/invites.csv, both
    dated 2027 = NEXT). Universe = Field(trailing 3 seasons: 2024-2026, only
    2026 has rows) ∪ Field-2027 ∪ Invites-2027:
-     Field-2026 (9): Duck, Hammer, Sully, "Johnson, Wade", Moose, Sock, Tex,
+     Field-2026 (9): Duck, Hammer, Sully, Wade Johnson, Moose, Sock, Tex,
        Tank, Bear.
      Field-2027 adds: Crash (paid 2026-09-01), Ghost (paid 2026-08-18).
        Duck/Tank also paid (2026-08-20 / 2026-08-22). Hammer present,
@@ -805,7 +805,7 @@ check("H5: deposit amount and payment handle rendered",
        status is no longer authoritative, so this is now IGNORED + FLAGGED,
        not acted on.
      Invites-2027 adds: Blade (new, nothing ticked). Duck (invited+responded
-       — paid overlap). "Johnson, Wade" (invited+responded). Moose (invited
+       — paid overlap). Wade Johnson (invited+responded). Moose (invited
        only). Sock (status=out — the AUTHORITATIVE source now). Sully
        (invited+responded+status=declined). Ghost (status=declined, no
        invited/responded ticks).
@@ -817,7 +817,7 @@ check("H5: deposit amount and payment handle rendered",
      Duck    — paid 2026-08-20               -> paid
      Tank    — paid 2026-08-22               -> paid
      Crash   — paid 2026-09-01               -> paid
-     "Johnson, Wade" — responded, unpaid     -> responded
+     Wade Johnson   — responded, unpaid     -> responded
      Moose   — invited only, unpaid          -> invited
      Hammer, Tex, Bear, Blade — nothing, unpaid -> needs
    Remaining population (all) = 9: 3 paid + 1 responded + 1 invited +
@@ -834,7 +834,7 @@ check("W1: funnel line reads the hand-derived counts — 3 paid · 1 responded �
    sole such person in the default fixture (2027,Hammer,,,,,, — a Field-2027
    row with a blank deposit). Everyone who used to appear in the old
    "responded+invited+needs" owing list purely via Invites/trailing-Field —
-   Tex, Bear, Blade (needs), Moose (invited), "Johnson, Wade" (responded) —
+   Tex, Bear, Blade (needs), Moose (invited), Wade Johnson (responded) —
    has NO Field-2027 row at all, so they move entirely behind ?admin=1. */
 check("W2: public board's committed-only owing list (A1) names Hammer (has a NEXT Field row, unpaid) and carries no funnel-stage headings (Invited/Needs an invite/Declined) or refund note",
   /Hammer/.test(nyBodyText)
@@ -842,9 +842,9 @@ check("W2: public board's committed-only owing list (A1) names Hammer (has a NEX
     && !nyBodyText.includes("Declined") && !/refund owed/i.test(nyBodyText),
   nyBodyText.slice(0, 500));
 
-check("W34: A1 — Tex/Bear/Blade/Moose/'Johnson, Wade' (responded/invited/needs, no Field-NEXT row) are ABSENT from the default (public) dom entirely",
+check("W34: A1 — Tex/Bear/Blade/Moose/'Wade Johnson' (responded/invited/needs, no Field-NEXT row) are ABSENT from the default (public) dom entirely",
   !/\bTex\b/.test(nyBodyText) && !/\bBear\b/.test(nyBodyText) && !/\bBlade\b/.test(nyBodyText)
-    && !/\bMoose\b/.test(nyBodyText) && !/Johnson, Wade/.test(nyBodyText),
+    && !/\bMoose\b/.test(nyBodyText) && !/Wade Johnson/.test(nyBodyText),
   nyBodyText.slice(0, 500));
 
 check("W3: Sully (declined) and Ghost (paid+declined) are absent from the public board entirely — no owing nag, no silent money loss shown publicly (F-DECLINED)",
@@ -1080,10 +1080,10 @@ check("W15: admin dom reveals Declined (Sully) and Paid — refund owed (Ghost) 
 
 // A1: "responded" never had a name list at all before this wave (design
 // decision recorded in the task-13 report) — now that the public owing list
-// is committed-only, the responded stage's name ("Johnson, Wade") must
+// is committed-only, the responded stage's name ("Wade Johnson") must
 // surface somewhere, and that's admin-only.
-check("W31: A1 — admin dom reveals a new 'Responded' list ('Johnson, Wade') that never existed publicly or in admin before this wave",
-  /Responded/.test(nyBodyTextAdmin) && /Johnson, Wade/.test(nyBodyTextAdmin),
+check("W31: A1 — admin dom reveals a new 'Responded' list ('Wade Johnson') that never existed publicly or in admin before this wave",
+  /Responded/.test(nyBodyTextAdmin) && /Wade Johnson/.test(nyBodyTextAdmin),
   nyBodyTextAdmin.slice(0, 700));
 
 check("W16: admin gating is explicitly documented as non-cryptographic (social gating only, not a security boundary)",
@@ -1331,8 +1331,8 @@ check("S2: S-VIEWS — VIEWS is derived from the [data-view] DOM (deduped), not 
   const domS3 = makeDom("", farFutureFetchS3);
   await until(() => domS3.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   const navLinksText = [...domS3.window.document.querySelectorAll(".nav-links a")].map(a => a.hash.slice(1));
-  check("S3: S-NAV off-season order — Home, Next Year, Field lead the nav (first_tee pinned far-future via override, A6 — can't go red during the real event window)",
-    navLinksText.slice(0, 3).join(",") === "home,nextyear,field",
+  check("S3: S-NAV off-season order — Home, Next Year, Field, Draft lead the nav (first_tee pinned far-future via override, A6 — can't go red during the real event window)",
+    navLinksText.slice(0, 4).join(",") === "home,nextyear,field,draft",
     navLinksText.join(","));
   domS3.window.close();
 }
@@ -1348,8 +1348,8 @@ check("S2: S-VIEWS — VIEWS is derived from the [data-view] DOM (deduped), not 
   const domS4 = makeDom("", eventFetch);
   await until(() => domS4.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   const navLinksTextS4 = [...domS4.window.document.querySelectorAll(".nav-links a")].map(a => a.hash.slice(1));
-  check("S4: S-NAV event-window order — Board, Pairings, Calcutta lead the nav (first_tee = today, inside ±3 days)",
-    navLinksTextS4.slice(0, 3).join(",") === "board,pairings,calcutta",
+  check("S4: S-NAV event-window order — Board, Draft, Pairings, Calcutta lead the nav (first_tee = today, inside ±3 days)",
+    navLinksTextS4.slice(0, 4).join(",") === "board,draft,pairings,calcutta",
     navLinksTextS4.join(","));
   domS4.window.close();
 }
@@ -1366,7 +1366,7 @@ check("S5: S-NAV right-edge fade — .nav-inner::after gradient overlay present 
   const pairGroups = [...doc.querySelectorAll("#pairBody .grp")];
   const grpText = who => pairGroups.find(g => (g.textContent || "").includes(who))?.textContent || "";
   const validGrp = grpText("Duck · Hammer · Sully");
-  const blankGrp = grpText("Johnson, Wade · Moose · Tex");
+  const blankGrp = grpText("Wade Johnson · Moose · Tex");
   const decimalGrp = grpText("Decimal test");
   const junkGrp = grpText("Leaders out last");
 
@@ -1992,6 +1992,89 @@ dom.window.close();
     && /duplicate/i.test(healthDup),
     "entries=" + dupEntries.length + " health=" + healthDup.slice(0, 160));
   domDup.window.close();
+}
+
+{
+  // D-DRAFT: pool/drafted split + U-POOL filter + U-TOKENS badges.
+  // Field: 4-player Duck team drafted; Wade Boggs + Jake in the pool;
+  // Ghost(out)/Blade(wd)/Crash(declined) excluded. Champions: Wade wins 2024
+  // (messy-token spelling — normalization), Jake takes 2nd 2023, and
+  // "Jakeb Smith" must NOT badge Jake (exact-token, never substring).
+  const fieldU2 = [
+    "year,player,team,since,handicap,status,deposit,paid_date,strengths",
+    "2026,Duck,Duck,2019,8,In,TRUE,,steady putter",
+    "2026,Hammer,Duck,2019,10,In,TRUE,,",
+    "2026,Sully,Duck,2021,15,In,TRUE,,",
+    "2026,Tank,Duck,2026,20,In,TRUE,,",
+    "2026,Wade Boggs,,2022,9,In,TRUE,,long drives",
+    "2026,Jake,,2024,,In,TRUE,,",
+    "2026,Ghost,,2020,12,out,,,",
+    "2026,Blade,,2020,13,wd,,,",
+    "2026,Crash,,2020,14,declined,,,",
+  ].join("\n");
+  const champsU2 = [
+    "year,champion,score,place,players",
+    '2024,Duck,151 (+7),,"Jakeb Smith · wade  BOGGS"',
+    '2023,Sully,150 (+6),2,"Jake, Bo"',
+  ].join("\n");
+  const fetchU2 = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldU2 }),
+    champions: () => Promise.resolve({ ok: true, status: 200, text: async () => champsU2 }),
+  });
+  const domU2 = makeDom("", fetchU2);
+  const docU2 = domU2.window.document;
+  await until(() => docU2.querySelectorAll("#draftPool .drow, #draftPool .lb-empty").length > 0);
+
+  const poolRows = [...docU2.querySelectorAll("#draftPool .drow")];
+  const poolNames = poolRows.map(r => r.querySelector(".drow-player")?.textContent.trim());
+  check("U6: U-POOL — pool = active-season blank-team rows minus out/wd/declined, handicap ascending with blank handicaps last",
+    poolRows.length === 2 && poolNames[0] === "Wade Boggs" && poolNames[1] === "Jake",
+    JSON.stringify(poolNames));
+
+  const wade = poolRows.find(r => r.textContent.includes("Wade Boggs"));
+  const jake = poolRows.find(r => r.querySelector(".drow-player")?.textContent.trim() === "Jake");
+  check("U7: U-TOKENS — Wade Boggs gets 🏆 2024 (messy token normalized), Jake gets a lighter 2nd '23 and NO trophy (Jakeb must not match Jake); strengths render",
+    !!wade && /🏆/.test(wade.textContent) && /2024/.test(wade.querySelector(".pod-win")?.textContent || "")
+    && /long drives/.test(wade.textContent)
+    && !!jake && !/🏆/.test(jake.textContent) && /2nd/.test(jake.querySelector(".pod-minor")?.textContent || ""),
+    "wade=" + (wade?.textContent || "").slice(0, 120) + " jake=" + (jake?.textContent || "").slice(0, 120));
+
+  const teamGroups = [...docU2.querySelectorAll("#draftTeams .draft-team")];
+  const duckNames = teamGroups.length === 1
+    ? [...teamGroups[0].querySelectorAll(".drow-player")].map(e => e.textContent.trim()) : [];
+  check("U8: D-DRAFT — drafted column groups by team, captain FIRST, all four members listed",
+    teamGroups.length === 1 && duckNames[0] === "Duck"
+    && ["Hammer","Sully","Tank"].every(n => duckNames.includes(n)),
+    JSON.stringify(duckNames));
+  domU2.window.close();
+}
+{
+  // Honest empty state: base 2026 field is fully drafted → the pool announces
+  // draft complete. Own dom — the main one is closed upstream.
+  const domU9 = makeDom("");
+  const docU9 = domU9.window.document;
+  await until(() => docU9.querySelectorAll("#lbBody .lb-row").length > 0);
+  const poolEmpty = docU9.querySelector("#draftPool")?.textContent || "";
+  check("U9: D-DRAFT — all-drafted pool renders 'draft complete' empty state on the default fixture",
+    /pool empty — draft complete/i.test(poolEmpty), poolEmpty.slice(0, 120));
+  domU9.window.close();
+}
+{
+  // No active-season Field rows at all → the view says so, honestly. Gate on
+  // the DISAPPEARANCE of #draftPool: the static markup ships the Pool/Drafted
+  // shell, so a textContent-length gate would fire before the fetch resolves;
+  // the empty-state branch replaces #draftBody's innerHTML, destroying the node.
+  const fieldNone = "year,player,team,since,handicap,status,deposit,paid_date,strengths\n2027,Duck,,,,,TRUE,2026-08-20,\n";
+  const fetchNone = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldNone }),
+  });
+  const domNone = makeDom("", fetchNone);
+  const docNone = domNone.window.document;
+  await until(() => !docNone.querySelector("#draftPool"));
+  check("U10: D-DRAFT — zero active-season Field rows renders the view's own note (no fabricated pool)",
+    /lights up|fills in/i.test(docNone.querySelector("#draftBody")?.textContent || ""),
+    (docNone.querySelector("#draftBody")?.textContent || "").slice(0, 120));
+  domNone.window.close();
 }
 
 /* ---------------------------------------------------------------------

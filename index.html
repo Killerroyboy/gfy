@@ -193,6 +193,18 @@
   .unassigned-lab{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--rust);
                   padding:10px 6px 4px}
 
+  .draft-cols{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+  @media(max-width:720px){.draft-cols{grid-template-columns:1fr}}
+  .draft-h{font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage);margin:0 0 10px}
+  .drow{display:grid;grid-template-columns:minmax(0,1.5fr) auto;gap:2px 10px;padding:9px 0;border-bottom:1px solid rgba(200,162,74,.14)}
+  .drow-name{font-weight:600;overflow-wrap:anywhere}
+  .drow-hcp{color:var(--bone);font-variant-numeric:tabular-nums;text-align:right}
+  .drow-meta{grid-column:1 / -1;font-size:.8rem;color:var(--sage);overflow-wrap:anywhere}
+  .pod-win{color:var(--brass);margin-right:8px}
+  .pod-minor{opacity:.7;margin-right:8px}
+  .draft-team{margin:0 0 18px}
+  .draft-team .drow{padding:6px 0}
+
   /* pairings */
   .rounds{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(200,162,74,.22);
           border:1px solid rgba(200,162,74,.22)}
@@ -408,6 +420,7 @@
     <div class="nav-links">
       <a href="#home">Home</a>
       <a href="#board">Board</a>
+      <a href="#draft">Draft</a>
       <a href="#field">Field</a>
       <a href="#pairings">Pairings</a>
       <a href="#calcutta">Calcutta</a>
@@ -518,6 +531,20 @@
       <div class="sg-panel card-drop" id="sgPanel" hidden></div>
     </div>
     <p class="sync" id="lbSync"></p>
+  </div>
+</section>
+
+<section class="band view" data-view="draft" id="draft">
+  <div class="wrap">
+    <p class="eyebrow">Friday night</p>
+    <h2>The Draft</h2>
+    <p class="lede">Captains pick from the pool. Drafting someone = filling their team cell on the Field tab — this board follows the sheet live.</p>
+    <div id="draftBody">
+      <div class="draft-cols">
+        <div><h3 class="draft-h">Pool</h3><div id="draftPool"></div></div>
+        <div><h3 class="draft-h">Drafted</h3><div id="draftTeams"></div></div>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -1431,6 +1458,77 @@ function renderField(){
   $("#fldBody").innerHTML=stripHTML+bodyHTML;
 }
 
+/* ---------- v2.5 draft board (D-DRAFT §15) ---------- */
+// U-TOKENS: Champions.players → exact-token podium index. Split on the spec's
+// separators, nkey each token, EXACT match only — "Jake" never matches "Jakeb".
+// Place semantics MIRROR renderChampions via the shared champPlace() helper
+// (module-scope, defined above renderChampions): blank = 1st; "1"-"3" = that
+// place; anything else is a typo — no badge fabricated (renderChampions flags it).
+function champPodium(){
+  const m=new Map();
+  (STATE.data.champions||[]).filter(r=>r.players).forEach(r=>{
+    const place=champPlace(r);
+    if(place===null) return;
+    String(r.players).split(/,|·|\/|&|\||\band\b/i).map(nkey).filter(Boolean).forEach(k=>{
+      if(!m.has(k)) m.set(k,{wins:[],minors:[]});
+      if(place===1) m.get(k).wins.push(r.year);
+      else m.get(k).minors.push({place,year:r.year});
+    });
+  });
+  m.forEach(p=>{ p.wins.sort((a,b)=>parseInt(b,10)-parseInt(a,10));
+    p.minors.sort((a,b)=>parseInt(b.year,10)-parseInt(a.year,10)); });
+  return m;
+}
+function renderDraft(){
+  const body=$("#draftBody"); if(!body) return;
+  // Pinned to activeSeason() end-to-end — the draft never follows the archive
+  // year picker (STATE.year), so rosterMap() must not be used here.
+  const season=activeSeason();
+  const rows=(STATE.data.field||[]).filter(r=>r.player&&r.year===season);
+  if(!rows.length){
+    body.innerHTML='<div class="lb-empty">The draft board lights up when this season\'s Field tab fills in.</div>';
+    return;
+  }
+  if(!body.querySelector("#draftPool")){                    // restore columns after an empty-state render
+    body.innerHTML='<div class="draft-cols"><div><h3 class="draft-h">Pool</h3><div id="draftPool"></div></div>'+
+      '<div><h3 class="draft-h">Drafted</h3><div id="draftTeams"></div></div></div>';
+  }
+  // U-POOL: blank team AND status not in {out, wd, declined}. Blank team is
+  // NORMAL here (E-TEAM) — the pool is the point; never flag it.
+  const excluded=new Set(["out","wd","declined"]);
+  const pool=rows.filter(r=>!String(r.team||"").trim()&&!excluded.has(nkey(r.status)));
+  const drafted=rows.filter(r=>String(r.team||"").trim());
+  const pod=champPodium();
+  const seasonInt=parseInt(season,10);
+  const hnum=v=>{ const n=parseFloat(String(v||"").replace(/[^0-9.\-]/g,"")); return isNaN(n)?Infinity:n; };
+  const podHTML=k=>{ const p=pod.get(k); if(!p) return "";
+    const wins=p.wins.length?`<span class="pod-win">🏆 ${p.wins.map(esc).join(" · ")}</span>`:"";
+    const minors=p.minors.length?`<span class="pod-minor">${p.minors.map(mm=>esc(mm.place+ordSuffix(mm.place)+" ’"+String(mm.year).slice(2))).join(" · ")}</span>`:"";
+    return wins||minors?`<span class="drow-pod">${wins}${minors}</span>`:""; };
+  const badgeHTML=r=>{ const b=seniorityBadge(r.since,seasonInt);
+    return b==="ROOKIE"?'<span class="badge badge-rookie">ROOKIE</span>':(b?`<span class="badge">${esc(b)}</span>`:""); };
+  const rowHTML=r=>`<div class="drow">
+      <div class="drow-name"><span class="drow-player">${esc(r.player)}</span>${badgeHTML(r)}</div>
+      <div class="drow-hcp">${r.handicap?esc(r.handicap):"—"}</div>
+      <div class="drow-meta">${podHTML(nkey(r.player))}${r.strengths?`<span class="drow-str">${esc(r.strengths)}</span>`:""}</div>
+    </div>`;
+  $("#draftPool").innerHTML = pool.length
+    ? [...pool].sort((a,b)=>hnum(a.handicap)-hnum(b.handicap)).map(rowHTML).join("")
+    : '<div class="lb-empty">Pool empty — draft complete.</div>';
+  // Drafted: grouped by team from THIS season's rows. Captain first (player ==
+  // team). Captainless or stray groups still render — nothing with a name may
+  // vanish, and nothing here flags (E-TEAM; rosterMap owns roster health).
+  const byTeam=new Map();
+  drafted.forEach(r=>{ const k=nkey(r.team);
+    if(!byTeam.has(k)) byTeam.set(k,{captain:null,members:[]});
+    const t=byTeam.get(k);
+    if(nkey(r.player)===k&&!t.captain) t.captain=r; else t.members.push(r);
+  });
+  const teamsHTML=[...byTeam.values()].map(t=>
+    `<div class="draft-team">${[...(t.captain?[t.captain]:[]),...t.members].map(rowHTML).join("")}</div>`).join("");
+  $("#draftTeams").innerHTML = teamsHTML || '<div class="lb-empty">Nobody drafted yet.</div>';
+}
+
 function renderPairings(){
   const rows=forYear(STATE.data.pairings,STATE.year).filter(r=>r.players);
   if(!rows.length){
@@ -2294,7 +2392,7 @@ function renderChampions(){
 }
 
 function renderAll(){
-  renderYears(); renderLeaderboard(); renderField(); renderPairings();
+  renderYears(); renderLeaderboard(); renderField(); renderDraft(); renderPairings();
   renderCalcutta(); renderNextYear(); renderRooms(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
 }
 
@@ -2318,8 +2416,8 @@ function renderHealth(){
    window paintHome/tick use for pre/post-event), it flips to what matters
    on the ground: Board, Pairings, Calcutta. Computed once per paint, not
    live-recomputed on scroll/click — it does not need to be. */
-const NAV_OFF_PRIORITY=["home","nextyear","field","rooms"];
-const NAV_EVENT_PRIORITY=["board","pairings","calcutta","rooms"];
+const NAV_OFF_PRIORITY=["home","nextyear","field","draft","rooms"];
+const NAV_EVENT_PRIORITY=["board","draft","pairings","calcutta","rooms"];
 function seasonPhase(){
   const tee=new Date(INFO.first_tee||CONFIG.FIRST_TEE);
   if(isNaN(tee.getTime())) return "off";

@@ -1,11 +1,11 @@
-year,player,team,since,handicap,status,deposit,paid_date
-2026,Duck,Duck,2019,8,In,TRUE,
+year,player,team,since,handicap,status,deposit,paid_date,strengths
+2026,Duck,Duck,2019,8,In,TRUE,,steady putter
 2026,Hammer,Duck,2019,10,In,TRUE,
 2026,Sully,Sully,2021,15,In,TRUE,
-2026,"Johnson, Wade",Sully,2022,12,In,TRUE,
+2026,Wade Johnson,Sully,2022,12,In,TRUE,
 2026,Moose,Moose,2019,9,In,TRUE,
 2026,Sock,Moose,2020,14,In,TRUE,
-2026,Tex,Tex,2019,18,In,TRUE,
+2026,Tex,Tex,2019,18,In,TRUE,,long drives
 2026,Tank,Tex,2026,20,In,TRUE,
 2026,Bear,Bear,2023,11,In,TRUE,
 2027,Duck,,,,,TRUE,2026-08-20
