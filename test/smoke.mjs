@@ -1769,8 +1769,10 @@ dom.window.close();
     && pyCourse.slice(0,9).reduce((s, r) => s + r[2], 0) === 3094
     && pyCourse.slice(9).reduce((s, r) => s + r[2], 0) === 3007,
     "pyCourse=" + JSON.stringify(pyCourse));
-  check("P6: script embeds no sheet ids/urls (safe for public repo)",
-    gs.length > 0 && !/docs\.google\.com|spreadsheets\/d\//.test(gs));
+  const triggs = (() => { try { return readFileSync(path.join(ROOT, "tools", "sheet-triggers.gs"), "utf8"); } catch { return ""; } })();
+  check("P6: scripts embed no sheet ids/urls (safe for public repo)",
+    gs.length > 0 && triggs.length > 0
+    && !/docs\.google\.com|spreadsheets\/d\//.test(gs) && !/docs\.google\.com|spreadsheets\/d\//.test(triggs));
 }
 
 /* ---------- Q: presend-check (v2.3 §13 V-MATCH/V-PATH) ---------- */
@@ -1866,6 +1868,10 @@ dom.window.close();
     && !/getSheetByName\("(Calcutta|Ledger|Rooms|Invites|Course|Payout|Champions|Shame|Schedule|Pairings)"\)/.test(tg.split("function onDepositEdit")[0] || tg));
   check("T4: stamp uses sheet timezone + never erases (F-STAMP-IMPL)",
     tg.includes("getSpreadsheetTimeZone()") && tg.includes('Utilities.formatDate') && /never erases|do not erase/i.test(tg));
+  const ps = readFileSync(path.join(ROOT, "tools", "sheet-polish.gs"), "utf8");
+  check("T5: buildStartHere_ dashboard + seasonal logic (F-START-LINKS, F-START, F-IDEM)",
+    ps.includes("function buildStartHere_") && ps.includes('ss.getUrl()') && !/docs\.google\.com|spreadsheets\/d\//.test(ps)
+    && ps.includes('"START HERE"') && ps.includes("inEventWindow_") && ps.includes("first_tee"));
 }
 
 /* ---------------------------------------------------------------------

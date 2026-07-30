@@ -25,6 +25,7 @@ function polish(){
     if (name === "Rooms") colorRooms_(sh);
     if (name === "Course") autofillCourse_(sh);
   });
+  buildStartHere_(ss);
   Logger.log("polish complete");
 }
 
@@ -114,3 +115,47 @@ function autofillCourse_(sh){
   }
 }
 function colLetter_(i){ let s = ""; while (i > 0){ s = String.fromCharCode(65 + ((i - 1) % 26)) + s; i = Math.floor((i - 1) / 26); } return s; }
+function buildStartHere_(ss){
+  const name = "START HERE";
+  let sh = ss.getSheetByName(name); if (!sh) sh = ss.insertSheet(name, 0);
+  const keep = sh.getRange("B7").getValue();                  // preserve Riley's pasted form URL (E-IDEM)
+  sh.clear();
+  const url = ss.getUrl();                                    // runtime — no ids in source (F-START-LINKS)
+  const link = tab => { const s = ss.getSheetByName(tab); return s ? `=HYPERLINK("${url}#gid=${s.getSheetId()}","${tab}")` : tab; };
+  const eventWindow = inEventWindow_(ss);
+  const rows = [
+    ["GFY — START HERE", ""],
+    ["", ""],
+    [eventWindow ? "EVENT WEEK — what matters now:" : "OFF-SEASON — what matters now:", ""],
+    ...(eventWindow
+      ? [["Scores land via the scoring form (link below)", ""], ["Watch the board", link("Scores")]]
+      : [["Collections: tick deposits on", link("Field")], ["Invites: tick invited/responded on", link("Invites")], ["Rooms:", link("Rooms")]]),
+    ["", ""],
+    ["Scoring form URL (paste once):", ""],
+    ["", ""],
+    ["COLOR LEGEND", ""],
+    ["Dark red row = deposit unpaid", ""], ["Gold tint = rookie (since == this season)", ""], ["Sage tint = Rooms name not on Field", ""],
+    ["", ""],
+    ["Before ANY email send round: npm run presend (see repo README)", ""],
+    ["Polish/repair the sheet: Extensions → Apps Script → run polish()", ""],
+  ];
+  sh.getRange(1, 1, rows.length, 2).setValues(rows);
+  if (keep) sh.getRange("B7").setValue(keep);                 // restore the form URL after rebuild
+  sh.setColumnWidth(1, 340); sh.getRange("A1").setFontSize(14).setFontWeight("bold");
+  ss.setActiveSheet(sh); ss.moveActiveSheet(1);
+  orderTabs_(ss, eventWindow);
+}
+function inEventWindow_(ss){
+  const info = ss.getSheetByName("Info"); if (!info) return false;
+  for (const r of info.getDataRange().getValues()){
+    if (String(r[0]).trim().toLowerCase() === "first_tee"){
+      const t = new Date(String(r[1])); if (isNaN(t)) return false;
+      return Math.abs(Date.now() - t.getTime()) < 3 * 864e5;   // first_tee ±3 days (F-START)
+    }
+  }
+  return false;
+}
+function orderTabs_(ss, eventWindow){
+  const want = eventWindow ? ["START HERE","Scores","Field","Pairings"] : ["START HERE","Field","Invites","Rooms"];
+  want.forEach((n, i) => { const s = ss.getSheetByName(n); if (s){ ss.setActiveSheet(s); ss.moveActiveSheet(i + 1); } });
+}
