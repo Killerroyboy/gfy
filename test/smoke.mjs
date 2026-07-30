@@ -2078,6 +2078,42 @@ dom.window.close();
 }
 
 /* ---------------------------------------------------------------------
+   Group Y: crest v3 Park Badge (spec §16). Y1 = outline enforcement (the
+   hero's only <text> is the live EST ribbon), Y2 = MARK_PATH single
+   authority, Y3 = sheet-driven est_year still lands in the ribbon.
+   --------------------------------------------------------------------- */
+{
+  // Y1/Y2: static assertions against a fresh dom + raw html source. The
+  // file-level `dom` const is already closed by Group Z's guardrail
+  // teardown (which runs earlier in file order, before Group U/Y), so Y1
+  // gets its own dom like every other isolated check in this file; `html`
+  // is a file-level const and never closes.
+  const domY1 = makeDom("");
+  const crestY = domY1.window.document.querySelector("svg.crest");
+  const textsY = crestY ? crestY.querySelectorAll("text") : [];
+  check("Y1: crest v3 — hero svg has exactly one <text> and it is #crestEst (outlined band type)",
+    !!crestY && textsY.length === 1 && textsY[0].id === "crestEst",
+    crestY ? "texts=" + textsY.length : "no svg.crest");
+  domY1.window.close();
+
+  const markCount = (html.match(/M 91 17 C 92 9, 100 3, 110 3/g) || []).length;
+  check("Y2: crest v3 — MARK_PATH literal occurs exactly once in index.html (keyline is injected, not copied)",
+    markCount === 1, "count=" + markCount);
+
+  // Y3: variant dom — Info est_year 1987 must land in the live ribbon text.
+  const infoVariant = withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200,
+      text: async () => FIXTURES.info.replace("est_year,2019", "est_year,1987") }),
+  });
+  const domY3 = makeDom("", infoVariant);
+  await until(() => domY3.window.document.querySelector("#crestEst")?.textContent === "EST. 1987");
+  const estY3 = domY3.window.document.querySelector("#crestEst")?.textContent || "";
+  check("Y3: crest v3 — #crestEst renders sheet est_year (variant 1987)",
+    estY3 === "EST. 1987", "got=" + estY3);
+  domY3.window.close();
+}
+
+/* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
 const groupTally = {};
