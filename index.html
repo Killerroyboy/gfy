@@ -399,6 +399,10 @@
   .sc-inert{color:var(--sage);font-size:1rem}
   .sc-inert-form{margin-top:8px}
   .sc-inert-form a{color:var(--brass)}
+  /* Task 5 — captain-facing header banners: storage-dead degrade copy and
+     the SC-LOUD-CONFIG carried-over banner (drain hit {kind:"config"}). */
+  .sc-degrade,.sc-loud-config{color:var(--rust);font-size:14px;margin:0 0 10px}
+  .sc-loud-config a{color:var(--brass);margin-left:6px}
 
   /* Task 3 card-first scorecard (SC-UI/SC-PAR/SC-ROUND). All scorer text
      stays >=13px (thumb-friendly outdoors, no squinting on the tee) — the
@@ -422,6 +426,13 @@
   .sc-cell.under b{color:var(--brass)}
   .sc-cell.bogey b{color:var(--sage)}
   .sc-cell.blowup b{color:var(--rust)}
+  /* Task 5 — SC-HONEST/SC-NOCLOBBER truth-state modifiers (combine with the
+     scoreClass ones above; conflict skips scoreClass entirely — ambiguous). */
+  .sc-cell.sc-queued{border-color:var(--brass-dim)}
+  .sc-cell.sc-sending{opacity:.65}
+  .sc-cell.sc-rejected{border-color:var(--rust);background:rgba(176,112,94,.16)}
+  .sc-cell.sc-conflict{border-color:var(--rust);background:rgba(176,112,94,.1)}
+  .sc-old-round{font-size:13px;color:var(--sage);margin:0 0 10px}
   .sc-legend{font-size:13px;color:var(--sage);margin:10px 0 20px;letter-spacing:.01em}
   #scPad{margin-top:10px;padding:16px;border:1px solid rgba(200,162,74,.3);background:rgba(0,0,0,.2)}
   #scPad[hidden]{display:none}
@@ -440,6 +451,10 @@
     background:var(--brass);color:var(--pine);border:0;cursor:pointer;font-family:var(--ui)}
   .sc-pad-close{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);
     background:none;border:1px solid rgba(200,162,74,.22);padding:6px 12px;cursor:pointer}
+  /* Task 5 — conflict (SC-NOCLOBBER) + rejected-verdict pad content. */
+  .sc-pad-conflict{font-size:14px;color:var(--rust);margin:0 0 10px}
+  .sc-pad-rejected{font-size:14px;color:var(--rust);margin:0 0 6px}
+  .sc-pad-escalate{font-size:14px;color:var(--rust);font-weight:600;margin:0 0 10px}
 </style>
 </head>
 <body>
@@ -2885,8 +2900,6 @@ function paintHome(){
    par-labeled pad, round chip) ----------
    Resolution order: hash team -> remembered (localStorage-confirmed) team ->
    picker. */
-window.scLocalCells = window.scLocalCells || {}; // hole -> {score, state:"local"} — Task 5's journal seam
-window.scJournalSave = window.scJournalSave || (e => {}); // Task 5 seam stub
 function scRoster(team,seasonY){
   return forYear(STATE.data.field,seasonY).filter(r=>r.player&&nkey(r.team)===nkey(team)).map(r=>r.player);
 }
@@ -3066,23 +3079,306 @@ function scShowConfirm(seasonY,team){
   confirmEl.hidden=false;
   $("#scPicker").hidden=true;
   $("#scConfirmBtn").addEventListener("click",()=>{
-    try{ localStorage.setItem(scKey(seasonY,nkey(team)),JSON.stringify({confirmed:true})); }catch{}
+    // Routed through scStore (Task 5's one mutation wrapper) rather than a
+    // bare localStorage.setItem: same {confirmed:true} write, but now also
+    // detects dead storage at the very FIRST journal touch (confirm time),
+    // not only at the first score tap, and shares the try/catch discipline
+    // with every other mutation instead of duplicating it.
+    scStore(scKey(seasonY,nkey(team)), root=>{ root.confirmed=true; });
     scShowCard(seasonY,team);
   });
   $("#scNotYou").addEventListener("click",e=>{ e.preventDefault(); scShowPicker(seasonY); });
 }
 
+/* ---------- §18 SC-HONEST / SC-NOCLOBBER / SC-QUEUE (Task 5) ----------
+   Journal root, per (season,team), lives at scKey(season, nkey(team)):
+     {client_id, seq, confirmed, entries:{"r2h13":{round,hole,score,seq,
+       state,verdict,ts,retries}}}
+   ONE mutation path (scStore) try/catches both the read and the write; a
+   throw on write flips window.scStorageDead (sticky — a phone that lost
+   its memory once stays degraded for the session, per the controller's
+   resolution) but the in-memory cache (scJournalCache) stays authoritative
+   regardless, so a dead-storage phone still renders every tap correctly
+   (X23) — only the ACROSS-RELOAD memory is gone, which is exactly what the
+   header copy says.
+   window.scSheetHoles (Task 6 seam, pinned `()=>null` until Task 6 lands)
+   supplies the sheet's per-hole values for the CURRENTLY ACTIVE round.
+   scCellState() is the single per-hole merge point the whole card renders
+   from — SC-UI's new source of truth, replacing Task 3's window.scLocalCells. */
+window.scStorageDead = window.scStorageDead || false;
+window.scConfigBroken = window.scConfigBroken || false; // SC-LOUD-CONFIG carried banner (drain hit kind:"config")
+window.scSheetHoles = window.scSheetHoles || (()=>null); // Task 6 seam — sheet-merge getter for SC-NOCLOBBER
+let scJournalCache={};   // key -> root, always current (populated by scJournalRead/scStore)
+let scDraining=false;    // single-flight guard for scDrain()
+let scDrainTimer=null;   // 20s poll, lives only while the #score view is visible
+
+function scNewClientId(){ return "c"+Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
+function scJournalDefaultRoot(){ return {client_id:null, seq:0, confirmed:false, entries:{}}; }
+// Read-only, cache-first, tolerant: never throws, never writes. Also
+// normalizes a pre-Task-5 {confirmed:true} blob (written by scShowConfirm
+// before this task existed, or by an older session) into the full shape
+// without discarding the confirmed flag or any other field already there.
+function scJournalRead(key){
+  if(scJournalCache[key]) return scJournalCache[key];
+  let root=null;
+  try{ const raw=localStorage.getItem(key); root=raw?JSON.parse(raw):null; }
+  catch(e){ window.scStorageDead=true; root=null; }
+  if(!root||typeof root!=="object") root=scJournalDefaultRoot();
+  if(!root.entries||typeof root.entries!=="object") root.entries={};
+  if(root.seq==null) root.seq=0;
+  root.confirmed=!!root.confirmed;
+  scJournalCache[key]=root;
+  return root;
+}
+// The ONE mutation wrapper (controller's binding resolution): every write —
+// confirm, save, coalesce, drain's state transitions, retry, force-send —
+// funnels through here. try/catch on read (via scJournalRead) AND write.
+function scStore(key,mutfn){
+  const root=scJournalRead(key);
+  if(!root.client_id) root.client_id=scNewClientId();
+  mutfn(root);
+  scJournalCache[key]=root; // in-memory copy always current, storage health notwithstanding
+  try{ localStorage.setItem(key,JSON.stringify(root)); }
+  catch(e){ window.scStorageDead=true; }
+  return root;
+}
+function scEntryKeyOf(round,hole){ return "r"+round+"h"+hole; }
+function scCurrentJournalKey(){
+  if(!STATE.scTeam||!STATE.scSeason) return null;
+  return scKey(STATE.scSeason,nkey(STATE.scTeam));
+}
+function scEntryFor(round,hole){
+  const key=scCurrentJournalKey();
+  if(!key) return null;
+  return scJournalRead(key).entries[scEntryKeyOf(round,hole)]||null;
+}
+function scSheetValFor(hole){
+  const map=(typeof window.scSheetHoles==="function")?window.scSheetHoles():null;
+  if(!map) return null;
+  const v=map[hole];
+  return v!=null?v:null;
+}
+// SC-HONEST/SC-NOCLOBBER precedence, exact (controller's four rules):
+//  1. sheet present + journal "ok" at the same value -> "on the sheet".
+//  2. sheet present + differs from the phone's latest entry (any state) ->
+//     conflict, both numbers shown, never auto-sent.
+//  3. no sheet value -> the journal state renders (queued/sending/ok/rejected).
+//  4. entries from a round OTHER than the active one never render per-hole
+//     here at all (see scOldRoundSummaryHTML) -> one quiet summary line.
+// This is the SINGLE per-hole merge point scCellHTML/scPadHTML/scTallyHTML
+// all read from.
+function scCellState(hole){
+  const round=scActiveRound();
+  const entry=scEntryFor(round,hole);
+  const sheetVal=scSheetValFor(hole);
+  if(sheetVal!=null){
+    if(entry&&entry.score!=null&&entry.score!==sheetVal){
+      return {kind:"conflict", sheetVal, phoneVal:entry.score, entry};
+    }
+    return {kind:"sheet", value:sheetVal, entry};
+  }
+  if(entry) return {kind:"journal", state:entry.state, score:entry.score, verdict:entry.verdict, entry};
+  return {kind:"empty"};
+}
+// Rule 2's HELD gate for the drain: never auto-send a sheet/phone mismatch.
+// Scoped to the ACTIVE round only — scSheetHoles() (Task 6 seam) takes no
+// round parameter, so there is no sheet data to check a non-active-round
+// entry against at this task; that entry drains normally (Task 6's real
+// per-round derivation can extend this later if needed). entry.override is
+// the one explicit, separate "send anyway" escape hatch (scPadForceSend) —
+// the ONLY way past a genuine hold.
+function scEntryHeld(entry){
+  if(entry.override) return false;
+  if(String(entry.round)!==String(scActiveRound())) return false;
+  const sheetVal=scSheetValFor(entry.hole);
+  return sheetVal!=null && sheetVal!==entry.score;
+}
+// Coalescing (X18): a fresh save ALWAYS gets a brand-new seq and REPLACES
+// whatever entry object lived at this (round,hole) key, regardless of its
+// previous state. An in-flight send for the OLD object becomes an orphaned
+// reference — scDrain()'s post-send handlers re-check the seq against the
+// CURRENT entries[key] before mutating, so a stale response for a
+// superseded seq is silently dropped rather than corrupting the new entry.
+function scJournalSave(entry){
+  const key=scCurrentJournalKey();
+  if(!key) return;
+  const entryKey=scEntryKeyOf(entry.round,entry.hole);
+  scStore(key,root=>{
+    root.seq=(root.seq||0)+1;
+    root.entries[entryKey]={round:entry.round,hole:entry.hole,score:entry.score,
+      seq:root.seq,state:"queued",verdict:null,ts:Date.now(),retries:0};
+  });
+  // Deferred, not inline: the CALLER's own renderScCard() (right after this
+  // call returns, in scSubmitScore) must paint "queued" first — offline-
+  // first means the local write is what's instant; the network attempt
+  // happens after (X16's "cell shows queued state INSTANTLY").
+  setTimeout(scDrain,0);
+}
+// Single-flight (scDraining), strictly one send in flight at a time,
+// ordered by seq (X19's captured-order proof depends on no Promise.all).
+async function scDrain(){
+  if(scDraining) return;
+  scDraining=true;
+  try{
+    const key=scCurrentJournalKey();
+    if(!key) return;
+    while(true){
+      const root=scJournalRead(key);
+      const queued=Object.keys(root.entries).map(k=>root.entries[k])
+        .filter(e=>e.state==="queued").sort((a,b)=>a.seq-b.seq);
+      let candidate=null;
+      for(const e of queued){ if(!scEntryHeld(e)){ candidate=e; break; } }
+      if(!candidate) break; // nothing eligible — done, or everything left is HELD
+      const entryKey=scEntryKeyOf(candidate.round,candidate.hole);
+      const seq=candidate.seq;
+      scStore(key,r=>{ const e=r.entries[entryKey]; if(e&&e.seq===seq) e.state="sending"; });
+      renderScCard();
+      let out,err;
+      try{
+        out=await scSend({team:STATE.scTeam,round:candidate.round,hole:candidate.hole,score:candidate.score},
+          root.client_id,seq);
+      }catch(e){ err=e; }
+      if(err){
+        if(err.kind==="network"){
+          scStore(key,r=>{ const e=r.entries[entryKey]; if(e&&e.seq===seq) e.state="queued"; });
+          renderScCard();
+          break; // offline — stop this pass; an external trigger (online/timer/pageshow) retries later
+        }
+        if(err.kind==="config"){
+          window.scConfigBroken=true;
+          scStore(key,r=>{ const e=r.entries[entryKey]; if(e&&e.seq===seq) e.state="queued"; });
+          renderScCard();
+          break; // broken deployment — entries stay queued, the loud banner is now up
+        }
+        break; // defensive: an unrecognized rejection kind must never spin
+      }
+      window.scConfigBroken=false; // a resolved response (ok true or false) proves transport is fine
+      scStore(key,r=>{
+        const e=r.entries[entryKey];
+        if(!e||e.seq!==seq) return; // superseded by a coalescing save mid-flight — drop the stale response
+        if(out.ok){ e.state="ok"; e.verdict=out.verdict; }
+        else { e.state="rejected"; e.verdict=out.verdict; }
+      });
+      renderScCard();
+    }
+  } finally {
+    scDraining=false;
+  }
+}
+// Manual retry of a rejected entry — SAME seq forever (idempotency pairing
+// with the server; this is NOT a new score, so it must not go through
+// scJournalSave, which would mint a new seq). Escalation copy ("text
+// Riley") appears once retries reach 2.
+function scRetryEntry(hole){
+  const key=scCurrentJournalKey();
+  if(!key) return;
+  const round=scActiveRound();
+  scStore(key,root=>{
+    const e=root.entries[scEntryKeyOf(round,hole)];
+    if(e&&e.state==="rejected"){ e.retries=(e.retries||0)+1; e.state="queued"; }
+  });
+  renderScCard();
+  scDrain();
+}
+// The one explicit, separate override past a NOCLOBBER hold (rule 2) — a
+// deliberate captain action, distinct from the ordinary edit-mode Replace
+// confirm, naming both numbers in the pad (X20).
+function scPadForceSend(hole){
+  const key=scCurrentJournalKey();
+  if(!key) return;
+  const round=scActiveRound();
+  scStore(key,root=>{
+    const e=root.entries[scEntryKeyOf(round,hole)];
+    if(e) e.override=true;
+  });
+  STATE.scPadHole=null;
+  renderScCard();
+  scDrain();
+}
+// Captain-facing header banners (#scHeader, shared region with the inert
+// copy — only one of inert/card is ever visible at a time, so no clash).
+function scHeaderHTML(){
+  const parts=[];
+  if(window.scStorageDead) parts.push(`<p class="sc-degrade">This phone can't remember sends — the sheet is your record.</p>`);
+  if(window.scConfigBroken){
+    const formUrl=scFormUrl();
+    parts.push(`<p class="sc-loud-config">Scoring endpoint not reachable — check the deployment.`+
+      (formUrl?` <a href="${esc(formUrl)}" target="_blank" rel="noopener">Score via the form</a>`:"")+`</p>`);
+  }
+  return parts.join("");
+}
+// Rule 4: entries from a round OTHER than the currently-active one (the
+// momentary round-toggle spring lets a captain log an out-of-sequence
+// round's hole without leaving the active round) render as ONE quiet
+// summary line per round — never a per-hole prompt, never clickable (no
+// listener wired for .sc-old-round in scWireCard()).
+function scOldRoundSummaryHTML(activeRound){
+  const key=scCurrentJournalKey();
+  if(!key) return "";
+  const root=scJournalRead(key);
+  const other={};
+  Object.keys(root.entries).forEach(k=>{
+    const e=root.entries[k];
+    if(String(e.round)!==String(activeRound)){
+      other[e.round]=other[e.round]||{count:0,ok:0};
+      other[e.round].count++;
+      if(e.state==="ok") other[e.round].ok++;
+    }
+  });
+  return Object.keys(other).sort().map(r=>
+    `<p class="sc-old-round">Round ${esc(r)}: ${other[r].count} recorded (${other[r].ok} on the sheet)</p>`
+  ).join("");
+}
+// Drain trigger lifecycle: after each save (scJournalSave, above); a 20s
+// timer while the #score view is visible (started/stopped from
+// renderScorer(), which runs on every hashchange and every paint() cycle);
+// window "online"/"pageshow" (always-on, not gated by which view is
+// showing — a background reconnect while looking at another tab should
+// still get a chance to drain); "visibilitychange" only on becoming
+// visible again (also defensively stops/restarts the 20s timer around a
+// backgrounded tab — strictly ADDS a stop condition beyond the hash-view
+// one, so it can only reduce background requests further, never violate
+// the "timer stops when the view hides" requirement).
+function scScoreViewActive(){
+  const bare=location.hash.slice(1).split("?")[0];
+  return (VIEW_ALIASES[bare]||bare)==="score";
+}
+function scStartDrainTimer(){
+  if(scDrainTimer) return;
+  scDrainTimer=setInterval(scDrain,20000);
+}
+function scStopDrainTimer(){
+  if(scDrainTimer){ clearInterval(scDrainTimer); scDrainTimer=null; }
+}
+window.addEventListener("online",()=>scDrain());
+window.addEventListener("pageshow",()=>scDrain());
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible"){
+    scDrain();
+    if(scScoreViewActive()) scStartDrainTimer();
+  } else {
+    scStopDrainTimer();
+  }
+});
+
 /* ---------- SC-UI: card-first scorecard ----------
-   Renders journal-only cells (window.scLocalCells) — the sheet-value merge
-   is Task 6's job (brief's Task-6 seam note). Idempotent: every call
-   rebuilds #scCard's innerHTML from STATE + scLocalCells and re-wires
-   listeners from scratch, so calling it twice back-to-back (or on every
-   60s refresh) reproduces the identical DOM shape — no incremental
-   patching to drift out of sync. */
+   Renders from scCellState(hole) (Task 5's journal+sheet merge) — the
+   single source of truth, replacing Task 3's window.scLocalCells. Still
+   idempotent: every call rebuilds #scCard's innerHTML from STATE + the
+   journal and re-wires listeners from scratch, so calling it twice
+   back-to-back (or on every periodic refresh) reproduces the identical DOM
+   shape — no incremental patching to drift out of sync. */
 function scTallyHTML(){
-  const cells=window.scLocalCells||{};
-  const filled=Object.keys(cells).map(Number).filter(h=>cells[h]&&cells[h].score!=null);
-  const strokes=filled.reduce((s,h)=>s+cells[h].score,0);
+  const filled=[]; const vals={};
+  HOLES.forEach(h=>{
+    const st=scCellState(h);
+    let v=null;
+    if(st.kind==="sheet") v=st.value;
+    else if(st.kind==="journal") v=st.score;
+    else if(st.kind==="conflict") v=st.phoneVal; // ambiguous sync-wise, but the phone's own count of strokes played is real
+    if(v!=null){ filled.push(h); vals[h]=v; }
+  });
+  const strokes=filled.reduce((s,h)=>s+vals[h],0);
   const pars=courseMap();
   if(pars){
     const parSum=filled.reduce((s,h)=>s+(pars[h]||0),0);
@@ -3097,14 +3393,29 @@ function scTallyHTML(){
     `<span class="sc-tally-lab"> strokes thru ${filled.length}</span></p>`;
 }
 function scCellHTML(h){
-  const cell=window.scLocalCells[h];
-  const score=cell&&cell.score!=null?cell.score:null;
+  const st=scCellState(h);
   const par=scHolePar(h);
-  const cls=(score!=null&&par)?scoreClass(score,par).trim():"";
+  let label="–", extraCls="", scoreForColor=null, titleAttr="";
+  if(st.kind==="conflict"){
+    label=`${st.phoneVal}·${st.sheetVal}`;
+    extraCls="sc-conflict";
+  } else if(st.kind==="sheet"){
+    label=String(st.value);
+    scoreForColor=st.value;
+    extraCls="sc-sheet";
+  } else if(st.kind==="journal"){
+    label=String(st.score);
+    scoreForColor=st.score;
+    if(st.state==="queued") extraCls="sc-queued";
+    else if(st.state==="sending") extraCls="sc-sending";
+    else if(st.state==="rejected"){ extraCls="sc-rejected"; titleAttr=` title="${esc(st.verdict||"")}"`; }
+  }
+  const scoreCls=(scoreForColor!=null&&par)?scoreClass(scoreForColor,par).trim():"";
   // over/under is never color-only: a ▾/▴ glyph rides alongside the color class.
-  const glyph=cls==="under"?"▾":(cls==="bogey"||cls==="blowup")?"▴":"";
-  return `<button type="button" class="sc-cell${cls?" "+cls:""}" data-hole="${h}" aria-label="Hole ${h}">`+
-    `<b>${score!=null?score:"–"}</b><span>${h}</span>`+
+  const glyph=scoreCls==="under"?"▾":(scoreCls==="bogey"||scoreCls==="blowup")?"▴":"";
+  const cls=[scoreCls,extraCls].filter(Boolean).join(" ");
+  return `<button type="button" class="sc-cell${cls?" "+cls:""}" data-hole="${h}" aria-label="Hole ${h}"${titleAttr}>`+
+    `<b>${label}</b><span>${h}</span>`+
     `${glyph?`<i class="sc-glyph" aria-hidden="true">${glyph}</i>`:""}</button>`;
 }
 function scNineHTML(a,b,lab){
@@ -3115,23 +3426,52 @@ function scNineHTML(a,b,lab){
 function scPadHTML(){
   const hole=STATE.scPadHole;
   if(hole==null) return `<div id="scPad" hidden></div>`;
-  const existing=window.scLocalCells[hole];
-  const editMode=!!(existing&&existing.score!=null);
+  const cellState=scCellState(hole);
   const par=scHolePar(hole);
   const ydsMap=courseYards();
   const yds=ydsMap?ydsMap[hole]:null;
+  const headHTML=`<div class="sc-pad-head">Hole ${hole}${par?` · Par ${par}`:""}${yds?` · ${yds} yds`:""}</div>`;
+
+  // CONFLICT mode (SC-NOCLOBBER rule 2): sheet and phone disagree — never
+  // auto-sendable. The ONLY way to push the phone's value is this explicit,
+  // separate override tap (distinct from the ordinary edit-mode Replace
+  // confirm below), naming both numbers (X20).
+  if(cellState.kind==="conflict"){
+    return `<div id="scPad">`+headHTML+
+      `<p class="sc-pad-conflict">Sheet has ${cellState.sheetVal} · your phone has ${cellState.phoneVal}</p>`+
+      `<button type="button" id="scPadForceSend" class="sc-pad-replace">Send ${cellState.phoneVal} anyway</button>`+
+      `<button type="button" class="sc-pad-close">Close</button>`+
+      `</div>`;
+  }
+
+  // Normal/edit mode (rule 3's journal-driven flow, and the "on the sheet,
+  // no conflict yet" case, which behaves like edit mode against the
+  // sheet's value — picking a DIFFERENT number there will render as a
+  // conflict on the next cell paint, per rule 2, since it now differs from
+  // the still-current sheet value; that's intentional friction, not a bug).
+  const existingScore = cellState.kind==="sheet" ? cellState.value
+    : (cellState.kind==="journal" ? cellState.score : null);
+  const editMode=existingScore!=null;
+  const rejectedEntry=(cellState.kind==="journal"&&cellState.state==="rejected")?cellState.entry:null;
   const pending=STATE.scPadPending;
   const numsHTML=scPadNumbers(hole).map(n=>
     `<button type="button" class="sc-num" data-score="${n.score}"><b>${n.score}</b>`+
     (n.label?`<span class="sc-num-lab">${esc(n.label)}</span>`:"")+`</button>`
   ).join("");
-  const currentHTML=editMode?`<p class="sc-pad-current">currently ${existing.score}</p>`:"";
+  const currentHTML=editMode?`<p class="sc-pad-current">currently ${existingScore}</p>`:"";
+  // REJECTED (rule 3's loud branch): verbatim verdict, manual Retry (same
+  // seq — see scRetryEntry), "text Riley" escalation after 2 manual retries.
+  const rejectedHTML=rejectedEntry
+    ? `<p class="sc-pad-rejected">Rejected: ${esc(rejectedEntry.verdict||"")}</p>`+
+      ((rejectedEntry.retries||0)>=2?`<p class="sc-pad-escalate">Still failing — text Riley.</p>`:"")+
+      `<button type="button" id="scPadRetry" class="sc-pad-replace">Retry send</button>`
+    : "";
   // Send-on-tap fires scJournalSave the instant a fresh cell's number is
   // tapped (no confirm) — EXCEPT edit mode, which arms this replace button
   // instead (NOCLOBBER: overwriting an already-saved score needs a second,
   // explicit tap, per the controller's asymmetry ruling).
   const replaceHTML=(editMode&&pending!=null)
-    ? `<button type="button" id="scPadReplace" class="sc-pad-replace">Replace ${existing.score} with ${pending}</button>`
+    ? `<button type="button" id="scPadReplace" class="sc-pad-replace">Replace ${existingScore} with ${pending}</button>`
     : "";
   // R1-3: a periodic refresh (renderScorer -> renderScCard, every REFRESH_MS)
   // rebuilds this whole innerHTML from scratch — STATE.scPadOtherVal is the
@@ -3146,8 +3486,9 @@ function scPadHTML(){
       : "")+
     `</div>`;
   return `<div id="scPad">`+
-    `<div class="sc-pad-head">Hole ${hole}${par?` · Par ${par}`:""}${yds?` · ${yds} yds`:""}</div>`+
+    headHTML+
     currentHTML+
+    rejectedHTML+
     `<div class="sc-pad-nums">${numsHTML}</div>`+
     otherHTML+
     replaceHTML+
@@ -3165,16 +3506,17 @@ function scSubmitScore(hole,score){
   if(!(score>=1)) return;
   const entry={round:scActiveRound(),hole,score,team:STATE.scTeam};
   try{ window.scJournalSave(entry); }catch{}
-  window.scLocalCells[hole]={score,state:"local"};
   STATE.scRoundOverride=null; // momentary toggle — consumed on send (SC-ROUND spring)
   STATE.scPadHole=null; STATE.scPadPending=null; STATE.scPadOtherOpen=false; STATE.scPadOtherVal=null;
   renderScCard();
 }
 function scPadPick(hole,score){
   if(!(score>=1&&score<=19)) return;
-  const existing=window.scLocalCells[hole];
-  const editMode=!!(existing&&existing.score!=null);
-  if(editMode&&existing.score!==score){ STATE.scPadPending=score; renderScCard(); return; }
+  const cellState=scCellState(hole);
+  const existingScore = cellState.kind==="sheet" ? cellState.value
+    : (cellState.kind==="journal" ? cellState.score : null);
+  const editMode=existingScore!=null;
+  if(editMode&&existingScore!==score){ STATE.scPadPending=score; renderScCard(); return; }
   scSubmitScore(hole,score);
 }
 function scWireCard(){
@@ -3188,6 +3530,10 @@ function scWireCard(){
   const pad=$("#scPad");
   if(!pad||pad.hidden) return;
   const hole=STATE.scPadHole;
+  const forceSendBtn=pad.querySelector("#scPadForceSend");
+  if(forceSendBtn) forceSendBtn.addEventListener("click",()=>scPadForceSend(hole));
+  const retryBtn=pad.querySelector("#scPadRetry");
+  if(retryBtn) retryBtn.addEventListener("click",()=>scRetryEntry(hole));
   pad.querySelectorAll(".sc-num[data-score]").forEach(b=>
     b.addEventListener("click",()=>scPadPick(hole,parseInt(b.dataset.score,10))));
   const replaceBtn=pad.querySelector("#scPadReplace");
@@ -3214,20 +3560,25 @@ function renderScCard(){
   const card=$("#scCard");
   if(!card) return;
   if(!STATE.scTeam){ card.innerHTML=""; return; }
+  $("#scHeader").innerHTML=scHeaderHTML();
   const active=scActiveRound();
   card.innerHTML=
     `<div class="sc-round"><button type="button" id="scRound">Round ${esc(active)} · ${scDayAbbrev(active)}</button></div>`+
+    scOldRoundSummaryHTML(active)+
     scTallyHTML()+
     scNineHTML(1,9,"Out")+
     scNineHTML(10,18,"In")+
-    `<div class="sc-legend">■ on the sheet · ⇡ saved on phone · ? sheet differs — tap</div>`+
+    `<div class="sc-legend">■ on the sheet · ⇡ saved on phone · ? sheet differs — tap · ! rejected — tap</div>`+
     scPadHTML();
   scWireCard();
 }
 
 function renderScorer(){
-  const bare=location.hash.slice(1).split("?")[0];
-  if((VIEW_ALIASES[bare]||bare)!=="score") return;
+  // SC-QUEUE drain-timer lifecycle: the 20s poll runs only while the
+  // #score view is the active hash view (started here; stopped the moment
+  // that stops being true — no background request profile change).
+  if(!scScoreViewActive()){ scStopDrainTimer(); return; }
+  scStartDrainTimer();
   const seasonY=scorerSeason();
   const hashTeam=scorerTeamFromHash();
   if(hashTeam){

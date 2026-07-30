@@ -2545,6 +2545,357 @@ async function openScorer(dom) {
 }
 
 /* ---------------------------------------------------------------------
+   X16-X23: journal, queue, and truth states (spec §18 rev 2,
+   SC-HONEST/SC-NOCLOBBER/SC-QUEUE — task 5). Taps now save for real
+   (window.scJournalSave is Task 5's real implementation, no longer Task
+   3's no-op stub) and drain through scSend for real. Every dom below uses
+   withScEndpoint() (score_endpoint present) to reach the live card, same
+   pattern X7-X12/X14 established.
+   --------------------------------------------------------------------- */
+const epUrl = "https://script.example/exec";
+
+{
+  // X16: offline-first — the endpoint fetch always rejects (network down).
+  // Tapping a fresh hole's number must update the cell to a "queued" state
+  // INSTANTLY — synchronously, before any network attempt resolves — with
+  // no error UI anywhere on the page. (scJournalSave defers its own drain
+  // kickoff via setTimeout precisely so this synchronous assertion, run
+  // with no await in between, observes "queued" and not a transient
+  // "sending".)
+  const fetchX16 = (url) => {
+    if (String(url).indexOf(epUrl) === 0) return Promise.reject(new TypeError("offline (simulated)"));
+    return withScEndpoint()(url);
+  };
+  const domX16 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX16);
+  const docX16 = await openScorer(domX16);
+  docX16.querySelector('.sc-cell[data-hole="3"]').click();        // hole 3, par 3
+  await until(() => !docX16.querySelector("#scPad")?.hidden);
+  docX16.querySelector('#scPad .sc-num[data-score="3"]').click(); // fresh cell, send-on-tap
+  const cellX16 = docX16.querySelector('.sc-cell[data-hole="3"]');
+  const queuedNowX16 = !!cellX16 && cellX16.classList.contains("sc-queued") && cellX16.querySelector("b")?.textContent === "3";
+  const noErrorUIX16 = !docX16.querySelector(".sc-degrade") && !docX16.querySelector(".sc-loud-config");
+  check("X16: offline-first — stub fetch rejects (network): tap score -> cell shows queued state INSTANTLY, no error UI",
+    queuedNowX16 && noErrorUIX16 && domX16.pageErrors.length === 0,
+    "queuedNow=" + queuedNowX16 + " noErrorUI=" + noErrorUIX16 + " cellClass=" + cellX16?.className +
+      " pageErrors=" + domX16.pageErrors.length);
+  domX16.window.close();
+}
+
+{
+  // X17: drain on reconnect — flip the stub to succeed, dispatch window
+  // 'online' -> until cell state 'ok'; exactly ONE POST body seen for that
+  // hole. Bodies are captured ONLY on the branch that actually resolves —
+  // a genuine network failure never reaches "the server" to record a body,
+  // so the earlier failed attempt must not inflate the count.
+  let onlineX17 = false;
+  const bodiesX17 = [];
+  const fetchX17 = (url, opts) => {
+    if (String(url).indexOf(epUrl) === 0) {
+      if (!onlineX17) return Promise.reject(new TypeError("offline (simulated)"));
+      bodiesX17.push(JSON.parse(opts.body));
+      return Promise.resolve({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: {} }) });
+    }
+    return withScEndpoint()(url);
+  };
+  const domX17 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX17);
+  const docX17 = await openScorer(domX17);
+  docX17.querySelector('.sc-cell[data-hole="4"]').click();        // hole 4, par 5
+  await until(() => !docX17.querySelector("#scPad")?.hidden);
+  docX17.querySelector('#scPad .sc-num[data-score="5"]').click();
+  await until(() => docX17.querySelector('.sc-cell[data-hole="4"]')?.classList.contains("sc-queued"));
+  onlineX17 = true;
+  domX17.window.dispatchEvent(new domX17.window.Event("online"));
+  await until(() => {
+    const c = docX17.querySelector('.sc-cell[data-hole="4"]');
+    return !!c && !c.classList.contains("sc-queued") && !c.classList.contains("sc-sending") &&
+      !c.classList.contains("sc-rejected") && c.querySelector("b")?.textContent === "5";
+  });
+  check("X17: drain on reconnect — flip the stub to succeed, dispatch window 'online' -> until cell state 'ok'; exactly ONE POST body seen for that hole",
+    bodiesX17.length === 1 && bodiesX17[0].hole === 4 && bodiesX17[0].score === 5,
+    "bodies=" + JSON.stringify(bodiesX17));
+  domX17.window.close();
+}
+
+{
+  // X18: coalescing — while offline, tap 4 then 6 on the same hole (the
+  // second tap goes through the existing edit-mode Replace-confirm, same
+  // as X12 — the ONLY way to change an already-filled cell). The journal
+  // must hold ONE entry per hole: the earlier value is fully replaced, not
+  // queued alongside it, so once reconnected at most one body is ever
+  // captured for that hole, and its score is the FINAL value (6).
+  let onlineX18 = false;
+  const bodiesX18 = [];
+  const fetchX18 = (url, opts) => {
+    if (String(url).indexOf(epUrl) === 0) {
+      if (!onlineX18) return Promise.reject(new TypeError("offline (simulated)"));
+      bodiesX18.push(JSON.parse(opts.body));
+      return Promise.resolve({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: {} }) });
+    }
+    return withScEndpoint()(url);
+  };
+  const domX18 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX18);
+  const docX18 = await openScorer(domX18);
+  docX18.querySelector('.sc-cell[data-hole="6"]').click();        // hole 6, par 4
+  await until(() => !docX18.querySelector("#scPad")?.hidden);
+  docX18.querySelector('#scPad .sc-num[data-score="4"]').click(); // tap #1: fresh, send-on-tap -> queued 4
+  await until(() => docX18.querySelector('.sc-cell[data-hole="6"] b')?.textContent === "4");
+  docX18.querySelector('.sc-cell[data-hole="6"]').click();        // re-tap the filled cell -> edit mode
+  await until(() => /currently 4/.test(docX18.querySelector("#scPad")?.textContent || ""));
+  docX18.querySelector('#scPad .sc-num[data-score="6"]').click(); // tap #2: arms "Replace 4 with 6"
+  await until(() => /Replace 4 with 6/.test(docX18.querySelector("#scPad")?.textContent || ""));
+  docX18.querySelector("#scPadReplace").click();                 // confirm -> coalesces to score 6, new seq
+  await until(() => docX18.querySelector('.sc-cell[data-hole="6"] b')?.textContent === "6");
+  onlineX18 = true;
+  domX18.window.dispatchEvent(new domX18.window.Event("online"));
+  await until(() => bodiesX18.length > 0);
+  await settle(300); // give a (buggy) second send every chance to land before asserting there isn't one
+  check("X18: coalescing — while offline, tap 4 then 6 on the same hole: stub captures show at most one in-flight body for that hole and its score is 6",
+    bodiesX18.length === 1 && bodiesX18[0].hole === 6 && bodiesX18[0].score === 6,
+    "bodies=" + JSON.stringify(bodiesX18));
+  domX18.window.close();
+}
+
+{
+  // X19: ordered drain — offline taps on holes 2 then 3 (different holes,
+  // no coalescing): the captured POST order must be [h2, h3], proving the
+  // drain sends strictly in seq order, one at a time (no Promise.all).
+  let onlineX19 = false;
+  const bodiesX19 = [];
+  const fetchX19 = (url, opts) => {
+    if (String(url).indexOf(epUrl) === 0) {
+      if (!onlineX19) return Promise.reject(new TypeError("offline (simulated)"));
+      bodiesX19.push(JSON.parse(opts.body));
+      return Promise.resolve({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: {} }) });
+    }
+    return withScEndpoint()(url);
+  };
+  const domX19 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX19);
+  const docX19 = await openScorer(domX19);
+  docX19.querySelector('.sc-cell[data-hole="2"]').click();        // hole 2, par 4
+  await until(() => !docX19.querySelector("#scPad")?.hidden);
+  docX19.querySelector('#scPad .sc-num[data-score="4"]').click();
+  await until(() => docX19.querySelector('.sc-cell[data-hole="2"] b')?.textContent === "4");
+  docX19.querySelector('.sc-cell[data-hole="3"]').click();        // hole 3, par 3
+  await until(() => !docX19.querySelector("#scPad")?.hidden);
+  docX19.querySelector('#scPad .sc-num[data-score="3"]').click();
+  await until(() => docX19.querySelector('.sc-cell[data-hole="3"] b')?.textContent === "3");
+  onlineX19 = true;
+  domX19.window.dispatchEvent(new domX19.window.Event("online"));
+  await until(() => bodiesX19.length >= 2);
+  const orderX19 = bodiesX19.map(b => b.hole);
+  // Self-review finding (mutation check): a broken seq assignment (e.g.
+  // every save minting the SAME seq) would still pass a hole-order-only
+  // assertion, since a stable sort on equal seqs happens to preserve
+  // object-key insertion order anyway — masking a real idempotency-ring
+  // hazard (the server dedups on client_id+seq; two distinct scores
+  // sharing one seq could get one silently treated as a replay of the
+  // other). Also asserting DISTINCT, increasing seqs closes that gap.
+  const seqsX19 = bodiesX19.map(b => b.seq);
+  const seqsDistinctIncreasingX19 = seqsX19.length === 2 && seqsX19[0] !== seqsX19[1] && seqsX19[1] > seqsX19[0];
+  check("X19: ordered drain — offline taps on holes 2 then 3: captured POST order is [h2, h3], each with its own distinct, increasing seq",
+    JSON.stringify(orderX19) === JSON.stringify([2, 3]) && seqsDistinctIncreasingX19,
+    "order=" + JSON.stringify(orderX19) + " seqs=" + JSON.stringify(seqsX19));
+  domX19.window.close();
+}
+
+{
+  // X20: SC-NOCLOBBER — sheet value for h14 = duck r2 fixture value (4)
+  // (fixtures/scores.csv row "2026,duck,2,...,h14=4"). Simulated through
+  // the Task-6 seam by stubbing window.scSheetHoles directly in this test
+  // — that IS the Task-6 seam contract (brief's own note: Task 6 replaces
+  // the stub with the real derivation and this check keeps passing).
+  // Round pinned to "2" via a first_tee dynamically set 2 days before "now"
+  // (never wall-clock-date-dependent) so scActiveRound()'s native DATE
+  // default lands on round 2 for the WHOLE sequence — the momentary toggle
+  // reverts after one submission and would not hold round 2 long enough.
+  const pastTeeX20 = new Date(Date.now() - 2 * 86400000).toISOString();
+  const infoX20 = FIXTURES.info.replace(/^first_tee,.*$/m, "first_tee," + pastTeeX20) +
+    "score_endpoint," + epUrl + "\n";
+  const sentHolesX20 = [];
+  const fetchX20 = (url, opts) => {
+    if (String(url).indexOf(epUrl) === 0) {
+      sentHolesX20.push(JSON.parse(opts.body).hole);
+      return Promise.resolve({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: {} }) });
+    }
+    return withOverride({ info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX20 }) })(url);
+  };
+  const domX20 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX20);
+  const docX20 = await openScorer(domX20);
+  await until(() => /Round 2/.test(docX20.querySelector("#scRound")?.textContent || ""));
+  const roundOkX20 = /Round 2/.test(docX20.querySelector("#scRound")?.textContent || "");
+  domX20.window.scSheetHoles = () => ({ 14: 4 }); // Task-6 seam stub, THIS test's own fixture-driven value
+  // h14's sheet value (4) is already known before any tap — cellState
+  // starts as kind:"sheet", which scPadHTML treats as edit mode (existing
+  // score 4). Picking 6 arms the ordinary Replace-confirm; confirming it
+  // saves a queued entry that IMMEDIATELY differs from the still-current
+  // sheet value, which is exactly rule 2's conflict.
+  docX20.querySelector('.sc-cell[data-hole="14"]').click();
+  await until(() => /currently 4/.test(docX20.querySelector("#scPad")?.textContent || ""));
+  docX20.querySelector('#scPad .sc-num[data-score="6"]').click();
+  await until(() => /Replace 4 with 6/.test(docX20.querySelector("#scPad")?.textContent || ""));
+  docX20.querySelector("#scPadReplace").click();
+  await until(() => docX20.querySelector('.sc-cell[data-hole="14"]')?.classList.contains("sc-conflict"));
+  await settle(300); // give the auto-drain (deferred from the save) a real chance to (wrongly) fire
+  const cellX20 = docX20.querySelector('.sc-cell[data-hole="14"]');
+  const cellTextX20 = cellX20?.textContent || "";
+  docX20.querySelector('.sc-cell[data-hole="14"]').click(); // reopen -> conflict pad
+  await until(() => !!docX20.querySelector("#scPad #scPadForceSend"));
+  const padTextX20 = docX20.querySelector("#scPad")?.textContent || "";
+  check("X20: SC-NOCLOBBER — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict (contains both numbers); pad(14) opens in replace-confirm naming both",
+    roundOkX20 && !sentHolesX20.includes(14) && /6/.test(cellTextX20) && /4/.test(cellTextX20) &&
+      /6/.test(padTextX20) && /4/.test(padTextX20) && /anyway/i.test(padTextX20),
+    "roundOk=" + roundOkX20 + " sentHoles=" + JSON.stringify(sentHolesX20) + " cellText=" + cellTextX20 +
+      " padText=" + padTextX20.slice(0, 160));
+  domX20.window.close();
+}
+
+{
+  // X21: rejected verdict — stub RESOLVES {ok:false, verdict:"team not in
+  // roster"} (a server-shaped rejection, not a transport failure — scSend
+  // resolves normally, so the drain's rejected-state branch fires, not the
+  // config one). Cell loud state carries the VERBATIM verdict (title
+  // attribute); the pad shows it too, plus a Retry that keeps the same
+  // seq (idempotency — proven directly by X22; here just the UI); "text
+  // Riley" escalates once retries reach 2.
+  const fetchX21 = (url) => {
+    if (String(url).indexOf(epUrl) === 0) {
+      return Promise.resolve({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: false, verdict: "team not in roster", team: "Duck", round: 2, holes: null }) });
+    }
+    return withScEndpoint()(url);
+  };
+  const domX21 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX21);
+  const docX21 = await openScorer(domX21);
+  docX21.querySelector('.sc-cell[data-hole="9"]').click();        // hole 9, par 5
+  await until(() => !docX21.querySelector("#scPad")?.hidden);
+  docX21.querySelector('#scPad .sc-num[data-score="5"]').click();
+  await until(() => docX21.querySelector('.sc-cell[data-hole="9"]')?.classList.contains("sc-rejected"));
+  const cellX21 = docX21.querySelector('.sc-cell[data-hole="9"]');
+  const cellVerdictOkX21 = (cellX21?.getAttribute("title") || "").includes("team not in roster");
+  docX21.querySelector('.sc-cell[data-hole="9"]').click();        // reopen -> rejected pad
+  await until(() => !!docX21.querySelector("#scPadRetry"));
+  const padVerdictOkX21 = /team not in roster/.test(docX21.querySelector("#scPad")?.textContent || "");
+  const noEscalateYetX21 = !/text Riley/i.test(docX21.querySelector("#scPad")?.textContent || "");
+  docX21.querySelector("#scPadRetry").click();                    // manual retry #1 — same seq, still rejected
+  await until(() => docX21.querySelector('.sc-cell[data-hole="9"]')?.classList.contains("sc-rejected"));
+  docX21.querySelector("#scPadRetry").click();                    // manual retry #2
+  await until(() => /text Riley/i.test(docX21.querySelector("#scPad")?.textContent || ""));
+  const escalateOkX21 = /text Riley/i.test(docX21.querySelector("#scPad")?.textContent || "");
+  domX21.window.close();
+
+  // Carried requirement (Task 4's review): when a drain hits {kind:"config"}
+  // the CAPTAIN-FACING view (not just the ?debug=1 panel X15 already
+  // covers) must show the loud banner — "scoring endpoint not reachable",
+  // plus the raw form link when form_url is configured. Folded into this
+  // same check per the controller's instruction (no new X-number).
+  const infoX21b = FIXTURES.info + "score_endpoint," + epUrl + "\nform_url,https://forms.gle/exampleFormXYZ\n";
+  const fetchX21b = (url) => {
+    if (String(url).indexOf(epUrl) === 0) return Promise.resolve({ ok: true, status: 200, text: async () => "<html>Sign in</html>" });
+    return withOverride({ info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX21b }) })(url);
+  };
+  const domX21b = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX21b);
+  const docX21b = await openScorer(domX21b);
+  docX21b.querySelector('.sc-cell[data-hole="10"]').click();      // hole 10, par 4
+  await until(() => !docX21b.querySelector("#scPad")?.hidden);
+  docX21b.querySelector('#scPad .sc-num[data-score="4"]').click();
+  await until(() => /scoring endpoint not reachable/i.test(docX21b.querySelector("#scHeader")?.textContent || ""));
+  const bannerTextX21b = docX21b.querySelector("#scHeader")?.textContent || "";
+  const bannerOkX21b = /scoring endpoint not reachable/i.test(bannerTextX21b);
+  const bannerLinkX21b = docX21b.querySelector("#scHeader a");
+  const linkOkX21b = bannerLinkX21b?.getAttribute("href") === "https://forms.gle/exampleFormXYZ";
+  domX21b.window.close();
+
+  check("X21: rejected verdict — cell loud state + pad carry the verbatim verdict; 'text Riley' escalates after 2 manual retries; the carried SC-LOUD-CONFIG banner (drain hit kind:'config') shows in the captain view too, with the form link when configured",
+    cellVerdictOkX21 && padVerdictOkX21 && noEscalateYetX21 && escalateOkX21 && bannerOkX21b && linkOkX21b,
+    "cellVerdict=" + cellVerdictOkX21 + " padVerdict=" + padVerdictOkX21 + " noEscalateYet=" + noEscalateYetX21 +
+      " escalate=" + escalateOkX21 + " banner=" + bannerOkX21b + " link=" + linkOkX21b);
+}
+
+{
+  // X22: idempotent seq — the same entry retried (stub: first
+  // network-reject, then success) sends the SAME seq both times. A
+  // network-level reject reverts the entry to queued WITHOUT touching its
+  // seq; the AUTOMATIC retry (triggered here by the 'online' event, not a
+  // manual tap) must reuse that same seq for the server's idempotency
+  // pairing to work. Captures the seq from every attempt (including the
+  // failed one) — the request body is genuinely constructed before the
+  // network decides whether to deliver it.
+  let attemptsX22 = 0;
+  const seqsX22 = [];
+  const fetchX22 = (url, opts) => {
+    if (String(url).indexOf(epUrl) === 0) {
+      attemptsX22++;
+      seqsX22.push(JSON.parse(opts.body).seq);
+      if (attemptsX22 === 1) return Promise.reject(new TypeError("first attempt offline (simulated)"));
+      return Promise.resolve({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: {} }) });
+    }
+    return withScEndpoint()(url);
+  };
+  const domX22 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX22);
+  const docX22 = await openScorer(domX22);
+  docX22.querySelector('.sc-cell[data-hole="11"]').click();       // hole 11, par 5
+  await until(() => !docX22.querySelector("#scPad")?.hidden);
+  docX22.querySelector('#scPad .sc-num[data-score="5"]').click();
+  await until(() => attemptsX22 >= 1);
+  await until(() => docX22.querySelector('.sc-cell[data-hole="11"]')?.classList.contains("sc-queued"));
+  domX22.window.dispatchEvent(new domX22.window.Event("online"));
+  await until(() => attemptsX22 >= 2);
+  await until(() => {
+    const c = docX22.querySelector('.sc-cell[data-hole="11"]');
+    return !!c && !c.classList.contains("sc-queued") && !c.classList.contains("sc-sending");
+  });
+  check("X22: idempotent seq — the same entry retried (stub: first network-reject, then success) sends the SAME seq both times",
+    attemptsX22 === 2 && seqsX22.length === 2 && seqsX22[0] === seqsX22[1] && typeof seqsX22[0] === "number",
+    "attempts=" + attemptsX22 + " seqs=" + JSON.stringify(seqsX22));
+  domX22.window.close();
+}
+
+{
+  // X23: storage-dead degrade — localStorage.setItem throws. jsdom's real
+  // Storage is a WebIDL "legacy platform object" whose named-property
+  // semantics make a plain `.setItem = fn` reassignment silently
+  // ineffective (verified by hand before writing this test) — the only
+  // reliable way to force a throw is replacing window.localStorage
+  // entirely with a stub. Confirm-tap happens with REAL storage first (so
+  // the confirmed flag persists normally, unaffected); only AFTER the card
+  // is up does storage go dead, isolating the journal-write failure.
+  const fetchX23 = (url) => {
+    if (String(url).indexOf(epUrl) === 0) {
+      return Promise.resolve({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: {} }) });
+    }
+    return withScEndpoint()(url);
+  };
+  const domX23 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX23);
+  const docX23 = await openScorer(domX23);
+  const deadStorageX23 = {
+    getItem() { return null; },
+    setItem() { throw new Error("storage dead (simulated)"); },
+    removeItem() {}, clear() {}, key() { return null; }, length: 0,
+  };
+  Object.defineProperty(domX23.window, "localStorage", { value: deadStorageX23, configurable: true });
+  docX23.querySelector('.sc-cell[data-hole="12"]').click();       // hole 12, par 3
+  await until(() => !docX23.querySelector("#scPad")?.hidden);
+  docX23.querySelector('#scPad .sc-num[data-score="3"]').click();
+  await until(() => docX23.querySelector('.sc-cell[data-hole="12"] b')?.textContent === "3");
+  await settle(300); // let the deferred drain (and its own scStore attempts against dead storage) run through
+  const cellX23 = docX23.querySelector('.sc-cell[data-hole="12"]');
+  const cellOkX23 = cellX23?.querySelector("b")?.textContent === "3";
+  const headerOkX23 = /can't remember sends/i.test(docX23.querySelector("#scHeader")?.textContent || "");
+  const noErrorsX23 = domX23.pageErrors.length === 0;
+  check("X23: storage-dead degrade — makeDom variant where localStorage.setItem throws: tap still updates the cell in-memory and the header shows the 'can't remember sends' copy; no uncaught errors",
+    cellOkX23 && headerOkX23 && noErrorsX23,
+    "cellOk=" + cellOkX23 + " headerOk=" + headerOkX23 + " pageErrors=" + domX23.pageErrors.length +
+      " headerText=" + (docX23.querySelector("#scHeader")?.textContent || "").slice(0, 120));
+  domX23.window.close();
+}
+
+/* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
 const groupTally = {};
