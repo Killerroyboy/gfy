@@ -395,6 +395,10 @@
   .sc-pick-roster{display:block;font-size:.85rem;color:var(--sage);margin-top:4px}
   #scConfirm p{color:var(--sage);font-size:1rem}
   #scConfirm .btn{margin-right:10px}
+  /* Task 4 — SC-LOUD-CONFIG inert copy (no score_endpoint configured). */
+  .sc-inert{color:var(--sage);font-size:1rem}
+  .sc-inert-form{margin-top:8px}
+  .sc-inert-form a{color:var(--brass)}
 
   /* Task 3 card-first scorecard (SC-UI/SC-PAR/SC-ROUND). All scorer text
      stays >=13px (thumb-friendly outdoors, no squinting on the tee) — the
@@ -2732,7 +2736,7 @@ async function pullDebug(tab){
   return rep;
 }
 
-function renderDebugPanel(reps){
+function renderDebugPanel(reps,extraLine){
   let el=document.getElementById("debugPanel");
   if(!el){
     el=document.createElement("div");
@@ -2744,17 +2748,34 @@ function renderDebugPanel(reps){
     document.body.appendChild(el);
   }
   el.textContent="GFY DEBUG — sheet pull @ "+new Date().toLocaleTimeString()+"\n"+
-    reps.map(r=>`${r.state.padEnd(6)} ${r.tab.padEnd(9)} ${r.state==="OK"?r.rows+" rows":r.reason}`).join("\n");
+    reps.map(r=>`${r.state.padEnd(6)} ${r.tab.padEnd(9)} ${r.state==="OK"?r.rows+" rows":r.reason}`).join("\n")+
+    (extraLine?"\n"+extraLine:"");
+}
+
+// §18 SC-LOUD-CONFIG debug ping: same loud discipline as scSend, reported
+// as one extra ?debug=1 row rather than thrown. Deliberately worded "not
+// configured" (never "OK") when score_endpoint is absent so this row can
+// never bump the tab-report's OK count (D5 asserts that count exactly).
+async function scPingRow_(){
+  if(!scEndpoint()) return "score endpoint: not configured";
+  try{
+    const r=await scPing();
+    return "score endpoint: OK ("+r.year+", "+(Array.isArray(r.teams)?r.teams.length:0)+" teams)";
+  }catch(err){
+    const why=(err&&err.kind==="network")?"network":((err&&err.detail)||"config");
+    return "score endpoint: scoring endpoint not reachable — check the deployment ("+why+")";
+  }
 }
 
 async function loadDebug(){
   const reps=await Promise.all(TABS.map(pullDebug));
   reps.forEach(r=>console.log("[GFY debug]",r.tab,
     {url:r.url,status:r.status,rows:r.rows,headers:r.headers,state:r.state,reason:r.reason}));
-  renderDebugPanel(reps);
   const data={}; reps.forEach(r=>{ data[r.tab]=r.data; });
   const results=reps.map(r=>({rows:r.data,at:r.state==="OK"?Date.now():0,live:r.state==="OK",err:r.state==="OK"?null:r.reason}));
-  paint(data,results);
+  paint(data,results);                        // renderInfo runs inside paint — INFO must be live before scPing()
+  const scRow=await scPingRow_();
+  renderDebugPanel(reps,scRow);
   const bad=reps.filter(r=>r.state!=="OK");
   if(bad.length){
     const msg="DEBUG: "+bad.map(r=>r.tab+" "+r.state+(r.reason?" — "+r.reason:"")).join(" · ");
@@ -2878,6 +2899,61 @@ function scConfirmedTeam(seasonY){
   }catch{ return null; }
 }
 
+/* ---------- §18 SC-WRITE (client transport) / SC-LOUD-CONFIG (Task 4) ----------
+   Transport is isolated from UI and from Task 5's journal: scEndpoint()
+   only checks the Info value's SHAPE (a well-formed https:// string) —
+   it says nothing about whether the endpoint is actually reachable, so
+   deciding inert-vs-card never blocks on a network round trip.
+   scSend()/scPing() are pure Promise-returning functions with no DOM side
+   effects; anything but a well-formed JSON body of the right shape
+   REJECTS with {kind:"config", detail} (non-JSON, HTML sign-in page, bad
+   shape — never a guess). A network-level failure (fetch throws —
+   offline, DNS, a CORS failure the browser surfaces as a rejected fetch)
+   rejects {kind:"network"} instead, so callers (Task 5's queue) can tell
+   "try again later" apart from "this deployment is broken." */
+function scEndpoint(){
+  const v=String(INFO.score_endpoint||"").trim();
+  return /^https:\/\//.test(v)?v:null;
+}
+// SC-LOUD-CONFIG's raw-form-link fallback (spec: "shows the raw form
+// link"). Info key name is this task's own choice — the brief/plan never
+// pin one (unlike score_endpoint) and no sibling task adds it to the sheet
+// side; documented in task-4-report.md. Absent in every current fixture
+// (including live), so the inert copy renders with no link by default.
+function scFormUrl(){
+  const v=String(INFO.form_url||"").trim();
+  return /^https:\/\//.test(v)?v:null;
+}
+async function scSend(entry,clientId,seq){
+  const url=scEndpoint(); if(!url) throw {kind:"config", detail:"no endpoint"};
+  let res;
+  try{
+    res=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify({team:entry.team,round:entry.round,hole:entry.hole,score:entry.score,client_id:clientId,seq:seq}),
+      redirect:"follow"});
+  }catch(err){ throw {kind:"network"}; }
+  let out;
+  try{ out=JSON.parse(await res.text()); }catch(err){ throw {kind:"config", detail:"non-JSON response"}; }
+  if(typeof out.ok!=="boolean"||typeof out.verdict!=="string") throw {kind:"config", detail:"bad shape"};
+  return out;
+}
+// Same discipline against doGet ({ok, year, teams}). Wired into the
+// ?debug=1 panel only (scPingRow_ below, near loadDebug) — NOT into the
+// captain-facing view at this task: there is no live reachability probe
+// on card boot, and taps still save through Task 3's scJournalSave stub
+// (Task 5 owns wiring scSend into real sends and rendering a failed send's
+// {kind:"config"} rejection into the view).
+async function scPing(){
+  const url=scEndpoint(); if(!url) throw {kind:"config", detail:"no endpoint"};
+  let res;
+  try{ res=await fetch(url,{method:"GET",redirect:"follow"}); }
+  catch(err){ throw {kind:"network"}; }
+  let out;
+  try{ out=JSON.parse(await res.text()); }catch(err){ throw {kind:"config", detail:"non-JSON response"}; }
+  if(typeof out.ok!=="boolean"||!Array.isArray(out.teams)) throw {kind:"config", detail:"bad shape"};
+  return out;
+}
+
 /* ---------- SC-PAR: per-hole par ----------
    courseMap() is all-or-nothing (index.html courseMap(): a par map is only
    returned once all 18 holes have a row — one missing hole and the WHOLE
@@ -2948,9 +3024,27 @@ function scShowCard(seasonY,team){
     STATE.scPadOtherOpen=false; STATE.scPadOtherVal=null;
   }
   STATE.scTeam=team; STATE.scSeason=seasonY;
+  // SC-LOUD-CONFIG rollback (spec: "the scorer is inert until score_endpoint
+  // exists"): a matched+confirmed team never gets a dead scoring surface.
+  if(!scEndpoint()){ scShowInert(); return; }
+  $("#scHeader").innerHTML="";
+  $("#scCard").hidden=false;
   renderScCard();
 }
+// No score_endpoint configured at all — #scCard hides entirely; the raw
+// form link (Info key form_url, scFormUrl()) is the only interactive
+// element, and only when Riley has actually pasted one (every current
+// fixture, including the live sheet today, has neither key — no link, no
+// error, just the honest "opens at the tournament" copy).
+function scShowInert(){
+  $("#scCard").hidden=true;
+  $("#scCard").innerHTML="";
+  const formUrl=scFormUrl();
+  $("#scHeader").innerHTML=`<p class="sc-inert">Scoring opens at the tournament.</p>`+
+    (formUrl?`<p class="sc-inert-form"><a href="${esc(formUrl)}" target="_blank" rel="noopener">Score via the form</a></p>`:"");
+}
 function scShowPicker(seasonY){
+  $("#scHeader").innerHTML="";
   const teams=scorerTeams(seasonY);
   const pickerEl=$("#scPicker");
   pickerEl.innerHTML=`<h2>Who's scoring?</h2>`+teams.map(t=>
@@ -2964,6 +3058,7 @@ function scShowPicker(seasonY){
   }));
 }
 function scShowConfirm(seasonY,team){
+  $("#scHeader").innerHTML="";
   const confirmEl=$("#scConfirm");
   confirmEl.innerHTML=`<p>Scoring for <strong>${esc(team)}</strong> — ${esc(scRoster(team,seasonY).join(", "))}.</p>`+
     `<button type="button" class="btn" id="scConfirmBtn">Confirm</button>`+

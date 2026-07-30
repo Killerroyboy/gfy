@@ -2205,6 +2205,20 @@ dom.window.close();
    X7-X12: card-first scorecard, par-labeled pad, momentary round chip
    (spec §18 rev 2, SC-UI/SC-PAR/SC-ROUND — task 3).
    --------------------------------------------------------------------- */
+// Task 4 note: reaching the CARD (not the inert copy) now requires a
+// configured score_endpoint (SC-LOUD-CONFIG's rollback gate — see X13/X14).
+// X7-X12 predate that gate and only exercise card/pad/round behavior, not
+// the endpoint itself, so every dom below is built via withScEndpoint()
+// (info override adding score_endpoint) to keep reaching the card exactly
+// as before Task 4 — no assertion in X7-X12 changed, only the fixture
+// needed to arrive at the same card state.
+const INFO_WITH_ENDPOINT = FIXTURES.info + "score_endpoint,https://script.example/exec\n";
+function withScEndpoint(overrides = {}) {
+  return withOverride(Object.assign({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => INFO_WITH_ENDPOINT }),
+  }, overrides));
+}
+
 // Confirm-tap (X1-X5's flow, one step further) then wait for the 18 cells.
 async function openScorer(dom) {
   const doc = dom.window.document;
@@ -2215,7 +2229,7 @@ async function openScorer(dom) {
 }
 {
   // X7: 18 sc-cell buttons, split 9/9 across two .sc-row containers, each aria-labeled "Hole N".
-  const domX7 = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  const domX7 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX7 = await openScorer(domX7);
   const rowsX7 = [...docX7.querySelectorAll("#scCard .sc-row")];
   const cellsX7 = [...docX7.querySelectorAll("#scCard .sc-cell")];
@@ -2238,7 +2252,7 @@ async function openScorer(dom) {
   // on the par-3 (delta -1), Eagle on the par-4 (delta -2) — the strongest
   // proof the label tracks each hole's own par rather than a hardcoded/global
   // score->label table.
-  const domX8 = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  const domX8 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX8 = await openScorer(domX8);
   const labFor = (pad, score) => [...pad.querySelectorAll(".sc-num[data-score]")]
     .find(b => b.dataset.score === score)?.querySelector(".sc-num-lab")?.textContent;
@@ -2264,7 +2278,7 @@ async function openScorer(dom) {
   // key in place at 0) is what actually flips courseMap() to null, confirmed by
   // reading the function directly.
   const courseX9 = FIXTURES.course.split("\n").filter(l => !l.startsWith("5,")).join("\n");
-  const overrideX9 = withOverride({
+  const overrideX9 = withScEndpoint({
     course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseX9 }),
   });
 
@@ -2293,7 +2307,7 @@ async function openScorer(dom) {
   // pass 171/171 — now also asserts the happy path (complete course data ->
   // data-mode="topar") on the standard fixture, alongside the h5-blanked
   // variant degrading to strokes-only.
-  const domX10std = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  const domX10std = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX10std = await openScorer(domX10std);
   const tallyX10std = docX10std.querySelector("#scCard .sc-tally");
   const domX10 = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX9);
@@ -2312,7 +2326,7 @@ async function openScorer(dom) {
   // the R1-board-complete branch needs the sheet merge, which is Task 6's),
   // this asserts the SPRING behavior itself rather than hardcoding which
   // round is "the" default (that depends on wall-clock time vs first_tee).
-  const domX11 = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  const domX11 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX11 = await openScorer(domX11);
   const chipX11 = () => docX11.querySelector("#scRound")?.textContent;
   const initialX11 = chipX11();
@@ -2330,7 +2344,7 @@ async function openScorer(dom) {
   // X12: edit mode — re-tapping an already-filled cell shows "currently N" and
   // arms a "Replace N with M" confirm after picking M (send-on-tap does NOT
   // fire immediately in edit mode — NOCLOBBER asymmetry).
-  const domX12 = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  const domX12 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX12 = await openScorer(domX12);
   docX12.querySelector('.sc-cell[data-hole="2"]').click(); // hole 2, par 4
   await until(() => !docX12.querySelector("#scPad")?.hidden);
@@ -2366,6 +2380,142 @@ async function openScorer(dom) {
     "currentOk=" + currentOkX12 + " replaceOk=" + replaceOkX12 + " otherSurvived=" + otherSurvivedX12 + " text=" +
       (docX12.querySelector("#scPad")?.textContent || "").slice(0, 160));
   domX12.window.close();
+}
+
+/* ---------------------------------------------------------------------
+   X13-X15: transport module + loud misconfig + debug ping
+   (spec §18 rev 2, SC-WRITE client / SC-LOUD-CONFIG — task 4).
+
+   Controller narrowing (both X14 and X15, recorded in task-4-report.md):
+   Task 3's tap wiring still calls the Task-5 stub `scJournalSave` (a
+   no-op) — Task 5 owns wiring `scSend` into real taps and rendering a
+   rejected send into a cell/banner. So X14/X15 exercise `scSend`/`scPing`
+   directly via a temporary test-only bridge (they're plain top-level
+   function declarations in a classic, non-module script — already
+   `window.scSend` etc. with no extra wiring needed, same as `renderScCard`
+   in X12 above) rather than through a pad tap. X14's "cell shows the sent
+   value" half of the plan's original text is Task 5's X17, which
+   supersedes it.
+   --------------------------------------------------------------------- */
+{
+  // X13: absent score_endpoint -> scorer inert state (SC-LOUD-CONFIG's
+  // rollback clause). A matched+CONFIRMED team (confirm-tap, same flow as
+  // X1-X12) never gets a dead scoring surface: #scCard hides and empties,
+  // "scoring opens at the tournament" copy shows in its place, no error.
+  // Default fixtures also lack the raw-form-link Info key (this task's own
+  // naming choice, `form_url` — see task-4-report.md) -> no dead link.
+  // A second dom variant (info override adding `form_url`) proves the link
+  // branch is real, not just "never render a link" — both assertions live
+  // in this one check per the controller's "no new X-numbers" constraint.
+  const domX13 = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  const docX13 = domX13.window.document;
+  await until(() => !!docX13.querySelector("#scConfirmBtn"));
+  docX13.querySelector("#scConfirmBtn").click();
+  await until(() => /scoring opens at the tournament/i.test(docX13.querySelector("#scHeader")?.textContent || ""));
+  const cardHiddenX13 = docX13.querySelector("#scCard")?.hidden === true;
+  const cardEmptyX13 = (docX13.querySelector("#scCard")?.innerHTML || "").trim() === "";
+  const copyOkX13 = /scoring opens at the tournament/i.test(docX13.querySelector("#scHeader")?.textContent || "");
+  const noLinkX13 = !docX13.querySelector("#scHeader a");
+  const noErrorsX13 = domX13.pageErrors.length === 0;
+  domX13.window.close();
+
+  const infoLinkX13 = FIXTURES.info + "form_url,https://forms.gle/exampleFormXYZ\n";
+  const domX13b = makeDom("#score?team=" + encodeURIComponent("Duck"), withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoLinkX13 }),
+  }));
+  const docX13b = domX13b.window.document;
+  await until(() => !!docX13b.querySelector("#scConfirmBtn"));
+  docX13b.querySelector("#scConfirmBtn").click();
+  await until(() => !!docX13b.querySelector("#scHeader a"));
+  const linkX13b = docX13b.querySelector("#scHeader a");
+  const linkOkX13b = linkX13b?.getAttribute("href") === "https://forms.gle/exampleFormXYZ";
+  domX13b.window.close();
+
+  check("X13: absent score_endpoint -> inert state (#scCard hidden+empty, 'scoring opens at the tournament' copy, no error); default fixtures also lack the form-url Info key -> no raw form link; a variant WITH that key renders the link (proves the branch is real)",
+    cardHiddenX13 && cardEmptyX13 && copyOkX13 && noLinkX13 && noErrorsX13 && linkOkX13b,
+    "cardHidden=" + cardHiddenX13 + " cardEmpty=" + cardEmptyX13 + " copyOk=" + copyOkX13 +
+      " noLink=" + noLinkX13 + " noErrors=" + noErrorsX13 + " linkHref=" + linkX13b?.getAttribute("href"));
+}
+
+{
+  // X14 (narrowed — see block comment above and task-4-report.md).
+  // FIXTURE REALITY (controller ruling): this variant (a) adds
+  // score_endpoint to the info fixture, AND (b) drops the lowercase
+  // "duck,2" scores row — future-proofing so Task 6's sheet-merge later
+  // doesn't turn this same variant's h13 into a conflict state (uppercase
+  // "Duck" round 1 + lowercase "duck" round 2 both normalize to the same
+  // nkey team, "Duck").
+  const infoX14 = FIXTURES.info + "score_endpoint,https://script.example/exec\n";
+  const scoresX14 = FIXTURES.scores.split("\n").filter(l => !l.startsWith("2026,duck,2,")).join("\n");
+  const epUrlX14 = "https://script.example/exec";
+  const fetchX14 = (url) => {
+    if (String(url).indexOf(epUrlX14) === 0) {
+      return Promise.resolve({
+        ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: { h13: 6 } }),
+      });
+    }
+    return withOverride({
+      info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX14 }),
+      scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresX14 }),
+    })(url);
+  };
+  const domX14 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX14);
+  const docX14 = await openScorer(domX14); // endpoint configured -> live card (NOT inert) — positive branch of X13
+  const cardVisibleX14 = docX14.querySelectorAll("#scCard .sc-cell").length === 18
+    && docX14.querySelector("#scCard")?.hidden !== true;
+  let sendResultX14, sendErrX14;
+  try {
+    sendResultX14 = await domX14.window.scSend({ team: "Duck", round: 2, hole: 13, score: 6 }, "client-x14", 1);
+  } catch (e) { sendErrX14 = e; }
+  check("X14: scSend resolves the endpoint's JSON verdict (stubbed)",
+    cardVisibleX14 && !sendErrX14 && !!sendResultX14 &&
+      sendResultX14.ok === true && sendResultX14.verdict === "applied" && sendResultX14.holes?.h13 === 6,
+    "cardVisible=" + cardVisibleX14 + " result=" + JSON.stringify(sendResultX14) + " err=" + JSON.stringify(sendErrX14));
+  domX14.window.close();
+}
+
+{
+  // X15: SC-LOUD-CONFIG. The endpoint returns an HTML sign-in page instead
+  // of JSON — scSend must REJECT with {kind:"config"}, never resolve, never
+  // guess at a verdict (transport contract, fully Task 4's to prove; the
+  // narrowing above explains why this isn't exercised through a real tap).
+  // The "view" this task actually wires for a broken endpoint is the
+  // ?debug=1 ping row (scPingRow_/loadDebug) — combining a hash team with
+  // ?debug=1 in one dom lets this check assert BOTH in one go: the card
+  // still renders (endpoint's URL is well-formed, so inert-vs-card doesn't
+  // change just because it's unreachable) AND the debug panel carries the
+  // spec's literal "scoring endpoint not reachable" wording, with no cell
+  // showing the value that would have been sent.
+  const infoX15 = FIXTURES.info + "score_endpoint,https://script.example/exec\n";
+  const epUrlX15 = "https://script.example/exec";
+  const fetchX15 = (url) => {
+    if (String(url).indexOf(epUrlX15) === 0) {
+      return Promise.resolve({ ok: true, status: 200, text: async () => "<html>Sign in</html>" });
+    }
+    return withOverride({
+      info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX15 }),
+    })(url);
+  };
+  const domX15 = makeDom("?debug=1#score?team=" + encodeURIComponent("Duck"), fetchX15);
+  const docX15 = await openScorer(domX15);
+  await until(() => /scoring endpoint not reachable/i.test(docX15.getElementById("debugPanel")?.textContent || ""));
+  const dbgTextX15 = docX15.getElementById("debugPanel")?.textContent || "";
+  const cardVisibleX15 = docX15.querySelectorAll("#scCard .sc-cell").length === 18
+    && docX15.querySelector("#scCard")?.hidden !== true;
+  const noSentCellX15 = [...docX15.querySelectorAll("#scCard .sc-cell b")].every(b => b.textContent === "–");
+
+  let sendErrX15;
+  try {
+    await domX15.window.scSend({ team: "Duck", round: 2, hole: 13, score: 6 }, "client-x15", 1);
+  } catch (e) { sendErrX15 = e; }
+  domX15.window.close();
+
+  check("X15: SC-LOUD-CONFIG — HTML (non-JSON) response rejects scSend with {kind:'config'}, never resolves, never guesses; the ?debug=1 panel shows the spec's literal 'scoring endpoint not reachable' wording; card still renders (URL well-formed) with no cell showing a sent value",
+    !!sendErrX15 && sendErrX15.kind === "config" && typeof sendErrX15.detail === "string" &&
+      /scoring endpoint not reachable/i.test(dbgTextX15) && cardVisibleX15 && noSentCellX15,
+    "err=" + JSON.stringify(sendErrX15) + " cardVisible=" + cardVisibleX15 + " noSentCell=" + noSentCellX15 +
+      " dbg=" + dbgTextX15.slice(0, 200));
 }
 
 /* ---------------------------------------------------------------------
