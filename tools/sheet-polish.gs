@@ -167,7 +167,21 @@ function buildStartHere_(ss){
   sh.setColumnWidth(1, 340); sh.getRange("A1").setFontSize(14).setFontWeight("bold");
   orderTabs_(ss, eventWindow);
 }
+// Review round 1: both helpers below check ONE combined condition and
+// either fully delegate to tools/sheet-triggers.gs's canonical
+// rosterTeams_/firstTeeYear_ (when that file has been pasted into the same
+// Apps Script project — the README-recommended setup) or fully fall back to
+// a standalone copy (when it hasn't been, e.g. polish() run well before the
+// live-scoring triggers setup). Never a mix of one delegated + one local —
+// that would let the two lanes disagree on "the current year" mid-call.
+// LOCKSTEP: keep this in sync with tools/sheet-triggers.gs's rosterTeams_ /
+// firstTeeYear_ (see the LOCKSTEP comments there) — the fallback copies
+// duplicate their exact semantics, including F-NKEY's normalization.
+function startHereCanonicalAvailable_(){
+  return typeof rosterTeams_ === "function" && typeof firstTeeYear_ === "function";
+}
 function startHereYear_(ss){
+  if (startHereCanonicalAvailable_()) return firstTeeYear_(ss);   // canonical, same-project case
   const info = ss.getSheetByName("Info"); if (!info) return null;
   for (const r of info.getDataRange().getValues()){
     if (String(r[0]).trim().toLowerCase() === "first_tee"){
@@ -178,12 +192,13 @@ function startHereYear_(ss){
   return null;
 }
 function startHereRoster_(ss){
-  // Self-contained on purpose — does NOT call tools/sheet-triggers.gs's
-  // rosterTeams_. polish() must work whether or not that file has been
-  // pasted into this Apps Script project yet (README has admins run polish()
-  // well before the live-scoring triggers setup). Same semantics: Field's
-  // team column, deduped by normalized text, scoped to the current
-  // first_tee year when Field has a year column.
+  if (startHereCanonicalAvailable_()) return Array.from(rosterTeams_(ss, firstTeeYear_(ss)).values());
+  // Standalone fallback — polish() must work whether or not sheet-triggers.gs
+  // has been pasted into this project yet. Same semantics as rosterTeams_:
+  // Field's team column, deduped by F-NKEY-normalized text (trim + collapse
+  // internal whitespace + casefold — identical to NORM in sheet-triggers.gs
+  // and nkey in index.html), scoped to the current first_tee year when Field
+  // has a year column.
   const sh = ss.getSheetByName("Field"); if (!sh) return [];
   const tCol = headerIndex_(sh, "team"); if (!tCol) return [];
   const yCol = headerIndex_(sh, "year");
@@ -193,7 +208,7 @@ function startHereRoster_(ss){
   for (let i = 1; i < vals.length; i++){
     if (yCol && year != null && String(vals[i][yCol - 1]) !== String(year)) continue;
     const raw = String(vals[i][tCol - 1] || "").trim(); if (!raw) continue;
-    const key = raw.toLowerCase();
+    const key = raw.replace(/\s+/g, " ").toLowerCase();       // F-NKEY: trim + collapse + casefold, matches NORM/nkey exactly
     if (!seen.has(key)){ seen.add(key); out.push(raw); }
   }
   return out;

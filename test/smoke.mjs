@@ -3391,28 +3391,37 @@ async function cellSettledOk(doc, hole) {
 {
   // X27: SC-PUBBTN — the public "Enter scores" hero button (and its
   // CONFIG.SHEET_EDIT_URL wiring) are REMOVED, not just hidden. Checks the
-  // rendered DOM (no #sheetBtn node, any dom) AND the raw index.html source
-  // (no lingering "sheetBtn" identifier anywhere — markup or wiring code —
-  // so a hidden/dead remnant can't survive unnoticed).
+  // rendered DOM (no #sheetBtn node, any dom), the raw index.html source
+  // for no lingering "sheetBtn" identifier anywhere (markup or wiring code),
+  // AND — independently, review round 1 — no literal "CONFIG.SHEET_EDIT_URL"
+  // consumer reference in the source either: the brief's literal
+  // consumer-wiring check, which also closes an id-rename blind spot the
+  // bare /sheetBtn/ regex would miss (rename #sheetBtn to something else
+  // while leaving a CONFIG.SHEET_EDIT_URL consumer wired to it, and the
+  // first regex alone would go quiet).
   const noBtnInDom = !doc.querySelector("#sheetBtn");
   const noBtnInSource = !/sheetBtn/.test(html);
-  check("X27: SC-PUBBTN — no #sheetBtn anywhere in the DOM, and the raw index.html source contains no 'sheetBtn' reference at all (markup + wiring both fully removed, not hidden)",
-    noBtnInDom && noBtnInSource,
-    "domHasBtn=" + !noBtnInDom + " sourceHasSheetBtn=" + !noBtnInSource);
+  const noConfigConsumerInSource = !/CONFIG\.SHEET_EDIT_URL/.test(html);
+  check("X27: SC-PUBBTN — no #sheetBtn anywhere in the DOM, and the raw index.html source contains no 'sheetBtn' reference NOR any 'CONFIG.SHEET_EDIT_URL' consumer wiring at all (markup + wiring both fully removed, not hidden, not renamed)",
+    noBtnInDom && noBtnInSource && noConfigConsumerInSource,
+    "domHasBtn=" + !noBtnInDom + " sourceHasSheetBtn=" + !noBtnInSource + " sourceHasConfigConsumer=" + !noConfigConsumerInSource);
 }
 
 {
   // X28: SC-PUBBTN — config.js's SHEET_EDIT_URL VALUE is retired to "" (the
   // key itself stays, per the brief, in case other tooling reads it as
-  // optional) and the live sheet's document id that used to sit in that
-  // value is nowhere left in the file (a stray comment reintroducing it
-  // would defeat the point of clearing the value).
+  // optional); the live sheet's document id that used to sit in that value
+  // is nowhere left in the file; AND — review round 1 widening — config.js
+  // contains no live Google Sheets EDIT url under ANY key at all (not just
+  // the one old doc-id fragment), so a future re-add under a renamed key
+  // (or a second key) can't slip past this check unnoticed.
   const configSrc = readFileSync(path.join(ROOT, "config.js"), "utf8");
   const valueCleared = /SHEET_EDIT_URL:\s*""/.test(configSrc);
   const noLiveId = !/16Co2b/.test(configSrc);
-  check("X28: SC-PUBBTN — config.js's SHEET_EDIT_URL value is \"\" (key preserved) and the live sheet's document id (16Co2b...) is nowhere in the file",
-    valueCleared && noLiveId,
-    "valueCleared=" + valueCleared + " noLiveId=" + noLiveId);
+  const noLiveEditUrl = !/docs\.google\.com\/spreadsheets\/d\/[A-Za-z0-9_-]+\/edit/.test(configSrc);
+  check("X28: SC-PUBBTN — config.js's SHEET_EDIT_URL value is \"\" (key preserved), the live sheet's document id (16Co2b...) is nowhere in the file, and no live spreadsheet edit URL appears under any key",
+    valueCleared && noLiveId && noLiveEditUrl,
+    "valueCleared=" + valueCleared + " noLiveId=" + noLiveId + " noLiveEditUrl=" + noLiveEditUrl);
 }
 
 /* ---------------------------------------------------------------------

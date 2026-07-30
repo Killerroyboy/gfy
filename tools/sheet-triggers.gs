@@ -92,6 +92,12 @@ function namedAnswers_(e){
   });
   return out;
 }
+// LOCKSTEP: tools/sheet-polish.gs's startHereRoster_ carries a standalone
+// fallback copy of this exact logic (dedup + year-scoping via F-NKEY
+// normalization), used only when this file hasn't been pasted into the
+// same Apps Script project yet (polish()'s typeof-guarded delegation
+// prefers this canonical version whenever it's present). Keep both in sync
+// if this logic ever changes.
 function rosterTeams_(ss, year){
   const sh = ss.getSheetByName("Field"); const m = new Map();
   if (!sh) return m;
@@ -103,6 +109,10 @@ function rosterTeams_(ss, year){
   }
   return m;
 }
+// LOCKSTEP: tools/sheet-polish.gs's startHereYear_ carries a standalone
+// fallback copy of this exact logic, used only when this file hasn't been
+// pasted into the same Apps Script project yet (see the LOCKSTEP note on
+// rosterTeams_ above). Keep both in sync if this logic ever changes.
 function firstTeeYear_(ss){
   const sh = ss.getSheetByName("Info"); if (!sh) return null;
   const vals = sh.getDataRange().getValues();
