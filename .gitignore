@@ -4,3 +4,4 @@ node_modules/
 *gfy-admin*
 *contacts*.csv
 !tools/gfy-admin-template.xlsx
+.worktrees/
