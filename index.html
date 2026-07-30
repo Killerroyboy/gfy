@@ -426,19 +426,19 @@
     <div class="nav-name">GFY</div>
     <div class="nav-links">
       <a href="#home">Home</a>
-      <a href="#board">Board</a>
-      <a href="#draft">Draft</a>
       <a href="#field">Field</a>
+      <a href="#draft">Draft</a>
+      <a href="#board">Board</a>
       <a href="#pairings">Pairings</a>
       <a href="#calcutta">Calcutta</a>
       <a href="#money">Money</a>
+      <a href="#nextyear">Next Year</a>
       <a href="#schedule">Card</a>
-      <a href="#rules">Rules</a>
+      <a href="#rooms">Rooms</a>
       <a href="#champions">Champions</a>
       <a href="#shame">Shame</a>
       <a href="#photos">Photos</a>
-      <a href="#nextyear">Next Year</a>
-      <a href="#rooms">Rooms</a>
+      <a href="#rules">Rules</a>
     </div>
   </div>
 </nav>
@@ -2442,14 +2442,15 @@ function renderHealth(){
     HEALTH.map(h=>`<div>${esc(h)}</div>`).join("")+`</details>`;
 }
 
-/* ---------- S-NAV: seasonal nav order ----------
-   Off-season (the common state — most of the year), the nav should lead
-   with what people actually open: Home, Next Year (collections), Field
-   (who's in). Inside the event window (first_tee ± 3 days — the same
-   window paintHome/tick use for pre/post-event), it flips to what matters
-   on the ground: Board, Pairings, Calcutta. Computed once per paint, not
-   live-recomputed on scroll/click — it does not need to be. */
-const NAV_OFF_PRIORITY=["home","nextyear","field","draft","rooms"];
+/* ---------- N-ORDER (§17): canonical seasonal nav ----------
+   One canonical, story-shaped order year-round — who's in → draft → play →
+   bets → settle → next season's collections → logistics → lore → rules.
+   Off-season the nav IS this order (the old off-season shuffle is retired,
+   §17). The event window (first_tee ± 3 days) keeps its flip so the Board
+   leads while play is live. Views not listed in NAV_ORDER (future tabs)
+   fall back to DOM order at the END — never dropped. Computed once per
+   paint, not live-recomputed on scroll/click. */
+const NAV_ORDER=["home","field","draft","board","pairings","calcutta","money","nextyear","schedule","rooms","champions","shame","photos","rules"];
 const NAV_EVENT_PRIORITY=["board","draft","pairings","calcutta","rooms"];
 function seasonPhase(){
   const tee=new Date(INFO.first_tee||CONFIG.FIRST_TEE);
@@ -2460,9 +2461,10 @@ function seasonPhase(){
 function applyNavOrder(){
   const nav=document.querySelector(".nav-links");
   if(!nav) return;
-  const priority=seasonPhase()==="event"?NAV_EVENT_PRIORITY:NAV_OFF_PRIORITY;
-  const rest=VIEWS.filter(v=>!priority.includes(v));
-  const order=[...priority.filter(v=>VIEWS.includes(v)),...rest];
+  const priority=seasonPhase()==="event"?NAV_EVENT_PRIORITY:[];
+  const canon=NAV_ORDER.filter(v=>VIEWS.includes(v)&&!priority.includes(v));
+  const rest=VIEWS.filter(v=>!priority.includes(v)&&!NAV_ORDER.includes(v));
+  const order=[...priority.filter(v=>VIEWS.includes(v)),...canon,...rest];
   const byView={};
   nav.querySelectorAll("a").forEach(a=>{ byView[a.hash.slice(1)]=a; });
   order.forEach(v=>{ if(byView[v]) nav.appendChild(byView[v]); });

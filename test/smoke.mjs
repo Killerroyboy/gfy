@@ -1331,8 +1331,8 @@ check("S2: S-VIEWS — VIEWS is derived from the [data-view] DOM (deduped), not 
   const domS3 = makeDom("", farFutureFetchS3);
   await until(() => domS3.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   const navLinksText = [...domS3.window.document.querySelectorAll(".nav-links a")].map(a => a.hash.slice(1));
-  check("S3: S-NAV off-season order — Home, Next Year, Field, Draft lead the nav (first_tee pinned far-future via override, A6 — can't go red during the real event window)",
-    navLinksText.slice(0, 4).join(",") === "home,nextyear,field,draft",
+  check("S3: N-ORDER canonical off-season nav — the full lifecycle order, no shuffle (first_tee pinned far-future via override, A6)",
+    navLinksText.join(",") === "home,field,draft,board,pairings,calcutta,money,nextyear,schedule,rooms,champions,shame,photos,rules",
     navLinksText.join(","));
   domS3.window.close();
 }
@@ -1348,8 +1348,8 @@ check("S2: S-VIEWS — VIEWS is derived from the [data-view] DOM (deduped), not 
   const domS4 = makeDom("", eventFetch);
   await until(() => domS4.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   const navLinksTextS4 = [...domS4.window.document.querySelectorAll(".nav-links a")].map(a => a.hash.slice(1));
-  check("S4: S-NAV event-window order — Board, Draft, Pairings, Calcutta lead the nav (first_tee = today, inside ±3 days)",
-    navLinksTextS4.slice(0, 4).join(",") === "board,draft,pairings,calcutta",
+  check("S4: S-NAV event-window flip — Board/Draft/Pairings/Calcutta/Rooms lead, remainder in canonical order (first_tee = today, inside ±3 days)",
+    navLinksTextS4.join(",") === "board,draft,pairings,calcutta,rooms,home,field,money,nextyear,schedule,champions,shame,photos,rules",
     navLinksTextS4.join(","));
   domS4.window.close();
 }
