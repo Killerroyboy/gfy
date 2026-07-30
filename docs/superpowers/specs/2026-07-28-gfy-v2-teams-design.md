@@ -594,3 +594,14 @@ Riley reviewed a tappable refinement prototype and approved it ("that looks good
 - **SC-CONFLICT-UI**: the conflict cell shows BOTH numbers ("5·4" + ▲); tapping opens a two-button ruling — "Keep the sheet's N" / "Replace with mine" — in plain words. This is the visual form of SC-NOCLOBBER; semantics unchanged.
 - **SC-TALLY-HONEST**: header tallies compute from non-conflict scored holes only and the to-par label carries its basis ("To par · thru N"); a disputed hole counts nowhere until resolved (S12).
 - Prototype caveats: the artifact's fake send timer, hardcoded conflict, and demo copy are NOT spec — transport and states come from rev 2.
+
+- **SC-BOARD-BTN (Riley ruled 2026-07-30, addendum to rev 3)**: the Board view gains an
+  "Enter scores — Team <name>" button that renders ONLY when this phone carries a persisted
+  scorer identity (the same localStorage persistence SC-LINK already writes on first link
+  open); it simply routes to bare `#score` (which resumes that team). No persisted identity →
+  NO button, no team picker, nothing rendered — spectators and strangers never see a write
+  affordance. Access stays link-gated by distribution (SC-ACCESS unchanged); this is a
+  shortcut for already-linked captains, not a new entry path. Suggested placement: beside the
+  board's year picker, styled as a quiet brass action, event-window or not (captains check
+  standings year-round). Smoke coverage: button absent on a fresh dom; present after the
+  persisted-identity key is planted.
