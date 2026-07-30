@@ -2105,6 +2105,17 @@ dom.window.close();
     polishSrc.includes("FORM TEAM LIST") && polishSrc.includes("no teams yet")
     && polishSrc.includes("Scoring form URL (paste once):") && /function teamList_/.test(polishSrc), "");
 }
+{
+  const preSrc = readFileSync(path.join(ROOT, "tools", "presend-check.mjs"), "utf8");
+  check("J5: O-EXTRAGID — repeatable --extra-gid name=gid, strict validation + collision guard exit 2, merged into the watchdog loop, exported readConfig",
+    preSrc.includes('"--extra-gid"') && /--extra-gid needs name=gid/.test(preSrc)
+    && /collides with a config GID key/.test(preSrc)
+    && /\{\s*\.\.\.gids,\s*\.\.\.extraGids\s*\}/.test(preSrc)
+    && preSrc.includes("export function readConfig"), "");
+  check("J6: O-VPROBE-LOUD — missing --vault-url prints the NOT-proven-unpublished warning (in the else of the vaultUrl gate)",
+    preSrc.includes("V-PROBE SKIPPED — no --vault-url given; the vault is NOT proven unpublished this run.")
+    && /\}\s*else\s*\{[^{}]*V-PROBE SKIPPED/.test(preSrc), "");
+}
 
 /* ---------------------------------------------------------------------
    Group Y: crest v3 Park Badge (spec §16). Y1 = outline enforcement (the
