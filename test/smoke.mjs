@@ -2112,14 +2112,18 @@ dom.window.close();
     estY3 === "EST. 1987", "got=" + estY3);
   domY3.window.close();
 
-  // Y4: the standalone asset's fist must equal MARK_PATH (S8 parity — the
-  // asset is a copy by necessity; this is the lockstep gate).
+  // Y4: the standalone asset's fist must equal MARK_PATH in BOTH copies —
+  // keyline stroke + brass fill (S8 parity — the asset is a copy by
+  // necessity; this is the lockstep gate). A single .includes() would pass
+  // if only one of the two copies matched, so count exact occurrences.
   let assetSvg = "";
   try { assetSvg = readFileSync(path.join(ROOT, "assets", "gfy-crest.svg"), "utf8"); } catch {}
   const markConst = (html.match(/const MARK_PATH="([^"]+)"/) || [])[1] || "";
-  check("Y4: crest v3 — assets/gfy-crest.svg fist d === MARK_PATH (asset parity)",
-    !!assetSvg && !!markConst && assetSvg.includes('d="' + markConst + '"'),
-    assetSvg ? "fist d mismatch" : "asset file missing");
+  const markNeedle = 'd="' + markConst + '"';
+  const assetMarkCount = assetSvg ? assetSvg.split(markNeedle).length - 1 : 0;
+  check("Y4: crest v3 — assets/gfy-crest.svg fist d === MARK_PATH, both copies (asset parity)",
+    !!assetSvg && !!markConst && assetMarkCount === 2,
+    assetSvg ? "count=" + assetMarkCount : "asset file missing");
 }
 
 /* ---------------------------------------------------------------------

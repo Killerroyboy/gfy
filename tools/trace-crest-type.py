@@ -3,9 +3,12 @@
 
 Face is PINNED: Futura-CondensedExtraBold from the macOS Futura.ttc — the
 face the approved render resolved (measured via canvas widths, plan header).
-Layout replicates SVG textPath: glyphs advance along the arc (letter-spacing
-between glyphs), each glyph's advance-center sits on the arc, rotated to the
-tangent. Geometry constants come from tools/crest-round2.html candidate A:
+Layout replicates SVG textPath: glyphs advance along the arc with letter-
+spacing applied after every glyph, including the last (trailing-inclusive —
+see total_advance()'s ls*n term below), for both the per-glyph stepping and
+the total-width centering; each glyph's advance-center sits on the arc,
+rotated to the tangent. Geometry constants come from tools/crest-round2.html
+candidate A:
   top arc:    M 51.9 141.2 A 159 159 0 0 1 348.1 141.2  -> C=(200,199.1) r=159
   bottom arc: M 51.9 258.8 A 159 159 0 0 0 348.1 258.8  -> C=(200,200.9) r=159
 Writes tools/crest-type-paths.svg (fragment: three <g> blocks).
