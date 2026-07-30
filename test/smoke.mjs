@@ -1956,11 +1956,22 @@ dom.window.close();
     && minors.some(e => e.querySelector(".entry-year")?.textContent === "3rd" && /Tex & Tank/.test(e.querySelector(".entry-roster")?.textContent || ""))
     && entries.some(e => !e.classList.contains("entry-minor") && /Duck/.test(e.textContent) && /Duck · Hammer/.test(e.querySelector(".entry-roster")?.textContent || "")),
     "entries=" + entries.length + " minors=" + minors.length + " :: " + entries.map(e => e.querySelector(".entry-year")?.textContent + "|" + e.querySelector(".entry-name")?.textContent).join(" ; "));
-  check("U4: H-PODIUM — years without 2nd/3rd rows render only what exists (2023, 2019 single entries, no fabricated placings) and the bird holder stays the latest place-1 row (Duck)",
+  const champsNo1 = 'year,champion,score,place,players\n2026,Moose,150 (+6),2,\n2024,Duck,151 (+7),,Duck · Hammer\n';
+  const domB = makeDom("", withOverride({
+    champions: () => Promise.resolve({ ok: true, status: 200, text: async () => champsNo1 }),
+  }));
+  await until(() => domB.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docB = domB.window.document;
+  const birdB = docB.querySelector("#homeBird")?.textContent || "";
+  const b2026 = [...docB.querySelectorAll("#champBody .entry")].filter(e => /Moose/.test(e.textContent));
+  check("U4: H-PODIUM — years without 2nd/3rd rows render only what exists (2023, 2019 single entries, no fabricated placings); bird holder stays the latest place-1 row (Duck); and a latest year WITHOUT any place-1 row never fabricates a bird nor falls back to an older year",
     entries.filter(e => e.querySelector(".entry-year")?.textContent === "2023").length === 1
     && entries.filter(e => e.querySelector(".entry-year")?.textContent === "2019").length === 1
-    && (docH.querySelector("#homeBird")?.textContent || "").includes("Duck"),
+    && (docH.querySelector("#homeBird")?.textContent || "").includes("Duck")
+    && !/Moose/.test(birdB) && !/since 2026/.test(birdB) && !/since 2024/.test(birdB)
+    && b2026.length === 1 && b2026[0].classList.contains("entry-minor") && b2026[0].querySelector(".entry-year")?.textContent === "2nd",
     "");
+  domB.window.close();
   domH.window.close();
 }
 {
