@@ -135,7 +135,15 @@ function doPost(e){
     const prior = props.getProperty(key);
     if (prior) return ContentService.createTextOutput(prior).setMimeType(ContentService.MimeType.JSON);
   }
-  const r = applyScore_(SpreadsheetApp.getActive(), p);
+  let r;
+  try{ r = applyScore_(SpreadsheetApp.getActive(), p); }
+  catch(err){
+    // Never cache this (same reasoning as the busy exclusion, one step earlier: a renamed/
+    // missing tab or other unexpected sheet state is a transient problem, not a stable answer —
+    // a retry after Riley fixes the sheet must re-execute, not replay a frozen "internal error"
+    // forever). Returning here, before the cache-write block below, is what guarantees that.
+    return jsonOut_({ok:false, verdict:"internal error", team:String((p && p.team) || ""), round:0, holes:null});
+  }
   const out = JSON.stringify(r);
   if (p.client_id && p.seq != null && r.verdict !== "busy — resubmit"){
     props.setProperty(key, out);                             // bounded: cleanupIdem_ below
@@ -144,9 +152,11 @@ function doPost(e){
   return ContentService.createTextOutput(out).setMimeType(ContentService.MimeType.JSON);
 }
 function doGet(){
-  const ss = SpreadsheetApp.getActive();
-  const year = firstTeeYear_(ss);
-  return jsonOut_({ok:true, year:year, teams:Array.from(rosterTeams_(ss, year).values())});
+  try{
+    const ss = SpreadsheetApp.getActive();
+    const year = firstTeeYear_(ss);
+    return jsonOut_({ok:true, year:year, teams:Array.from(rosterTeams_(ss, year).values())});
+  } catch(err){ return jsonOut_({ok:false, verdict:"internal error"}); }
 }
 function jsonOut_(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 // Keep at most 600 idem keys (15 teams x 2 rounds x 18 holes + retries headroom).
