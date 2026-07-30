@@ -1853,6 +1853,21 @@ dom.window.close();
   }
 }
 
+/* ---------- T: sheet-triggers.gs parity (v2.4 §14) ---------- */
+{
+  let tg = ""; try { tg = readFileSync(path.join(ROOT, "tools", "sheet-triggers.gs"), "utf8"); } catch {}
+  check("T1: triggers script exists with OnlyCurrentDoc + no ids/urls",
+    tg.includes("@OnlyCurrentDoc") && !/docs\.google\.com|spreadsheets\/d\//.test(tg) && tg.length > 0);
+  check("T2: writer uses LockService + S-KEY normalization + first_tee year (F-LOCK/F-NKEY/F-YEAR)",
+    tg.includes("LockService.getDocumentLock") && tg.includes('replace(/\\s+/g, " ").toLowerCase()')
+    && tg.includes("first_tee") && !/new Date\(\)\.getFullYear\(\)[^]*writeScore/.test(tg));
+  check("T3: writer touches Scores only; stamp touches Field only (closed surfaces)",
+    /getSheetByName\("Scores"\)/.test(tg) && /getSheetByName\("Field"\)/.test(tg)
+    && !/getSheetByName\("(Calcutta|Ledger|Rooms|Invites|Course|Payout|Champions|Shame|Schedule|Pairings)"\)/.test(tg.split("function onDepositEdit")[0] || tg));
+  check("T4: stamp uses sheet timezone + never erases (F-STAMP-IMPL)",
+    tg.includes("getSpreadsheetTimeZone()") && tg.includes('Utilities.formatDate') && /never erases|do not erase/i.test(tg));
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
