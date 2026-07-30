@@ -34,8 +34,13 @@ Event: **Aug 14–16, 2026** at MeadowCreek (New Meadows, ID). 12–15 four-play
   rounds re-reviewed, whole-round final review on strongest model). It caught real bugs
   every single round — do not skip reviews.
 - Doctrine: `~/.claude/projects/-Users-riley/memory/DOCTRINE.md` + session-start heartbeat.
-- **The fence**: pushes to main are Riley-typed (`! git push origin v2.1-invites:main`);
-  a PreToolUse hook blocks agent-side pushes BY DESIGN. Rollback ref for next push: `49efa87`.
+- **The fence (amended, Riley ratified 2026-07-30)**: the push DECISION stays Riley's,
+  per push — but for THIS repo only he says the word in chat ("push it") and the agent
+  executes `GFY_PUSH_GRANT=1 git push origin v2.1-invites:main` from inside ~/Code/gfy,
+  then verifies Pages build + live md5 and reports true state. The fence-hook honors the
+  token ONLY with a ~/Code/gfy cwd, bypasses only the push check, and logs every grant
+  (~/.mc-ground/state/fence.log). NEVER push without the word; never let a subagent push.
+  All other repos: fence absolute. Rollback ref for next push: `49efa87`.
 
 ## Binding invariants (cost us reviews to learn — do not relearn)
 
