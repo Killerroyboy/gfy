@@ -76,11 +76,11 @@ function colorField_(sh){
   const rules = [];
   if (dep) rules.push(SpreadsheetApp.newConditionalFormatRule()
     .whenFormulaSatisfied(`=AND($A2<>"",${colLetter_(dep)}2=FALSE)`)
-    .setBackground("#3d2323")
+    .setBackground("#f4cccc")
     .setRanges([sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))]).build());
   if (since) rules.push(SpreadsheetApp.newConditionalFormatRule()
     .whenFormulaSatisfied(`=AND($A2<>"",${colLetter_(since)}2=$A2)`)     // rookie: since == row's season
-    .setBackground("#33321f")
+    .setBackground("#fff2cc")
     .setRanges([sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))]).build());
   if (sh.getConditionalFormatRules().length > rules.length)
     Logger.log(sh.getName() + ": replacing ALL conditional formatting — hand-added rules are erased (polish owns CF on this sheet)");
@@ -94,7 +94,7 @@ function colorRooms_(sh){
   const pcol = field ? colLetter_(headerIndex_(field, "player") || 2) : "B";
   const rules = [SpreadsheetApp.newConditionalFormatRule()
     .whenFormulaSatisfied(`=AND(${c}2<>"",LEFT(${c}2,6)<>"guest:",ISNA(MATCH(${c}2,INDIRECT("Field!${pcol}:${pcol}"),0)))`)
-    .setBackground("#3d3223")
+    .setBackground("#fce5cd")
     .setRanges([sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))]).build()];
   if (sh.getConditionalFormatRules().length > rules.length)
     Logger.log(sh.getName() + ": replacing ALL conditional formatting — hand-added rules are erased (polish owns CF on this sheet)");
@@ -137,7 +137,7 @@ function buildStartHere_(ss){
     ["Scoring form URL (paste once):", ""],
     ["", ""],
     ["COLOR LEGEND", ""],
-    ["Dark red row = deposit unpaid", ""], ["Gold tint = rookie (since == this season)", ""], ["Sage tint = Rooms name not on Field", ""],
+    ["Red row = deposit unpaid", ""], ["Gold tint = rookie (since == this season)", ""], ["Orange tint = Rooms name not on Field", ""],
     ["", ""],
     ["Before ANY email send round: npm run presend (see repo README)", ""],
     ["Polish/repair the sheet: Extensions → Apps Script → run polish()", ""],
