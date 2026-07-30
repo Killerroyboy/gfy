@@ -1187,8 +1187,13 @@ function rosterMap(seasonY=STATE.year){
   m.forEach((t,k)=>{ if(!t.captain) flag(`team "${k}" has no captain row (player must equal team)`); });
   return m;
 }
-function teamLabel(key,rawFallback){
-  const t=rosterMap().get(key);
+// seasonY (additive, default STATE.year — review round 1 fix): every
+// pre-existing call site is board/grid/card UI that IS meant to follow the
+// #board year picker, so the default preserves them byte-for-byte. The
+// scorer's glance strip (scGlanceHTML) is the one caller that must NOT
+// follow STATE.year (SC-YEAR) — it passes scorerSeason() explicitly.
+function teamLabel(key,rawFallback,seasonY=STATE.year){
+  const t=rosterMap(seasonY).get(key);
   if(!t||!t.captain){ const raw=rawFallback!==undefined&&rawFallback!==""?rawFallback:key; return {html:esc(raw),text:raw}; }
   const names=[t.captain,...t.members];
   return {
@@ -1199,9 +1204,9 @@ function teamLabel(key,rawFallback){
 // B-CAPTAIN (§15): board rows + grid sticky column show the captain only —
 // width-critical at 15 four-player teams. Full roster: card header + Field.
 // The hole panel keeps the joined form (vertical list, width not constrained).
-function captainLabel(key,rawFallback){
-  const t=rosterMap().get(key);
-  if(!t||!t.captain) return teamLabel(key,rawFallback);
+function captainLabel(key,rawFallback,seasonY=STATE.year){
+  const t=rosterMap(seasonY).get(key);
+  if(!t||!t.captain) return teamLabel(key,rawFallback,seasonY);
   return { html:`<span class="cap">${esc(t.captain)}</span>`, text:t.captain };
 }
 
@@ -3892,13 +3897,13 @@ function scGlanceHTML(){
     const lThru=scGlanceRoundThru(leader,round);
     leaderHTML = leader.key===me.key
       ? `<p class="sc-glance-leader">You're leading${lThru!=null?" · thru "+lThru:""}</p>`
-      : `<p class="sc-glance-leader">Leader: ${captainLabel(leader.key,leader.name).html}${lThru!=null?" · thru "+lThru:""}</p>`;
+      : `<p class="sc-glance-leader">Leader: ${captainLabel(leader.key,leader.name,scorerSeason()).html}${lThru!=null?" · thru "+lThru:""}</p>`;
   }
   const neighborHTML=["above","below"].map(dir=>{
     const n = dir==="above" ? players[idx-1] : players[idx+1];
     if(!n) return "";
     const nThru=scGlanceRoundThru(n,round);
-    return `<p class="sc-glance-neighbor" data-dir="${dir}">${captainLabel(n.key,n.name).html}${nThru!=null?" · thru "+nThru:""}</p>`;
+    return `<p class="sc-glance-neighbor" data-dir="${dir}">${captainLabel(n.key,n.name,scorerSeason()).html}${nThru!=null?" · thru "+nThru:""}</p>`;
   }).join("");
   const pendingN=scGlancePendingCount(round);
   const pendingHTML=pendingN>0

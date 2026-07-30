@@ -3183,8 +3183,17 @@ async function cellSettledOk(doc, hole) {
 /* ---------------------------------------------------------------------
    X24-X26: sheet truth merge, glance strip, render boundary (spec §18
    SC-DERIVE/SC-GLANCE — task 6). window.scSheetHoles is no longer the
-   Task 5 ()=>null seam stub — these are the FIRST tests to exercise the
-   REAL derivation end to end (no noSheet override anywhere below).
+   Task 5 ()=>null seam stub. X24 and X25 are the FIRST tests to exercise
+   the REAL derivation end to end (no noSheet override). X26 is mixed —
+   its FIRST dom (pad-open/Other-survives) passes { noSheet: true }
+   deliberately: it is proving PRE-Task-6 pad mechanics (Task 3/5's
+   STATE-driven idempotent renderScCard()) survive a full load() cycle,
+   not the sheet merge itself, so it stays isolated from real sheet data
+   for the same reason X7-X23 do (review round 1: corrected here after
+   the report overclaimed "no noSheet override anywhere below" for all
+   three). Its SECOND dom (the #scConfirm boundary) uses no override —
+   it never renders a card at all (picker/confirm only), so the real vs.
+   stubbed sheet is moot there either way.
    --------------------------------------------------------------------- */
 {
   // X24: SC-YEAR independence — duck's r2 fixture natively has h1..h6 =
@@ -3280,13 +3289,40 @@ async function cellSettledOk(doc, hole) {
   const stillThru7X25 = /thru 7/.test(glanceText()) && !/thru 9/.test(glanceText());
   const stillM4X25 = /of 4 reporting/.test(glanceText());
 
+  // Review round 1 (Important finding): the glance's leader/neighbor names
+  // must be season-pinned (scorerSeason(), SC-YEAR) — captainLabel/teamLabel
+  // internally call rosterMap(seasonY), not bare rosterMap()=rosterMap
+  // (STATE.year). Poke the year picker on #board (X24's own technique) to
+  // 2025 (a year Field has NO rows for), then return to #score, and assert
+  // the leader/neighbor names are STILL cap-styled. Asserting only the raw
+  // name TEXT would be a false-positive test: a broken bare-rosterMap()
+  // path also falls through to captainLabel/teamLabel's raw-esc(rawFallback)
+  // branch (no roster match for 2025) and still shows "Duck"/"Sully"/"Moose"
+  // as plain text — only the .cap class distinguishes a genuine season-
+  // pinned roster hit from that fallback.
+  domX25.window.location.hash = "#board";
+  domX25.window.dispatchEvent(new domX25.window.Event("hashchange"));
+  await until(() => docX25.querySelector('[data-view="board"]')?.hidden === false);
+  await until(() => !!docX25.querySelector('#years .year-btn[data-year="2025"]'));
+  docX25.querySelector('#years .year-btn[data-year="2025"]').click();
+  domX25.window.location.hash = "#score?team=" + encodeURIComponent("Tex");
+  domX25.window.dispatchEvent(new domX25.window.Event("hashchange"));
+  await until(() => docX25.querySelectorAll("#scCard .sc-cell").length > 0);
+
+  const namesAfterPokeX25 = /Duck/.test(glanceText()) && /Sully/.test(glanceText()) && /Moose/.test(glanceText());
+  const leaderCapAfterPokeX25 = !!docX25.querySelector(".sc-glance-leader .cap");
+  const neighborCapsAfterPokeX25 = docX25.querySelectorAll(".sc-glance-neighbor .cap").length === 2;
+
   domX25.window.close();
 
-  check("X25: SC-GLANCE honesty — Tex shows '3rd of 4 reporting · thru 7' (M verified against the fixture: 4 of 5 registered teams have an actual r2 hole-by-hole card; Bear's r2 is totals-only), leader Duck (thru 18), neighbors Sully/Moose named; 2 fresh offline taps render as their OWN 'pending on your phone' line (2 pending) without moving the board's thru/reporting numbers",
+  check("X25: SC-GLANCE honesty — Tex shows '3rd of 4 reporting · thru 7' (M verified against the fixture: 4 of 5 registered teams have an actual r2 hole-by-hole card; Bear's r2 is totals-only), leader Duck (thru 18), neighbors Sully/Moose named; 2 fresh offline taps render as their OWN 'pending on your phone' line (2 pending) without moving the board's thru/reporting numbers; leader/neighbor names stay CAP-STYLED (season-pinned via scorerSeason(), not STATE.year) after poking the #board year picker to 2025 and back",
     posOkX25 && thruOkX25 && leaderOkX25 && neighborsOkX25 && noPendingYetX25 &&
-      pendingOkX25 && stillThru7X25 && stillM4X25,
+      pendingOkX25 && stillThru7X25 && stillM4X25 &&
+      namesAfterPokeX25 && leaderCapAfterPokeX25 && neighborCapsAfterPokeX25,
     "pos=" + posOkX25 + " thru=" + thruOkX25 + " leader=" + leaderOkX25 + " neighbors=" + neighborsOkX25 +
       " pendingBefore=" + !noPendingYetX25 + " pendingText=" + pendingTextX25 +
+      " namesAfterPoke=" + namesAfterPokeX25 + " leaderCapAfterPoke=" + leaderCapAfterPokeX25 +
+      " neighborCapsAfterPoke=" + neighborCapsAfterPokeX25 +
       " glanceText=" + glanceText().slice(0, 220));
 }
 
