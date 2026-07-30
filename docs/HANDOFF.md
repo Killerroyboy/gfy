@@ -16,8 +16,8 @@ Event: **Aug 14–16, 2026** at MeadowCreek (New Meadows, ID). 12–15 four-play
 
 | Thing | Where | State at handoff |
 |---|---|---|
-| Site | killerroyboy.github.io/gfy (repo Killerroyboy/gfy, public) | LIVE at v2.3 (`7714510`) |
-| Local repo | `~/Code/gfy`, branch `v2.1-invites` | **v2.5 BUILT + reviewed at `793e647`** (155/155), **not pushed** (33 commits pending, ff-promotable, rollback `7714510`); crest-v3 round (§16) in flight from a parallel session |
+| Site | killerroyboy.github.io/gfy (repo Killerroyboy/gfy, public) | LIVE at v2.5 + crest v3 (`49efa87`, deployed 2026-07-30, live md5 == tip) |
+| Local repo | `~/Code/gfy`, branch `v2.1-invites` | **PUSHED + DEPLOYED**: branch == origin/main == `49efa87` (v2.5 at `793e647` + crest-v3 merged); suite 159/159 at tip; next-push rollback ref = `49efa87` |
 | Google Sheet | id `16Co2b3_uaBhg1tzFw56aGJVsicgPx_xeQr_mCgHPNBw`, account **goodfriendsyearly@gmail.com** | polished (light CF tints, START HERE first tab, real Course 18); Riley entering REAL data (teams Jake/Greg/Voss, real rounds) |
 | Apps Script | project `1HE704reG5WNBWSQOMhoiTzG-phbTGKlD_NP6ywipR5zWy1xV9x8bTtOW` (Code.gs = sheet-polish + `/** @OnlyCurrentDoc */`; triggers.gs = sheet-triggers) | **2 triggers INSTALLED** (onScoreFormSubmit, onDepositEdit) — verified on Triggers page |
 | Scoring form | `docs.google.com/forms/d/e/1FAIpQLSdlNWdXrrolvALR1JkT0_QtQH7mpS6cDscq-TI3UGIfD6FsdA/viewform` | PUBLISHED, linked to the sheet, URL pasted in START HERE B8; **email collection = Do not collect (verified)**; E2E proven (Jake r1 h18=5 → applied) |
@@ -35,7 +35,7 @@ Event: **Aug 14–16, 2026** at MeadowCreek (New Meadows, ID). 12–15 four-play
   every single round — do not skip reviews.
 - Doctrine: `~/.claude/projects/-Users-riley/memory/DOCTRINE.md` + session-start heartbeat.
 - **The fence**: pushes to main are Riley-typed (`! git push origin v2.1-invites:main`);
-  a PreToolUse hook blocks agent-side pushes BY DESIGN. Rollback ref for next push: `7714510`.
+  a PreToolUse hook blocks agent-side pushes BY DESIGN. Rollback ref for next push: `49efa87`.
 
 ## Binding invariants (cost us reviews to learn — do not relearn)
 
@@ -57,8 +57,8 @@ Event: **Aug 14–16, 2026** at MeadowCreek (New Meadows, ID). 12–15 four-play
    review→fix rounds; fable whole-branch review + final wave; 155/155). Podium history,
    public `#draft` board, captain-only labels, N-FULLNAMES, template columns.
    Accepted residuals + carried-minors triage live in the ledger's FINAL entry.
-2. **Riley push gate**: everything since `7714510` ships on his next `!` push
-   (33 commits incl. v2.5 + crest-v3 spec/tools work; ancestry verified ff-promotable).
+2. **DONE — pushed + deployed 2026-07-30**: `49efa87` live, Pages built, live md5 == tip,
+   `#draft` present in served HTML. Rollback ref for the NEXT push: `49efa87`.
 3. **Ops-hardening wave (PROPOSED, not built)**: 8 small judgment-free sheet-ops fixes
    (top: repo `sheet-polish.gs` missing `@OnlyCurrentDoc`; template content-checker;
    gid-check tool; presend V-PROBE silent-skip warning) + 4 Riley-judgment items —
