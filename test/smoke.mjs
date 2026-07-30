@@ -1943,6 +1943,46 @@ dom.window.close();
   domU.window.close();
 }
 
+{
+  // H-PODIUM on the default fixtures (own dom — the main one is closed upstream)
+  const domH = makeDom("");
+  const docH = domH.window.document;
+  await until(() => docH.querySelectorAll("#lbBody .lb-row").length > 0);
+  const entries = [...docH.querySelectorAll("#champBody .entry")];
+  const minors = entries.filter(e => e.classList.contains("entry-minor"));
+  check("U3: H-PODIUM — 2024 renders a full podium: place-1 Duck (blank place = 1st, legacy), 2nd Sully, 3rd Tex, each with its roster",
+    entries.length === 5 && minors.length === 2
+    && minors.some(e => e.querySelector(".entry-year")?.textContent === "2nd" && /Sully/.test(e.textContent) && /Wade Johnson/.test(e.querySelector(".entry-roster")?.textContent || ""))
+    && minors.some(e => e.querySelector(".entry-year")?.textContent === "3rd" && /Tex & Tank/.test(e.querySelector(".entry-roster")?.textContent || ""))
+    && entries.some(e => !e.classList.contains("entry-minor") && /Duck/.test(e.textContent) && /Duck · Hammer/.test(e.querySelector(".entry-roster")?.textContent || "")),
+    "entries=" + entries.length + " minors=" + minors.length + " :: " + entries.map(e => e.querySelector(".entry-year")?.textContent + "|" + e.querySelector(".entry-name")?.textContent).join(" ; "));
+  check("U4: H-PODIUM — years without 2nd/3rd rows render only what exists (2023, 2019 single entries, no fabricated placings) and the bird holder stays the latest place-1 row (Duck)",
+    entries.filter(e => e.querySelector(".entry-year")?.textContent === "2023").length === 1
+    && entries.filter(e => e.querySelector(".entry-year")?.textContent === "2019").length === 1
+    && (docH.querySelector("#homeBird")?.textContent || "").includes("Duck"),
+    "");
+  domH.window.close();
+}
+{
+  // U-DUPES: two place-1 rows same year → BOTH render + health flag, no silent
+  // de-dup. Gate on the BOARD, not #champBody — static markup ships 6 .entry
+  // divs, so a champBody-based until() fires before the fetch resolves.
+  const champsDup = 'year,champion,score,place,players\n2024,Duck,151 (+7),1,\n2024,Moose,151 (+7),1,\n';
+  const fetchDup = withOverride({
+    champions: () => Promise.resolve({ ok: true, status: 200, text: async () => champsDup }),
+  });
+  const domDup = makeDom("", fetchDup);
+  const docDup = domDup.window.document;
+  await until(() => docDup.querySelectorAll("#lbBody .lb-row").length > 0);
+  const dupEntries = [...docDup.querySelectorAll("#champBody .entry")];
+  const healthDup = docDup.querySelector("#healthStrip")?.textContent || "";
+  check("U5: U-DUPES — duplicate same-year place-1 rows ALL render + health-strip flag (no silent de-dup, no fabricated podium)",
+    dupEntries.length === 2 && /Duck/.test(dupEntries.map(e=>e.textContent).join(" ")) && /Moose/.test(dupEntries.map(e=>e.textContent).join(" "))
+    && /duplicate/i.test(healthDup),
+    "entries=" + dupEntries.length + " health=" + healthDup.slice(0, 160));
+  domDup.window.close();
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */

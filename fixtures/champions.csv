@@ -1,4 +1,6 @@
-year,champion,score
-2024,Duck,151 (+7)
-2023,Hammer,149 (+5)
-2019,Tex,Inaugural
+year,champion,score,place,players
+2024,Duck,151 (+7),,Duck · Hammer
+2024,Sully,153 (+9),2,Sully · Wade Johnson
+2024,Tex,158 (+14),3,Tex & Tank
+2023,Hammer,149 (+5),,
+2019,Tex,Inaugural,,

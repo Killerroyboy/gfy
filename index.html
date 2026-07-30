@@ -314,6 +314,9 @@
   .entry-year{font-family:var(--display);font-size:1.15rem;color:var(--brass)}
   .entry-name{font-size:1.05rem}
   .entry-name.blank{color:var(--brass-dim);font-style:italic;font-size:.95rem}
+  .entry-minor{opacity:.72}
+  .entry-minor .entry-name{font-size:.95em}
+  .entry-roster{font-size:.78rem;color:var(--sage);margin-top:2px;font-weight:400;letter-spacing:.02em}
   .entry-score{text-align:right;font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:var(--sage)}
   .holder{margin-top:34px;padding:26px 30px;border:1px solid rgba(200,162,74,.3);
           display:flex;align-items:center;gap:26px}
@@ -2240,17 +2243,41 @@ function renderChampions(){
       <div class="entry"><div class="entry-year">2019</div><div class="entry-name blank">Add name</div><div class="entry-score">Inaugural</div></div>`;
     return;
   }
+  // H-PODIUM (§15): optional place + players roster.
+  // blank = 1st (legacy rows, silent). "1"-"3" = that place. Anything else is
+  // a typo: flagged, rendered as-is, NEVER counted as a win — a bad cell must
+  // not fabricate a first place (or hand The Bird to a typo).
   const withYear=rows.filter(r=>r.year);
-  $("#champBody").innerHTML=withYear.map(r=>{
-    const blank=!r.champion;
-    return `<div class="entry">
-      <div class="entry-year">${esc(r.year)}</div>
-      <div class="entry-name${blank?" blank":""}">${esc(r.champion||"Open")}</div>
-      <div class="entry-score">${esc(r.score||"—")}</div>
-    </div>`;
+  const placeOf=r=>{ const s=String(r.place||"").trim(); if(!s) return 1;
+    const n=parseInt(s,10); return (n>=1&&n<=3)?n:null; };
+  const years=[...new Set(withYear.map(r=>r.year))].sort((a,b)=>parseInt(b,10)-parseInt(a,10));
+  $("#champBody").innerHTML=years.map(y=>{
+    const yr=withYear.filter(r=>r.year===y);
+    const counts={};
+    yr.forEach(r=>{ const p=placeOf(r); if(p!==null) counts[p]=(counts[p]||0)+1; });
+    Object.entries(counts).filter(([,n])=>n>1)
+      .forEach(([p,n])=>flag(`Champions ${y} has ${n} duplicate place-${p} rows — showing all`));
+    yr.filter(r=>placeOf(r)===null)
+      .forEach(r=>flag(`Champions ${y} place "${r.place}" is not 1-3 — shown as-is, not counted as a win`));
+    const ordered=[...yr].sort((a,b)=>(placeOf(a)??9)-(placeOf(b)??9));
+    return ordered.map(r=>{
+      const pl=placeOf(r);
+      const minor=pl!==1;
+      const yearCell=pl===1?esc(r.year):(pl!==null?esc(pl+ordSuffix(pl)):esc(String(r.place)));
+      const blank=!r.champion;
+      const roster=r.players?`<div class="entry-roster">${esc(r.players)}</div>`:"";
+      return `<div class="entry${minor?" entry-minor":""}">
+        <div class="entry-year">${yearCell}</div>
+        <div class="entry-name${blank?" blank":""}">${esc(r.champion||"Open")}${roster}</div>
+        <div class="entry-score">${esc(r.score||"—")}</div>
+      </div>`;
+    }).join("");
   }).join("");
 
-  const latest=withYear.reduce((a,b)=>(!a||parseInt(b.year,10)>parseInt(a.year,10))?b:a,null);
+  // Bird: the LATEST year's place-1 row — never an older year's (spec pin).
+  // Latest year without a place-1 row → leave #homeBird's default copy alone.
+  const latestYear=years[0];
+  const latest=latestYear?withYear.find(r=>r.year===latestYear&&placeOf(r)===1):null;
   const bird=$("#homeBird");
   if(bird&&latest){
     const p=bird.querySelector("p");
