@@ -18,7 +18,7 @@ Event: **Aug 14–16, 2026** at MeadowCreek (New Meadows, ID). 12–15 four-play
 |---|---|---|
 | Site | killerroyboy.github.io/gfy (repo Killerroyboy/gfy, public) | LIVE at v2.5 + crest v3 (`49efa87`, deployed 2026-07-30, live md5 == tip) |
 | Local repo | `~/Code/gfy`, branch `v2.1-invites` | **PUSHED + DEPLOYED**: branch == origin/main == `49efa87` (v2.5 at `793e647` + crest-v3 merged); suite 159/159 at tip; next-push rollback ref = `49efa87` |
-| Google Sheet | id `16Co2b3_uaBhg1tzFw56aGJVsicgPx_xeQr_mCgHPNBw`, account **goodfriendsyearly@gmail.com** | polished (light CF tints, START HERE first tab, real Course 18); Riley entering REAL data (teams Jake/Greg/Voss, real rounds) |
+| Google Sheet | (sheet edit link — Riley's private bookmark; removed from repo), account **goodfriendsyearly@gmail.com** | polished (light CF tints, START HERE first tab, real Course 18); Riley entering REAL data (teams Jake/Greg/Voss, real rounds) |
 | Apps Script | project `1HE704reG5WNBWSQOMhoiTzG-phbTGKlD_NP6ywipR5zWy1xV9x8bTtOW` (Code.gs = sheet-polish + `/** @OnlyCurrentDoc */`; triggers.gs = sheet-triggers) | **2 triggers INSTALLED** (onScoreFormSubmit, onDepositEdit) — verified on Triggers page |
 | Scoring form | `docs.google.com/forms/d/e/1FAIpQLSdlNWdXrrolvALR1JkT0_QtQH7mpS6cDscq-TI3UGIfD6FsdA/viewform` | PUBLISHED, linked to the sheet, URL pasted in START HERE B8; **email collection = Do not collect (verified)**; E2E proven (Jake r1 h18=5 → applied) |
 | Published CSV | PUB_ID + 13 gids in `config.js` (info gid fixed to 346870487) | 13/13 verified |

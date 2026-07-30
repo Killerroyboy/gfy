@@ -215,10 +215,53 @@ Sheet edits reach the site in roughly 1–6 minutes (Google republishes ~every
 5 minutes; the site refreshes every 60 seconds). During a round, that's fast
 enough to keep the board honest — just don't panic-refresh.
 
-## Live scoring (the Form)
+## Live scoring
 
-During the tournament, a Google Form feeds live scores into the spreadsheet.
-Set it up once before the event:
+During the tournament, each captain scores their own team's card straight from
+their phone at a link generated just for them. The Google Form is still there
+as the no-JS fallback (same validation, same sheet). Neither one replaces the
+paper scorecard — see below.
+
+### What a captain sees
+
+Each team gets one link — `.../gfy/#score?team=<Team>` — generated for you (see
+"Captain links," below) and never hand-typed. First open shows a one-time
+"Scoring for **\<Team\>** — \<roster\>" confirmation; after that, that link (or
+a bare `#score`) resumes straight to that team's card, and a "Who's scoring?"
+picker in the header can always switch teams (a captain covering two teams, or
+Riley filling in).
+
+The card is 18 cells, Out and In. Tap a hole, tap the score — **it sends
+immediately**, no confirm screen, no undo timer, so a tap that ends up in a
+pocket can never strand a send. The cell itself is the receipt: `■ on the
+sheet` (confirmed) · `⇡ saved on phone` (queued, not confirmed yet) · `?`
+(the sheet disagrees with this phone — see below) · `!` (rejected — shows the
+sheet's exact reason, with a retry button; "text Riley" shows up after two
+retries still fail). Re-tapping an already-scored hole asks first ("Replace 6
+with 4?") — nothing overwrites silently.
+
+**Offline is expected, not an error.** Saving to the phone never waits on a
+signal — a tap always lands instantly, bars or no bars. Copy states the truth
+plainly: queued scores live on this phone and send next time this page is
+open with signal. If two phones ever send different numbers for the same
+hole, the site never auto-picks a winner — it shows both numbers and waits
+for a person to resolve it.
+
+**The paper scorecard is the tournament's system of record.** Keep it, and
+turn it in, exactly like every year before this — the phone scorer and the
+Form are both a convenience layer on top of the sheet, not a replacement for
+the card in your pocket. If the card ever disagrees with the phone or the
+sheet, the card wins.
+
+Before `score_endpoint` exists on the Info tab (i.e., before the setup below
+is finished), every scoring link is honestly inert — it reads "Scoring opens
+at the tournament." and, only if `form_url` is already pasted, a "Score via
+the form" link underneath. Never a dead button, never a guess. (The public
+"Enter scores" button that used to open the sheet directly is gone for good —
+see the retired `SHEET_EDIT_URL` comment in `config.js`. Scoring only ever
+runs through a captain's link or the form now.)
+
+### One-time setup
 
 1. **Create the form** with these four questions, in order:
    - **Team** (dropdown, menu items hand-filled at draft night — one item per team captain)
@@ -242,8 +285,8 @@ Set it up once before the event:
 4. **Deploy the Web App**: still in Extensions → Apps Script, **Deploy → New
    deployment** → gear icon → **Web app** → Execute as **Me**, Who has
    access **Anyone** → **Deploy** → authorize → copy the **Web app URL**
-   (ends in `/exec`). Full walkthrough + a CORS proof you can run before
-   trusting it: `tools/spike-scorer-cors.md`.
+   (ends in `/exec`). Full walkthrough + a CORS proof — run it before the
+   draft-night drill and before sharing any link: `tools/spike-scorer-cors.md`.
    **Once this URL has gone out to captains, never redeploy with "New
    deployment" again** — that mints a different URL and silently orphans
    every captain link and every `score_endpoint` value already handed out.
@@ -262,17 +305,72 @@ Set it up once before the event:
 
    Then re-run `polish()` — it rebuilds START HERE's **Captain scoring
    links** and **Form Team dropdown** blocks from the current Field roster.
+   Confirm it landed: open the live site with `?debug=1` — the panel's last
+   line reads `score endpoint: OK (<year>, <N> teams)` once configured (it
+   reads `score endpoint: not configured` before this step, and never counts
+   toward the tab-report's OK total either way).
 6. **Check the timezone**: On the LIVE sheet, open **File → Settings** and
    confirm the time zone is set to **America/Boise** (used for `paid_date`
    stamps — see **Collecting for next year**, below).
 
-**How it works:** When someone submits the form, a trigger fires
-`onScoreFormSubmit()`, which writes the score to the Scores tab (matching
-the team by name, case-insensitive) and marks the response row with a status:
-- **applied** — score was valid and written to Scores.
+### Captain links & the Form's Team list
+
+Every current-season team's scoring link and Form-dropdown entry are
+generated for you on START HERE — never hand-typed:
+
+- Re-run `polish()` (Extensions → Apps Script → run `polish()`) any time the
+  roster changes. It rebuilds two blocks from the live Field tab:
+  **CAPTAIN SCORING LINKS** (one ready-to-text link per team) and **FORM TEAM
+  DROPDOWN** (the same team list, meant to be selected and pasted directly
+  into the Form's Team question options).
+- **Paste these lists exactly — never retype them by hand.** A retyped name
+  that doesn't match the Field `team` value byte-for-byte is a team the
+  live-scoring writer can never find.
+- **Team names freeze the moment these links go out.** Renaming a team
+  afterward means updating every one of that team's rows on Scores to match,
+  or the writer silently stops finding them.
+
+### The draft-night drill (SC-DRILL) — blocking, before any link is texted
+
+Do not text a single captain link, or hand out the form, until this drill has
+passed live against the real deployed endpoint (~25 minutes):
+
+1. **Pre-flight** — Scores/Field/Info headers present, `first_tee` year
+   correct, sheet timezone correct, `score_endpoint` pasted into Info, sheet
+   sharing restricted to named editors only, and `SHEET_EDIT_URL` confirmed
+   gone from `config.js`.
+2. **The 15-tap sweep** — one submission per team, every one using **round 2
+   / hole 13 / score 6** (hole ≠ score on purpose — a transposition mistake
+   can't accidentally pass the check). Verify 15× `ok` verdicts AND 15×
+   `h13 = 6` on the Scores tab, and record the observed sheet-to-published-CSV
+   lag in the ledger.
+3. **Pocket test** — tap a score, lock the screen for 2 minutes; it must
+   land.
+4. **Airplane test** — enter 3 holes with the phone offline; all three must
+   land exactly once when signal returns.
+5. **Clobber test** — send a differing value for the same hole from a second
+   browser; confirm it renders the conflict state (not a resend), then
+   hand-fix it in the sheet and confirm it doesn't bounce back.
+6. **Round-toggle spring test** — the manual round toggle is momentary; after
+   one submission it must spring back to the derived default round on its
+   own.
+7. **Per-round canary** — Riley submits one real score at each round's first
+   tee.
+
+**Cleanup (S15):** clear every sweep-created cell **and delete the
+sweep-created rows outright** — an emptied row still ghosts on the board.
+
+### How it works
+
+When someone submits the form (or a captain's phone POSTs to `score_endpoint`
+directly), the same validator writes the score to the Scores tab (matching
+the team by name, case-insensitive) — the form trigger marks its response row
+with a status, and the site scorer reads the equivalent verdict back straight
+from the server response:
+- **applied** / **ok** — score was valid and written to Scores.
 - **rejected: …** — the submission failed (team not found, hole out of range,
-  invalid score, etc.). Resubmit the hole with corrections — last write wins,
-  so a resubmit overwrites the old one.
+  invalid score, a round total already on that row, etc.). Resubmit the hole
+  with corrections — last write wins, so a resubmit overwrites the old one.
 - **rejected: busy — resubmit** — a submission collided with another (both
   sent at the exact same moment). Resubmit; the document lock ensures they
   serialize.
@@ -280,7 +378,9 @@ the team by name, case-insensitive) and marks the response row with a status:
 
 The responses sheet (auto-created by Google Forms) has a `status` column
 added by the trigger — open it to audit which submissions applied and which
-were rejected.
+were rejected. A repeated `client_id`+submission is recognized and answered
+the same way again rather than written twice, so a retried send or a drained
+queue entry can never double-apply.
 
 When someone ticks the `deposit` checkbox on the Field tab, a trigger fires
 `onDepositEdit()` and stamps today's date (in the sheet's time zone) into
