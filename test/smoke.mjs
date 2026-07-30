@@ -2116,6 +2116,19 @@ dom.window.close();
     preSrc.includes("V-PROBE SKIPPED — no --vault-url given; the vault is NOT proven unpublished this run.")
     && /\}\s*else\s*\{[^{}]*V-PROBE SKIPPED/.test(preSrc), "");
 }
+{
+  let ctSrc = ""; try { ctSrc = readFileSync(path.join(ROOT, "tools", "check_template.py"), "utf8"); } catch {}
+  let gcSrc = ""; try { gcSrc = readFileSync(path.join(ROOT, "tools", "gid-check.mjs"), "utf8"); } catch {}
+  const adminSrc = readFileSync(path.join(ROOT, "tools", "make_admin_template.py"), "utf8");
+  check("J7: O-TEMPLATECHECK — read-only content diff (no xlsx write anywhere in the checker)",
+    ctSrc.length > 0 && !ctSrc.includes(".save(") && /load_workbook/.test(ctSrc), "");
+  check("J8: O-GIDCHECK — print-only (no config write), fail-loud on unparseable pubhtml, shares presend's readConfig",
+    gcSrc.length > 0 && !/writeFileSync|createWriteStream/.test(gcSrc)
+    && /could not parse the tab map/.test(gcSrc)
+    && /import\s*\{[^}]*readConfig[^}]*\}\s*from/.test(gcSrc), "");
+  check("J9: O-ADMINPATH — __file__-resolved output, __main__ guard, READ ME teaches --vault-url",
+    /__file__/.test(adminSrc) && /__main__/.test(adminSrc) && adminSrc.includes("--vault-url"), "");
+}
 
 /* ---------------------------------------------------------------------
    Group Y: crest v3 Park Badge (spec §16). Y1 = outline enforcement (the
