@@ -2220,9 +2220,25 @@ function withScEndpoint(overrides = {}) {
 }
 
 // Confirm-tap (X1-X5's flow, one step further) then wait for the 18 cells.
-async function openScorer(dom) {
+// `noSheet` (additive, default false — X24-26 need the REAL derivation and
+// pass nothing): pre-Task-6 tests (X7-X23) were built and reviewed against
+// window.scSheetHoles's Task-5 ()=>null seam stub (see task-5-report.md's
+// "X7-X12 state-source edits: None" — scCellState resolved to {kind:"empty"}
+// for every hole those tests touch). Task 6's REAL derivation now finds
+// genuine sheet data for Duck (both fixture rounds are fully populated), so
+// those tests need the seam explicitly held back at its pre-Task-6 value to
+// keep exercising the SAME scenario they were written and reviewed against
+// — same technique X20/X21 already established (a direct scSheetHoles
+// override), just applied proactively here instead of reactively mid-test.
+// Must be set AFTER the confirm button exists (the script's function
+// hoisting for `function scSheetHoles(){}` happens the instant its single
+// execution begins, well before this point — setting the override any
+// EARLIER, before the script has run at all, gets silently clobbered by
+// that hoisting the first time the script actually executes).
+async function openScorer(dom, { noSheet = false } = {}) {
   const doc = dom.window.document;
   await until(() => !!doc.querySelector("#scConfirmBtn"));
+  if (noSheet) dom.window.scSheetHoles = () => null;
   doc.querySelector("#scConfirmBtn").click();
   await until(() => doc.querySelectorAll("#scCard .sc-cell").length > 0);
   return doc;
@@ -2230,7 +2246,7 @@ async function openScorer(dom) {
 {
   // X7: 18 sc-cell buttons, split 9/9 across two .sc-row containers, each aria-labeled "Hole N".
   const domX7 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
-  const docX7 = await openScorer(domX7);
+  const docX7 = await openScorer(domX7, { noSheet: true });
   const rowsX7 = [...docX7.querySelectorAll("#scCard .sc-row")];
   const cellsX7 = [...docX7.querySelectorAll("#scCard .sc-cell")];
   const perRowX7 = rowsX7.map(r => r.querySelectorAll(".sc-cell").length);
@@ -2253,7 +2269,7 @@ async function openScorer(dom) {
   // proof the label tracks each hole's own par rather than a hardcoded/global
   // score->label table.
   const domX8 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
-  const docX8 = await openScorer(domX8);
+  const docX8 = await openScorer(domX8, { noSheet: true });
   const labFor = (pad, score) => [...pad.querySelectorAll(".sc-num[data-score]")]
     .find(b => b.dataset.score === score)?.querySelector(".sc-num-lab")?.textContent;
   docX8.querySelector('.sc-cell[data-hole="7"]').click();
@@ -2286,7 +2302,7 @@ async function openScorer(dom) {
   // labels; hole 7 (untouched, real par 3) is still labeled via the per-hole
   // raw-parse fallback (scHolePar), which is exactly the point of the fallback.
   const domX9 = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX9);
-  const docX9 = await openScorer(domX9);
+  const docX9 = await openScorer(domX9, { noSheet: true });
   docX9.querySelector('.sc-cell[data-hole="5"]').click();
   await until(() => (docX9.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 5"));
   const pad5 = docX9.querySelector("#scPad");
@@ -2308,10 +2324,10 @@ async function openScorer(dom) {
   // data-mode="topar") on the standard fixture, alongside the h5-blanked
   // variant degrading to strokes-only.
   const domX10std = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
-  const docX10std = await openScorer(domX10std);
+  const docX10std = await openScorer(domX10std, { noSheet: true });
   const tallyX10std = docX10std.querySelector("#scCard .sc-tally");
   const domX10 = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX9);
-  const docX10 = await openScorer(domX10);
+  const docX10 = await openScorer(domX10, { noSheet: true });
   const tallyX10 = docX10.querySelector("#scCard .sc-tally");
   check("X10: to-par tally — complete course data renders data-mode='topar' (happy path); the h5-blanked variant degrades to strokes-only (data-mode='strokes') when courseMap() is null (all-18 rule)",
     !!tallyX10std && tallyX10std.getAttribute("data-mode") === "topar" &&
@@ -2327,7 +2343,7 @@ async function openScorer(dom) {
   // this asserts the SPRING behavior itself rather than hardcoding which
   // round is "the" default (that depends on wall-clock time vs first_tee).
   const domX11 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
-  const docX11 = await openScorer(domX11);
+  const docX11 = await openScorer(domX11, { noSheet: true });
   const chipX11 = () => docX11.querySelector("#scRound")?.textContent;
   const initialX11 = chipX11();
   docX11.querySelector("#scRound").click();
@@ -2345,7 +2361,7 @@ async function openScorer(dom) {
   // arms a "Replace N with M" confirm after picking M (send-on-tap does NOT
   // fire immediately in edit mode — NOCLOBBER asymmetry).
   const domX12 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
-  const docX12 = await openScorer(domX12);
+  const docX12 = await openScorer(domX12, { noSheet: true });
   docX12.querySelector('.sc-cell[data-hole="2"]').click(); // hole 2, par 4
   await until(() => !docX12.querySelector("#scPad")?.hidden);
   [...docX12.querySelectorAll("#scPad .sc-num[data-score]")].find(b => b.dataset.score === "4").click();
@@ -2401,7 +2417,7 @@ async function openScorer(dom) {
     return withScEndpoint()(url);
   };
   const domX12b = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX12b);
-  const docX12b = await openScorer(domX12b);
+  const docX12b = await openScorer(domX12b, { noSheet: true });
   domX12b.window.scSheetHoles = () => ({ 7: 3 }); // hole 7, par 3 — sheet already shows 3
   docX12b.querySelector('.sc-cell[data-hole="7"]').click();
   await until(() => /currently 3/.test(docX12b.querySelector("#scPad")?.textContent || ""));
@@ -2508,7 +2524,7 @@ async function openScorer(dom) {
     })(url);
   };
   const domX14 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX14);
-  const docX14 = await openScorer(domX14); // endpoint configured -> live card (NOT inert) — positive branch of X13
+  const docX14 = await openScorer(domX14, { noSheet: true }); // endpoint configured -> live card (NOT inert) — positive branch of X13
   const cardVisibleX14 = docX14.querySelectorAll("#scCard .sc-cell").length === 18
     && docX14.querySelector("#scCard")?.hidden !== true;
   let sendResultX14, sendErrX14;
@@ -2564,7 +2580,7 @@ async function openScorer(dom) {
     })(url);
   };
   const domX15 = makeDom("?debug=1#score?team=" + encodeURIComponent("Duck"), fetchX15);
-  const docX15 = await openScorer(domX15);
+  const docX15 = await openScorer(domX15, { noSheet: true });
   await until(() => /scoring endpoint not reachable/i.test(docX15.getElementById("debugPanel")?.textContent || ""));
   const dbgTextX15 = docX15.getElementById("debugPanel")?.textContent || "";
   const cardVisibleX15 = docX15.querySelectorAll("#scCard .sc-cell").length === 18
@@ -2607,7 +2623,7 @@ const epUrl = "https://script.example/exec";
     return withScEndpoint()(url);
   };
   const domX16 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX16);
-  const docX16 = await openScorer(domX16);
+  const docX16 = await openScorer(domX16, { noSheet: true });
   docX16.querySelector('.sc-cell[data-hole="3"]').click();        // hole 3, par 3
   await until(() => !docX16.querySelector("#scPad")?.hidden);
   docX16.querySelector('#scPad .sc-num[data-score="3"]').click(); // fresh cell, send-on-tap
@@ -2667,7 +2683,7 @@ async function cellSettledOk(doc, hole) {
   // (a) online — the original scenario.
   const online17 = makeGatedEndpointFetch();
   const domOnline17 = makeDom("#score?team=" + encodeURIComponent("Duck"), online17.fetch);
-  const docOnline17 = await openScorer(domOnline17);
+  const docOnline17 = await openScorer(domOnline17, { noSheet: true });
   docOnline17.querySelector('.sc-cell[data-hole="4"]').click();        // hole 4, par 5
   await until(() => !docOnline17.querySelector("#scPad")?.hidden);
   docOnline17.querySelector('#scPad .sc-num[data-score="5"]').click();
@@ -2688,7 +2704,7 @@ async function cellSettledOk(doc, hole) {
   // (c) pageshow.
   const pageshow17 = makeGatedEndpointFetch();
   const domPageshow17 = makeDom("#score?team=" + encodeURIComponent("Duck"), pageshow17.fetch);
-  const docPageshow17 = await openScorer(domPageshow17);
+  const docPageshow17 = await openScorer(domPageshow17, { noSheet: true });
   docPageshow17.querySelector('.sc-cell[data-hole="10"]').click();      // hole 10, par 4
   await until(() => !docPageshow17.querySelector("#scPad")?.hidden);
   docPageshow17.querySelector('#scPad .sc-num[data-score="4"]').click();
@@ -2702,7 +2718,7 @@ async function cellSettledOk(doc, hole) {
   // (d) visibilitychange (becoming visible).
   const vis17 = makeGatedEndpointFetch();
   const domVis17 = makeDom("#score?team=" + encodeURIComponent("Duck"), vis17.fetch);
-  const docVis17 = await openScorer(domVis17);
+  const docVis17 = await openScorer(domVis17, { noSheet: true });
   docVis17.querySelector('.sc-cell[data-hole="11"]').click();          // hole 11, par 5
   await until(() => !docVis17.querySelector("#scPad")?.hidden);
   docVis17.querySelector('#scPad .sc-num[data-score="5"]').click();
@@ -2740,7 +2756,7 @@ async function cellSettledOk(doc, hole) {
     return withScEndpoint()(url);
   };
   const domX18 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX18);
-  const docX18 = await openScorer(domX18);
+  const docX18 = await openScorer(domX18, { noSheet: true });
   docX18.querySelector('.sc-cell[data-hole="6"]').click();        // hole 6, par 4
   await until(() => !docX18.querySelector("#scPad")?.hidden);
   docX18.querySelector('#scPad .sc-num[data-score="4"]').click(); // tap #1: fresh, send-on-tap -> queued 4
@@ -2777,7 +2793,7 @@ async function cellSettledOk(doc, hole) {
     return withScEndpoint()(url);
   };
   const domX19 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX19);
-  const docX19 = await openScorer(domX19);
+  const docX19 = await openScorer(domX19, { noSheet: true });
   docX19.querySelector('.sc-cell[data-hole="2"]').click();        // hole 2, par 4
   await until(() => !docX19.querySelector("#scPad")?.hidden);
   docX19.querySelector('#scPad .sc-num[data-score="4"]').click();
@@ -2854,7 +2870,7 @@ async function cellSettledOk(doc, hole) {
     return withOverride({ info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX20 }) })(url);
   };
   const domX20 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX20);
-  const docX20 = await openScorer(domX20);
+  const docX20 = await openScorer(domX20, { noSheet: true });
   await until(() => /Round 2/.test(docX20.querySelector("#scRound")?.textContent || ""));
   const roundOkX20 = /Round 2/.test(docX20.querySelector("#scRound")?.textContent || "");
 
@@ -2960,7 +2976,7 @@ async function cellSettledOk(doc, hole) {
     return withScEndpoint()(url);
   };
   const domX21 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX21);
-  const docX21 = await openScorer(domX21);
+  const docX21 = await openScorer(domX21, { noSheet: true });
   docX21.querySelector('.sc-cell[data-hole="9"]').click();        // hole 9, par 5
   await until(() => !docX21.querySelector("#scPad")?.hidden);
   docX21.querySelector('#scPad .sc-num[data-score="5"]').click();
@@ -2989,7 +3005,7 @@ async function cellSettledOk(doc, hole) {
     return withOverride({ info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX21b }) })(url);
   };
   const domX21b = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX21b);
-  const docX21b = await openScorer(domX21b);
+  const docX21b = await openScorer(domX21b, { noSheet: true });
   docX21b.querySelector('.sc-cell[data-hole="10"]').click();      // hole 10, par 4
   await until(() => !docX21b.querySelector("#scPad")?.hidden);
   docX21b.querySelector('#scPad .sc-num[data-score="4"]').click();
@@ -3015,7 +3031,7 @@ async function cellSettledOk(doc, hole) {
     return withScEndpoint()(url);
   };
   const domX21c = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX21c);
-  const docX21c = await openScorer(domX21c);
+  const docX21c = await openScorer(domX21c, { noSheet: true });
   docX21c.querySelector("#scRound").click();                      // spring to the OTHER round for one submission
   docX21c.querySelector('.sc-cell[data-hole="6"]').click();        // hole 6, par 4
   await until(() => !docX21c.querySelector("#scPad")?.hidden);
@@ -3061,7 +3077,7 @@ async function cellSettledOk(doc, hole) {
     return withScEndpoint()(url);
   };
   const domX22 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX22);
-  const docX22 = await openScorer(domX22);
+  const docX22 = await openScorer(domX22, { noSheet: true });
   docX22.querySelector('.sc-cell[data-hole="11"]').click();       // hole 11, par 5
   await until(() => !docX22.querySelector("#scPad")?.hidden);
   docX22.querySelector('#scPad .sc-num[data-score="5"]').click();
@@ -3096,6 +3112,11 @@ async function cellSettledOk(doc, hole) {
   const domC1 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchC1);
   const docC1 = domC1.window.document;
   await until(() => !!docC1.querySelector("#scConfirmBtn")); // confirm screen shown, BEFORE clicking -- no journal read has happened yet
+  // Pre-Task-6 baseline (see openScorer's noSheet comment above): this test
+  // predates SC-DERIVE and must stay isolated from the real sheet merge —
+  // set only now the script has genuinely run once (function hoisting for
+  // scSheetHoles already happened before this point).
+  domC1.window.scSheetHoles = () => null;
   const seasonC1 = domC1.window.scorerSeason();
   const roundC1 = domC1.window.scActiveRound(); // whatever the native default resolves to in this config
   const journalKeyC1 = "gfy-scorer:" + seasonC1 + ":duck"; // nkey("Duck") === "duck"
@@ -3136,7 +3157,7 @@ async function cellSettledOk(doc, hole) {
     return withScEndpoint()(url);
   };
   const domX23 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX23);
-  const docX23 = await openScorer(domX23);
+  const docX23 = await openScorer(domX23, { noSheet: true });
   const deadStorageX23 = {
     getItem() { return null; },
     setItem() { throw new Error("storage dead (simulated)"); },
@@ -3157,6 +3178,178 @@ async function cellSettledOk(doc, hole) {
     "cellOk=" + cellOkX23 + " headerOk=" + headerOkX23 + " pageErrors=" + domX23.pageErrors.length +
       " headerText=" + (docX23.querySelector("#scHeader")?.textContent || "").slice(0, 120));
   domX23.window.close();
+}
+
+/* ---------------------------------------------------------------------
+   X24-X26: sheet truth merge, glance strip, render boundary (spec §18
+   SC-DERIVE/SC-GLANCE — task 6). window.scSheetHoles is no longer the
+   Task 5 ()=>null seam stub — these are the FIRST tests to exercise the
+   REAL derivation end to end (no noSheet override anywhere below).
+   --------------------------------------------------------------------- */
+{
+  // X24: SC-YEAR independence — duck's r2 fixture natively has h1..h6 =
+  // 4,4,3,5,3,4 (fixtures/scores.csv "2026,duck,2,..."). Round pinned to
+  // "2" via the same past-first_tee trick X20 established (never
+  // wall-clock-dependent). The card's sheet-derived cells must never move
+  // when the #board year picker changes STATE.year — scSheetHoles() is
+  // keyed off scorerSeason() (buildPlayers(seasonY), an independent read),
+  // never STATE.year. Proven by actually poking the picker to a DIFFERENT
+  // year (2025) on #board, then navigating back to #score, and re-reading
+  // the exact same cells.
+  const pastTeeX24 = new Date(Date.now() - 2 * 86400000).toISOString();
+  const infoX24 = FIXTURES.info.replace(/^first_tee,.*$/m, "first_tee," + pastTeeX24) +
+    "score_endpoint," + epUrl + "\n";
+  const fetchX24 = withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX24 }),
+  });
+  const domX24 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX24);
+  const docX24 = await openScorer(domX24);
+  await until(() => /Round 2/.test(docX24.querySelector("#scRound")?.textContent || ""));
+  const sheetVal = h => docX24.querySelector('.sc-cell[data-hole="' + h + '"] b')?.textContent;
+  const isSheet = h => !!docX24.querySelector('.sc-cell[data-hole="' + h + '"]')?.classList.contains("sc-sheet");
+  const expectedX24 = ["4", "4", "3", "5", "3", "4"];
+  const beforeValsX24 = [1, 2, 3, 4, 5, 6].map(sheetVal);
+  const beforeClassesX24 = [1, 2, 3, 4, 5, 6].every(isSheet);
+
+  // Poke the year picker on #board to a DIFFERENT year (STATE.year away).
+  domX24.window.location.hash = "#board";
+  domX24.window.dispatchEvent(new domX24.window.Event("hashchange"));
+  await until(() => docX24.querySelector('[data-view="board"]')?.hidden === false);
+  await until(() => !!docX24.querySelector('#years .year-btn[data-year="2025"]'));
+  docX24.querySelector('#years .year-btn[data-year="2025"]').click();
+
+  // ...and back to #score.
+  domX24.window.location.hash = "#score?team=" + encodeURIComponent("Duck");
+  domX24.window.dispatchEvent(new domX24.window.Event("hashchange"));
+  await until(() => docX24.querySelectorAll("#scCard .sc-cell").length > 0);
+
+  const afterValsX24 = [1, 2, 3, 4, 5, 6].map(sheetVal);
+  const afterClassesX24 = [1, 2, 3, 4, 5, 6].every(isSheet);
+  domX24.window.close();
+
+  check("X24: SC-YEAR independence — duck r2 h1..h6 (4,4,3,5,3,4) render on-sheet, unaffected by poking the #board year picker to 2025 and back to #score",
+    JSON.stringify(beforeValsX24) === JSON.stringify(expectedX24) && beforeClassesX24 &&
+      JSON.stringify(afterValsX24) === JSON.stringify(expectedX24) && afterClassesX24,
+    "before=" + JSON.stringify(beforeValsX24) + " after=" + JSON.stringify(afterValsX24) +
+      " beforeClasses=" + beforeClassesX24 + " afterClasses=" + afterClassesX24);
+}
+
+{
+  // X25: SC-GLANCE honesty. Team chosen: Tex — board pos 3 (per group A's
+  // existing A4/A8 assertions), with a genuinely PARTIAL round-2 card (7
+  // holes; h1's on-sheet "0" is excluded per S-ZERO, matching A8's own
+  // "R2 · 7"). Reporting count verified against the fixture directly (not
+  // assumed) at implementation time: of the 5 registered teams, only
+  // duck/sully/moose/tex have an actual hole-by-hole round-2 card — Bear's
+  // round 2 is a totals-only lump score (76, no per-hole breakdown, no
+  // "thru" to report) — so M=4, stated here per the brief's instruction to
+  // verify and report the real number (see task-6-report.md).
+  const pastTeeX25 = new Date(Date.now() - 2 * 86400000).toISOString();
+  const infoX25 = FIXTURES.info.replace(/^first_tee,.*$/m, "first_tee," + pastTeeX25) +
+    "score_endpoint," + epUrl + "\n";
+  const fetchX25 = (url) => {
+    if (String(url).indexOf(epUrl) === 0) return Promise.reject(new TypeError("offline (simulated)"));
+    return withOverride({ info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX25 }) })(url);
+  };
+  const domX25 = makeDom("#score?team=" + encodeURIComponent("Tex"), fetchX25);
+  const docX25 = await openScorer(domX25);
+  await until(() => /Round 2/.test(docX25.querySelector("#scRound")?.textContent || ""));
+  const glanceText = () => docX25.querySelector("#scGlance")?.textContent || "";
+
+  const posOkX25 = /3rd of 4 reporting/.test(glanceText());
+  const thruOkX25 = /thru 7/.test(glanceText());
+  const leaderOkX25 = /Duck/.test(glanceText()) && /thru 18/.test(glanceText());
+  const neighborsOkX25 = /Sully/.test(glanceText()) && /Moose/.test(glanceText());
+  const noPendingYetX25 = !docX25.querySelector(".sc-glance-pending");
+
+  // Tap two FRESH holes (9, 10 — blank on Tex's r2 sheet row) while
+  // offline: they queue locally but never reach the sheet.
+  docX25.querySelector('.sc-cell[data-hole="9"]').click();
+  await until(() => !docX25.querySelector("#scPad")?.hidden);
+  docX25.querySelector('#scPad .sc-num[data-score="4"]').click();
+  await until(() => docX25.querySelector('.sc-cell[data-hole="9"]')?.classList.contains("sc-queued"));
+  docX25.querySelector('.sc-cell[data-hole="10"]').click();
+  await until(() => !docX25.querySelector("#scPad")?.hidden);
+  docX25.querySelector('#scPad .sc-num[data-score="4"]').click();
+  await until(() => docX25.querySelector('.sc-cell[data-hole="10"]')?.classList.contains("sc-queued"));
+
+  const pendingTextX25 = docX25.querySelector(".sc-glance-pending")?.textContent || "";
+  const pendingOkX25 = /2 pending/.test(pendingTextX25);
+  // Board-data-only: the two fresh phone-only taps must NOT move the
+  // board's own thru/reporting numbers — they're not on the sheet.
+  const stillThru7X25 = /thru 7/.test(glanceText()) && !/thru 9/.test(glanceText());
+  const stillM4X25 = /of 4 reporting/.test(glanceText());
+
+  domX25.window.close();
+
+  check("X25: SC-GLANCE honesty — Tex shows '3rd of 4 reporting · thru 7' (M verified against the fixture: 4 of 5 registered teams have an actual r2 hole-by-hole card; Bear's r2 is totals-only), leader Duck (thru 18), neighbors Sully/Moose named; 2 fresh offline taps render as their OWN 'pending on your phone' line (2 pending) without moving the board's thru/reporting numbers",
+    posOkX25 && thruOkX25 && leaderOkX25 && neighborsOkX25 && noPendingYetX25 &&
+      pendingOkX25 && stillThru7X25 && stillM4X25,
+    "pos=" + posOkX25 + " thru=" + thruOkX25 + " leader=" + leaderOkX25 + " neighbors=" + neighborsOkX25 +
+      " pendingBefore=" + !noPendingYetX25 + " pendingText=" + pendingTextX25 +
+      " glanceText=" + glanceText().slice(0, 220));
+}
+
+{
+  // X26: render boundary. (a) open pad(7), start typing an "Other" value,
+  // then run the SAME path the 60s auto-refresh timer uses (window.load()
+  // — a plain top-level `function load(){}` declaration, which DOES become
+  // a window property in a classic script, unlike scDrainTimer's `let`, per
+  // the precedent Task 5 already established) — the pad must still be open
+  // on hole 7 and the in-progress Other value must survive a GENUINE DOM
+  // rebuild (asserted via node identity, not just a leftover value). (b)
+  // separately, the boundary must also protect #scConfirm: a captain
+  // reached via the PICKER (no hash team — scShowConfirm called directly
+  // from the pick button, nothing persisted) must not be bounced back to
+  // #scPicker by a background load() cycle before tapping Confirm
+  // (ledgered carry-over from Task 1's review). Combined into ONE check
+  // per the "no new X-numbers beyond the brief" constraint.
+  const domX26 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docX26 = await openScorer(domX26, { noSheet: true });
+  docX26.querySelector('.sc-cell[data-hole="7"]').click();
+  await until(() => (docX26.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 7"));
+  docX26.querySelector("#scPadOtherBtn").click();
+  await until(() => !!docX26.querySelector("#scPadOtherInput"));
+  const inputBeforeX26 = docX26.querySelector("#scPadOtherInput");
+  inputBeforeX26.value = "9";
+  inputBeforeX26.dispatchEvent(new domX26.window.Event("input", { bubbles: true }));
+
+  await domX26.window.load(); // the SAME path the 60s timer uses (setInterval(load, CONFIG.REFRESH_MS))
+
+  const padOpenAfterX26 = !docX26.querySelector("#scPad")?.hidden;
+  const holeStillX26 = (docX26.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 7");
+  const inputAfterX26 = docX26.querySelector("#scPadOtherInput");
+  // Both layers: (1) the pad genuinely got torn down and rebuilt (a
+  // DIFFERENT DOM node — proving this isn't just an untouched leftover),
+  // (2) the value re-hydrated from STATE, not carried by an accident of DOM
+  // survival.
+  const rebuiltX26 = !!inputAfterX26 && inputAfterX26 !== inputBeforeX26;
+  const otherSurvivedX26 = inputAfterX26?.value === "9";
+  domX26.window.close();
+
+  const domX26b = makeDom("#score", withScEndpoint());
+  const docX26b = domX26b.window.document;
+  await until(() => docX26b.querySelectorAll("#scPicker .sc-pick").length > 0);
+  const teamBtnX26b = [...docX26b.querySelectorAll("#scPicker .sc-pick")].find(b => /Duck/.test(b.textContent));
+  teamBtnX26b.click(); // -> scShowConfirm(seasonY,"Duck"), no hash change, nothing persisted yet
+  await until(() => !docX26b.querySelector("#scConfirm")?.hidden);
+  const confirmTextBeforeX26b = docX26b.querySelector("#scConfirm")?.textContent || "";
+
+  await domX26b.window.load(); // background repaint, BEFORE any Confirm tap
+
+  const confirmStillUpX26b = !docX26b.querySelector("#scConfirm")?.hidden;
+  const pickerStillHiddenX26b = docX26b.querySelector("#scPicker")?.hidden === true;
+  const confirmTextAfterX26b = docX26b.querySelector("#scConfirm")?.textContent || "";
+  const sameTeamNamedX26b = /Duck/.test(confirmTextAfterX26b);
+  domX26b.window.close();
+
+  check("X26: render boundary — a full load()/paint()/renderScorer() cycle (the 60s auto-refresh path) leaves pad(7) open on hole 7 with its in-progress Other value (9) surviving a genuine DOM rebuild (fresh node, STATE-backed); separately, a captain mid-decision on the identity confirm (reached via the picker, nothing persisted yet) is NOT bounced back to #scPicker by the same background cycle",
+    padOpenAfterX26 && holeStillX26 && rebuiltX26 && otherSurvivedX26 &&
+      confirmStillUpX26b && pickerStillHiddenX26b && sameTeamNamedX26b,
+    "padOpen=" + padOpenAfterX26 + " holeStill=" + holeStillX26 + " rebuilt=" + rebuiltX26 +
+      " otherSurvived=" + otherSurvivedX26 + " inputAfterVal=" + inputAfterX26?.value +
+      " confirmTextBefore=" + confirmTextBeforeX26b.slice(0, 80) + " confirmTextAfter=" + confirmTextAfterX26b.slice(0, 80) +
+      " confirmStillUp=" + confirmStillUpX26b + " pickerStillHidden=" + pickerStillHiddenX26b);
 }
 
 /* ---------------------------------------------------------------------

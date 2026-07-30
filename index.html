@@ -467,6 +467,13 @@
   .sc-pad-conflict{font-size:14px;color:var(--rust);margin:0 0 10px}
   .sc-pad-rejected{font-size:14px;color:var(--rust);margin:0 0 6px}
   .sc-pad-escalate{font-size:14px;color:var(--rust);font-weight:600;margin:0 0 10px}
+  /* Task 6 — SC-GLANCE compact board-context strip (#scGlance), below the
+     card. Same >=13px discipline as the rest of the scorer. */
+  #scGlance{margin-top:20px}
+  #scGlance p{font-size:14px;color:var(--sage);margin:0 0 6px}
+  #scGlance .sc-glance-pos{color:var(--bone)}
+  #scGlance .sc-glance-thru{color:var(--sage)}
+  #scGlance .sc-glance-pending{color:var(--rust)}
 </style>
 </head>
 <body>
@@ -984,7 +991,7 @@ const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,
   17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
 let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null,
   scTeam:null, scSeason:null, scPadHole:null, scPadPending:null, scRoundOverride:null,
-  scPadOtherOpen:false, scPadOtherVal:null };
+  scPadOtherOpen:false, scPadOtherVal:null, scConfirmPending:null };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -1167,9 +1174,9 @@ const scKey=(y,tk)=>"gfy-scorer:"+y+":"+tk;
 // `String(parseInt(activeSeason(),10)+1)` independently; three copies of the
 // same arithmetic is how they'd silently drift.
 function nextSeason(){ return String(parseInt(activeSeason(),10)+1); }
-function rosterMap(){
+function rosterMap(seasonY=STATE.year){
   const m=new Map();
-  (STATE.data.field||[]).filter(r=>r.player&&r.team&&r.year===STATE.year).forEach(r=>{
+  (STATE.data.field||[]).filter(r=>r.player&&r.team&&r.year===seasonY).forEach(r=>{
     const k=nkey(r.team);
     if(!m.has(k)) m.set(k,{captain:null,members:[],since:{}});
     const t=m.get(k);
@@ -1221,9 +1228,9 @@ function courseYards(){
 }
 
 /* ---------- build player cards ---------- */
-function buildPlayers(){
-  const roster=rosterMap();
-  const scores=forYear(STATE.data.scores,STATE.year).filter(s=>(s.team||s.player));
+function buildPlayers(seasonY=STATE.year){
+  const roster=rosterMap(seasonY);
+  const scores=forYear(STATE.data.scores,seasonY).filter(s=>(s.team||s.player));
   const pars=courseMap();
   const byKey={};
   scores.forEach(s=>{
@@ -1356,9 +1363,9 @@ function cardHTML(p){
   }).join("") + `</div>`;
 }
 
-function rankedPlayers(basis){
+function rankedPlayers(basis,seasonY=STATE.year){
   const useNet = basis==="net";
-  const players=buildPlayers();
+  const players=buildPlayers(seasonY);
   const key=p=>{
     if(useNet) return p.net;
     return p.rel!==null ? p.rel : p.total;
@@ -3053,6 +3060,7 @@ function scDayAbbrev(round){
 }
 
 function scShowCard(seasonY,team){
+  STATE.scConfirmPending=null;
   $("#scConfirm").hidden=true;
   $("#scPicker").hidden=true;
   if(STATE.scTeam!==team||STATE.scSeason!==seasonY){
@@ -3081,6 +3089,7 @@ function scShowInert(){
     (formUrl?`<p class="sc-inert-form"><a href="${esc(formUrl)}" target="_blank" rel="noopener">Score via the form</a></p>`:"");
 }
 function scShowPicker(seasonY){
+  STATE.scConfirmPending=null;
   $("#scHeader").innerHTML="";
   const teams=scorerTeams(seasonY);
   const pickerEl=$("#scPicker");
@@ -3095,6 +3104,12 @@ function scShowPicker(seasonY){
   }));
 }
 function scShowConfirm(seasonY,team){
+  // SC-CONFIRM-GUARD (render boundary, X26): records that THIS team/season
+  // is currently on-screen for a not-yet-persisted identity decision, so a
+  // background repaint's routing (renderScorer, below) can tell "nothing
+  // decided yet, still routing fresh" apart from "captain is mid-decision
+  // right here" and skip re-deciding out from under them.
+  STATE.scConfirmPending={season:seasonY, team};
   $("#scHeader").innerHTML="";
   const confirmEl=$("#scConfirm");
   confirmEl.innerHTML=`<p>Scoring for <strong>${esc(team)}</strong> — ${esc(scRoster(team,seasonY).join(", "))}.</p>`+
@@ -3125,13 +3140,36 @@ function scShowConfirm(seasonY,team){
    regardless, so a dead-storage phone still renders every tap correctly
    (X23) — only the ACROSS-RELOAD memory is gone, which is exactly what the
    header copy says.
-   window.scSheetHoles (Task 6 seam, pinned `()=>null` until Task 6 lands)
-   supplies the sheet's per-hole values for the CURRENTLY ACTIVE round.
+   window.scSheetHoles (Task 6, SC-DERIVE — real derivation below) supplies
+   the sheet's per-hole values for the CURRENTLY ACTIVE round.
    scCellState() is the single per-hole merge point the whole card renders
    from — SC-UI's new source of truth, replacing Task 3's window.scLocalCells. */
 window.scStorageDead = window.scStorageDead || false;
 window.scConfigBroken = window.scConfigBroken || false; // SC-LOUD-CONFIG carried banner (drain hit kind:"config")
-window.scSheetHoles = window.scSheetHoles || (()=>null); // Task 6 seam — sheet-merge getter for SC-NOCLOBBER; NUMBERS ONLY per hole (coerced defensively in scSheetValFor via posInt — see I1, review round 1)
+// §18 SC-DERIVE (Task 6): the real sheet-merge getter, replacing the
+// Task 5 ()=>null seam stub. Season-pinned via scorerSeason() —
+// buildPlayers(seasonY) is an independent read from STATE.year (SC-YEAR),
+// so the #board year picker can never move what the card renders (X24).
+// S-KEY: the scorer team key is nkey(team) — the SAME convention
+// scEntryFor/scCurrentJournalKey already use — find that key in
+// buildPlayers' output. S-MERGE: buildPlayers already collapses multiple
+// scores rows for the same team+round into one holes map (conflicting
+// values flagged, last-wins) — reused here for free, not reimplemented.
+// S-ZERO: buildPlayers' own posInt() guard already drops a sheet zero
+// (posInt(0)===null) before it ever reaches p.rounds[r].holes, so a
+// genuine "0" cell on the sheet reads as "no score yet", never a real
+// zero-stroke hole (proven directly against the fixture's own Tex
+// r2·h1=0 row — group A's existing "R2 · 7" assertion already depends on
+// this). A totals-only round (r.total, no r.holes — e.g. Bear) has no
+// per-hole sheet truth to merge against; returns null, same as no data.
+function scSheetHoles(){
+  if(!STATE.scTeam) return null;
+  const players=buildPlayers(scorerSeason());
+  const p=players.find(pl=>pl.key===nkey(STATE.scTeam));
+  if(!p) return null;
+  const r=p.rounds[scActiveRound()];
+  return (r&&r.holes) ? r.holes : null;
+}
 let scJournalCache={};   // key -> root, always current (populated by scJournalRead/scStore)
 let scDraining=false;    // single-flight guard for scDrain()
 let scDrainTimer=null;   // 20s poll, lives only while the #score view is visible
@@ -3801,10 +3839,78 @@ function scWireCard(){
     renderScCard();
   });
 }
+// §18 SC-GLANCE (Task 6): compact board-only context strip below the card
+// (#scGlance — "updates in place" on every renderScCard() call, including
+// while a pad or the identity confirm is up; see the render-boundary
+// exemption at renderScorer()). Reuses rankedPlayers()/buildPlayers' SAME
+// season-pinned array the board itself renders from (scorerSeason() —
+// SC-YEAR, X24) — one derivation, no second ranking pass, per the
+// controller's binding resolution.
+function scGlanceRoundThru(p,round){
+  const r=p.rounds[round];
+  return (r&&r.holes) ? Object.keys(r.holes).length : null;
+}
+// Pending-on-phone count: journal entries for the ACTIVE round whose hole
+// has NO sheet value yet (scSheetValFor — the SAME SC-HONEST merge point
+// scCellState reads from). A genuine sheet/phone CONFLICT is already
+// surfaced loudly on the cell itself (the ? glyph) and is deliberately not
+// double-counted here — this line is specifically for scores the sheet
+// doesn't know about at all yet, and it is never blended into the "thru"
+// number above (board-data only).
+function scGlancePendingCount(round){
+  const key=scCurrentJournalKey();
+  if(!key) return 0;
+  const root=scJournalRead(key);
+  let n=0;
+  Object.keys(root.entries).forEach(k=>{
+    const e=root.entries[k];
+    if(String(e.round)!==String(round)||e.score==null) return;
+    if(scSheetValFor(e.hole)!=null) return;
+    n++;
+  });
+  return n;
+}
+function scGlanceHTML(){
+  const round=scActiveRound();
+  const players=rankedPlayers("gross",scorerSeason());
+  const idx=players.findIndex(p=>p.key===nkey(STATE.scTeam));
+  if(idx<0) return "";
+  const me=players[idx];
+  // "Reporting" (this round): an actual hole-by-hole card exists for the
+  // active round — a totals-only round (e.g. Bear's single lump score, no
+  // per-hole breakdown) has no "thru" progress to show, so it's excluded
+  // from M, the same treatment thruLabel() already gives it on the board.
+  const reporters=players.filter(p=>scGlanceRoundThru(p,round)!=null);
+  const myThru=scGlanceRoundThru(me,round);
+  const posHTML=(me.pos!=null&&myThru!=null)
+    ? `<p class="sc-glance-pos">${me.pos}${ordSuffix(me.pos)} of ${reporters.length} reporting `+
+      `<span class="sc-glance-thru">· thru ${myThru}</span></p>`
+    : `<p class="sc-glance-pos">Not yet reporting Round ${esc(round)}</p>`;
+  const leader=players.find(p=>p.pos===1);
+  let leaderHTML="";
+  if(leader){
+    const lThru=scGlanceRoundThru(leader,round);
+    leaderHTML = leader.key===me.key
+      ? `<p class="sc-glance-leader">You're leading${lThru!=null?" · thru "+lThru:""}</p>`
+      : `<p class="sc-glance-leader">Leader: ${captainLabel(leader.key,leader.name).html}${lThru!=null?" · thru "+lThru:""}</p>`;
+  }
+  const neighborHTML=["above","below"].map(dir=>{
+    const n = dir==="above" ? players[idx-1] : players[idx+1];
+    if(!n) return "";
+    const nThru=scGlanceRoundThru(n,round);
+    return `<p class="sc-glance-neighbor" data-dir="${dir}">${captainLabel(n.key,n.name).html}${nThru!=null?" · thru "+nThru:""}</p>`;
+  }).join("");
+  const pendingN=scGlancePendingCount(round);
+  const pendingHTML=pendingN>0
+    ? `<p class="sc-glance-pending">${pendingN} pending on your phone — not yet on the sheet</p>`
+    : "";
+  return posHTML+leaderHTML+(neighborHTML?`<div class="sc-glance-neighbors">${neighborHTML}</div>`:"")+pendingHTML;
+}
 function renderScCard(){
   const card=$("#scCard");
   if(!card) return;
-  if(!STATE.scTeam){ card.innerHTML=""; return; }
+  const glance=$("#scGlance");
+  if(!STATE.scTeam){ card.innerHTML=""; if(glance) glance.innerHTML=""; return; }
   $("#scHeader").innerHTML=scHeaderHTML();
   const active=scActiveRound();
   card.innerHTML=
@@ -3816,6 +3922,7 @@ function renderScCard(){
     `<div class="sc-legend">■ on the sheet · ⇡ saved on phone · ? sheet differs — tap · ! rejected — tap</div>`+
     scPadHTML();
   scWireCard();
+  if(glance) glance.innerHTML=scGlanceHTML();
 }
 
 function renderScorer(){
@@ -3829,11 +3936,22 @@ function renderScorer(){
   if(hashTeam){
     let confirmed=false;
     try{ confirmed=!!JSON.parse(localStorage.getItem(scKey(seasonY,nkey(hashTeam)))||"{}").confirmed; }catch{}
+    // A background repaint re-showing the SAME hash-named team's confirm
+    // screen is a harmless idempotent rebuild (scShowConfirm always renders
+    // the identical content for the same team — no guard needed here,
+    // unlike the picker branch below: this path never lands on a
+    // DIFFERENT view, so there's nothing to bounce away from).
     if(confirmed) scShowCard(seasonY,hashTeam); else scShowConfirm(seasonY,hashTeam);
     return;
   }
   const remembered=scConfirmedTeam(seasonY);
   if(remembered){ scShowCard(seasonY,remembered); return; }
+  // SC-CONFIRM-GUARD: reached via the picker (no hash team) — the captain
+  // already tapped a team (scShowConfirm called directly from the pick
+  // button, no hash change) and hasn't confirmed yet. A background repaint
+  // must not fall through to scShowPicker() and bounce them back to the
+  // team list mid-decision (ledgered carry-over from Task 1's review).
+  if(STATE.scConfirmPending && STATE.scConfirmPending.season===seasonY) return;
   scShowPicker(seasonY);
 }
 window.addEventListener("hashchange",renderScorer);
