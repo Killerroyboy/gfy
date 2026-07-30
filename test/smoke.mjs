@@ -2202,6 +2202,133 @@ dom.window.close();
 }
 
 /* ---------------------------------------------------------------------
+   X7-X12: card-first scorecard, par-labeled pad, momentary round chip
+   (spec §18 rev 2, SC-UI/SC-PAR/SC-ROUND — task 3).
+   --------------------------------------------------------------------- */
+// Confirm-tap (X1-X5's flow, one step further) then wait for the 18 cells.
+async function openScorer(dom) {
+  const doc = dom.window.document;
+  await until(() => !!doc.querySelector("#scConfirmBtn"));
+  doc.querySelector("#scConfirmBtn").click();
+  await until(() => doc.querySelectorAll("#scCard .sc-cell").length > 0);
+  return doc;
+}
+{
+  // X7: 18 sc-cell buttons, split 9/9 across two .sc-row containers, each aria-labeled "Hole N".
+  const domX7 = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  const docX7 = await openScorer(domX7);
+  const rowsX7 = [...docX7.querySelectorAll("#scCard .sc-row")];
+  const cellsX7 = [...docX7.querySelectorAll("#scCard .sc-cell")];
+  const perRowX7 = rowsX7.map(r => r.querySelectorAll(".sc-cell").length);
+  const ariaOkX7 = cellsX7.every((b, i) => b.getAttribute("aria-label") === `Hole ${i + 1}`);
+  check("X7: 18 button.sc-cell[data-hole] split 9/9 across two .sc-row rows, aria-label='Hole N'",
+    cellsX7.length === 18 && rowsX7.length === 2 && perRowX7.every(n => n === 9) && ariaOkX7,
+    "cells=" + cellsX7.length + " rows=" + JSON.stringify(perRowX7) + " aria0=" + (cellsX7[0]?.getAttribute("aria-label")));
+  domX7.window.close();
+
+  // X8: SC-PAR — pad labels derive from THAT hole's real par. fixtures/course.csv
+  // (actual MeadowCreek data, not a stand-in): hole 7 = par 3 (160 yds), hole 8 =
+  // par 4 (415 yds) — the reverse of the brief's illustrative example, so this
+  // uses the fixture's real holes per the controller's resolution.
+  const domX8 = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  const docX8 = await openScorer(domX8);
+  docX8.querySelector('.sc-cell[data-hole="7"]').click();
+  await until(() => (docX8.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 7"));
+  const pad7 = docX8.querySelector("#scPad");
+  const lab7 = [...pad7.querySelectorAll(".sc-num[data-score]")]
+    .find(b => b.dataset.score === "3")?.querySelector(".sc-num-lab")?.textContent;
+  docX8.querySelector('.sc-cell[data-hole="8"]').click();
+  await until(() => (docX8.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 8"));
+  const pad8 = docX8.querySelector("#scPad");
+  const lab8 = [...pad8.querySelectorAll(".sc-num[data-score]")]
+    .find(b => b.dataset.score === "4")?.querySelector(".sc-num-lab")?.textContent;
+  check("X8: SC-PAR — pad(7) [par 3] labels score 3 'Par'; pad(8) [par 4] labels score 4 'Par'",
+    lab7 === "Par" && lab8 === "Par", "h7:" + lab7 + " h8:" + lab8);
+  domX8.window.close();
+
+  // X9/X10 variant: course fixture with hole 5's row entirely removed. courseMap()
+  // (index.html) only returns a par map when all 18 holes have a row — dropping
+  // one hole's row (not just blanking its par value, which would still leave the
+  // key in place at 0) is what actually flips courseMap() to null, confirmed by
+  // reading the function directly.
+  const courseX9 = FIXTURES.course.split("\n").filter(l => !l.startsWith("5,")).join("\n");
+  const overrideX9 = withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseX9 }),
+  });
+
+  // X9: SC-PAR degrade — hole 5 (blanked) shows plain numbers, no golf-term
+  // labels; hole 7 (untouched, real par 3) is still labeled via the per-hole
+  // raw-parse fallback (scHolePar), which is exactly the point of the fallback.
+  const domX9 = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX9);
+  const docX9 = await openScorer(domX9);
+  docX9.querySelector('.sc-cell[data-hole="5"]').click();
+  await until(() => (docX9.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 5"));
+  const pad5 = docX9.querySelector("#scPad");
+  const labs5 = [...pad5.querySelectorAll(".sc-num[data-score] .sc-num-lab")];
+  docX9.querySelector('.sc-cell[data-hole="7"]').click();
+  await until(() => (docX9.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 7"));
+  const pad7b = docX9.querySelector("#scPad");
+  const lab7b = [...pad7b.querySelectorAll(".sc-num[data-score]")]
+    .find(b => b.dataset.score === "3")?.querySelector(".sc-num-lab")?.textContent;
+  check("X9: SC-PAR degrade — course variant blanking h5's row: pad(5) has NO golf-term labels (plain numbers); pad(7) (untouched) still labeled",
+    labs5.length === 0 && lab7b === "Par",
+    "labs5.length=" + labs5.length + " lab7b=" + lab7b);
+  domX9.window.close();
+
+  // X10: same variant — the to-par tally can't honestly compute without all 18
+  // pars, so it degrades to strokes-only, flagged via data-mode="strokes".
+  const domX10 = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX9);
+  const docX10 = await openScorer(domX10);
+  const tallyX10 = docX10.querySelector("#scCard .sc-tally");
+  check("X10: to-par tally suppressed to strokes-only (data-mode='strokes') when courseMap() is null (all-18 rule)",
+    !!tallyX10 && tallyX10.getAttribute("data-mode") === "strokes",
+    "mode=" + tallyX10?.getAttribute("data-mode"));
+  domX10.window.close();
+
+  // X11: SC-ROUND spring — toggling #scRound flips the chip for exactly ONE
+  // submission, then auto-returns to the natively-derived default. Per the
+  // controller's scoping (scRoundDefault() is date-rule-only at this task —
+  // the R1-board-complete branch needs the sheet merge, which is Task 6's),
+  // this asserts the SPRING behavior itself rather than hardcoding which
+  // round is "the" default (that depends on wall-clock time vs first_tee).
+  const domX11 = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  const docX11 = await openScorer(domX11);
+  const chipX11 = () => docX11.querySelector("#scRound")?.textContent;
+  const initialX11 = chipX11();
+  docX11.querySelector("#scRound").click();
+  const toggledX11 = chipX11();
+  docX11.querySelector('.sc-cell[data-hole="1"]').click();
+  await until(() => !docX11.querySelector("#scPad")?.hidden);
+  docX11.querySelector("#scPad .sc-num[data-score]").click();
+  await until(() => chipX11() === initialX11);
+  check("X11: SC-ROUND spring — toggle flips the chip for one submission, then auto-returns to the derived default",
+    !!initialX11 && initialX11 !== toggledX11 && chipX11() === initialX11,
+    "initial=" + initialX11 + " toggled=" + toggledX11 + " after=" + chipX11());
+  domX11.window.close();
+
+  // X12: edit mode — re-tapping an already-filled cell shows "currently N" and
+  // arms a "Replace N with M" confirm after picking M (send-on-tap does NOT
+  // fire immediately in edit mode — NOCLOBBER asymmetry).
+  const domX12 = makeDom("#score?team=" + encodeURIComponent("Duck"));
+  const docX12 = await openScorer(domX12);
+  docX12.querySelector('.sc-cell[data-hole="2"]').click(); // hole 2, par 4
+  await until(() => !docX12.querySelector("#scPad")?.hidden);
+  [...docX12.querySelectorAll("#scPad .sc-num[data-score]")].find(b => b.dataset.score === "4").click();
+  await until(() => docX12.querySelector('.sc-cell[data-hole="2"] b')?.textContent === "4");
+  docX12.querySelector('.sc-cell[data-hole="2"]').click(); // re-tap the filled cell -> edit mode
+  await until(() => /currently 4/.test(docX12.querySelector("#scPad")?.textContent || ""));
+  const currentOkX12 = /currently 4/.test(docX12.querySelector("#scPad")?.textContent || "");
+  [...docX12.querySelectorAll("#scPad .sc-num[data-score]")].find(b => b.dataset.score === "6").click();
+  await until(() => /Replace 4 with 6/.test(docX12.querySelector("#scPad")?.textContent || ""));
+  const replaceOkX12 = /Replace 4 with 6/.test(docX12.querySelector("#scPad")?.textContent || "");
+  check("X12: edit mode — re-tapping a filled cell shows 'currently N'; picking M arms 'Replace N with M' (no immediate send)",
+    currentOkX12 && replaceOkX12,
+    "currentOk=" + currentOkX12 + " replaceOk=" + replaceOkX12 + " text=" +
+      (docX12.querySelector("#scPad")?.textContent || "").slice(0, 160));
+  domX12.window.close();
+}
+
+/* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
 const groupTally = {};

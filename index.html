@@ -387,7 +387,7 @@
     .photo-frame{height:420px}
   }
 
-  /* §18 scorer shell — Task 1 (picker/confirm only; card comes later). */
+  /* §18 scorer shell — Task 1 (picker/confirm) + Task 3 (card/pad/round chip). */
   .sc-pick{display:block;width:100%;text-align:left;font-family:var(--ui);font-size:1rem;
     color:var(--bone);background:var(--pine-2);border:1px solid rgba(200,162,74,.22);
     padding:14px 16px;margin:0 0 10px;cursor:pointer;transition:border-color .18s,background .18s}
@@ -395,6 +395,47 @@
   .sc-pick-roster{display:block;font-size:.85rem;color:var(--sage);margin-top:4px}
   #scConfirm p{color:var(--sage);font-size:1rem}
   #scConfirm .btn{margin-right:10px}
+
+  /* Task 3 card-first scorecard (SC-UI/SC-PAR/SC-ROUND). All scorer text
+     stays >=13px (thumb-friendly outdoors, no squinting on the tee) — the
+     rules below deliberately use px, not rem, so this holds regardless of
+     root font-size. .sc-cell/.sc-num get a real 48px tap bar (>=44px HIG
+     minimum) even though jsdom can't see layout to verify it. */
+  .sc-round{margin:0 0 14px}
+  .sc-round button{font-family:var(--display);font-size:18px;color:var(--brass);
+    background:none;border:1px solid rgba(200,162,74,.4);padding:8px 16px;cursor:pointer}
+  .sc-tally{font-size:15px;color:var(--sage);margin:0 0 16px;font-variant-numeric:tabular-nums}
+  .sc-tally .sc-tally-lab{font-size:13px;letter-spacing:.06em;text-transform:uppercase;margin-left:6px}
+  .sc-nine{margin:0 0 18px}
+  .sc-lab{display:block;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--brass);margin:0 0 8px}
+  .sc-row{display:grid;grid-template-columns:repeat(9,1fr);gap:4px}
+  .sc-cell{min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;background:var(--pine-2);border:1px solid rgba(200,162,74,.22);color:var(--bone);
+    font-family:var(--ui);cursor:pointer;padding:4px 2px}
+  .sc-cell b{font-family:var(--display);font-size:18px;font-variant-numeric:tabular-nums;font-weight:400}
+  .sc-cell span{font-size:13px;color:var(--sage)}
+  .sc-cell .sc-glyph{font-size:13px;line-height:1;font-style:normal}
+  .sc-cell.under b{color:var(--brass)}
+  .sc-cell.bogey b{color:var(--sage)}
+  .sc-cell.blowup b{color:var(--rust)}
+  .sc-legend{font-size:13px;color:var(--sage);margin:10px 0 20px;letter-spacing:.01em}
+  #scPad{margin-top:10px;padding:16px;border:1px solid rgba(200,162,74,.3);background:rgba(0,0,0,.2)}
+  #scPad[hidden]{display:none}
+  .sc-pad-head{font-family:var(--display);font-size:18px;color:var(--brass);margin:0 0 8px}
+  .sc-pad-current{font-size:14px;color:var(--sage);margin:0 0 10px}
+  .sc-pad-nums{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 12px}
+  .sc-num{min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:var(--pine-2);border:1px solid rgba(200,162,74,.22);color:var(--bone);cursor:pointer;padding:4px;
+    font-family:var(--ui)}
+  .sc-num b{font-family:var(--display);font-size:16px;font-weight:400}
+  .sc-num-lab{font-size:13px;color:var(--sage);text-transform:uppercase;letter-spacing:.04em}
+  .sc-pad-other{display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+  .sc-pad-other input{width:70px;font-size:16px;padding:8px;background:var(--pine-2);
+    border:1px solid rgba(200,162,74,.3);color:var(--bone)}
+  .sc-pad-replace{display:block;width:100%;font-size:15px;padding:12px;margin:0 0 10px;
+    background:var(--brass);color:var(--pine);border:0;cursor:pointer;font-family:var(--ui)}
+  .sc-pad-close{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);
+    background:none;border:1px solid rgba(200,162,74,.22);padding:6px 12px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -910,7 +951,8 @@ const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,
   9:{x:34.0,y:63.0}, 10:{x:57.5,y:59.4}, 11:{x:45.8,y:42.2}, 12:{x:66.2,y:28.8},
   13:{x:81.5,y:22.8}, 14:{x:76.7,y:37.6}, 15:{x:67.1,y:64.0}, 16:{x:72.6,y:83.1},
   17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
-let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null };
+let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null,
+  scTeam:null, scSeason:null, scPadHole:null, scPadPending:null, scRoundOverride:null, scPadOtherOpen:false };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -2817,9 +2859,12 @@ function paintHome(){
   statusEl.innerHTML=nyHTML+calHTML+needHTML;
 }
 
-/* ---------- §18 scorer (Task 1: routing + team resolution only) ----------
-   #scCard stays an empty shell for Task 3. Resolution order: hash team ->
-   remembered (localStorage-confirmed) team -> picker. */
+/* ---------- §18 scorer (Task 1: routing + team resolution; Task 3: card,
+   par-labeled pad, round chip) ----------
+   Resolution order: hash team -> remembered (localStorage-confirmed) team ->
+   picker. */
+window.scLocalCells = window.scLocalCells || {}; // hole -> {score, state:"local"} — Task 5's journal seam
+window.scJournalSave = window.scJournalSave || (e => {}); // Task 5 seam stub
 function scRoster(team,seasonY){
   return forYear(STATE.data.field,seasonY).filter(r=>r.player&&nkey(r.team)===nkey(team)).map(r=>r.player);
 }
@@ -2831,10 +2876,77 @@ function scConfirmedTeam(seasonY){
     })||null;
   }catch{ return null; }
 }
+
+/* ---------- SC-PAR: per-hole par ----------
+   courseMap() is all-or-nothing (index.html courseMap(): a par map is only
+   returned once all 18 holes have a row — one missing hole and the WHOLE
+   map goes null). That's the right call for the to-par tally (a tally
+   missing one hole's par would misreport every score after it) but wrong
+   for the pad LABEL on the other 17 holes, which have perfectly good par
+   data sitting in the raw course rows. scHolePar() re-reads the raw row
+   per-hole so labels survive what the tally correctly refuses to (X9/X10). */
+function scHolePar(hole){
+  const pars=courseMap();
+  if(pars) return posInt(pars[hole]);
+  const row=(STATE.data.course||[]).find(r=>parseInt(r.hole,10)===hole);
+  return row?posInt(row.par):null;
+}
+function scParLabel(delta){
+  if(delta<=-2) return "Eagle";
+  if(delta===-1) return "Birdie";
+  if(delta===0) return "Par";
+  if(delta===1) return "Bogey";
+  return "+"+delta;
+}
+function scPadNumbers(hole){
+  const par=scHolePar(hole);
+  if(par){
+    const out=[];
+    for(let d=-2;d<=4;d++){ const s=par+d; if(s>=1) out.push({score:s,label:scParLabel(d)}); }
+    return out;
+  }
+  return Array.from({length:8},(_,i)=>({score:i+1,label:null}));
+}
+
+/* ---------- SC-ROUND: momentary round toggle ----------
+   scRoundDefault() is the DATE rule ONLY at this task. The brief's other
+   branch ("if the team's R1 board row has 18 entries -> default R2") needs
+   a real sheet read — buildPlayers()'s season param, and the sheet-value
+   merge generally, are Task 6's job (see the brief's Task-6 seam note and
+   Interfaces line). Duck's fixture R1 IS complete, but that fact lives in
+   scores.csv; scLocalCells (the only "board" Task 3 can see) starts empty,
+   so there is nothing to evaluate that branch against yet — wiring it here
+   would just be reading a source this task doesn't own. It lands in Task 6
+   alongside the sheet merge (controller-scoped; see task-3-report.md). */
+function scRoundDefault(){
+  const ft=String(INFO.first_tee||CONFIG.FIRST_TEE||"");
+  const teeMs=Date.parse(ft);
+  if(isNaN(teeMs)) return "1";
+  const dayIdx=Math.floor((Date.now()-teeMs)/86400000);
+  return Math.max(0,Math.min(1,dayIdx))===1 ? "2" : "1";
+}
+function scOtherRound(r){ return r==="2" ? "1" : "2"; }
+function scActiveRound(){ return STATE.scRoundOverride || scRoundDefault(); }
+function scEventDate(round){
+  const m=String(INFO.first_tee||CONFIG.FIRST_TEE||"").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return null;
+  const base=Date.UTC(+m[1],+m[2]-1,+m[3]);
+  return new Date(base+(String(round)==="2"?86400000:0));
+}
+function scDayAbbrev(round){
+  const d=scEventDate(round);
+  return d ? d.toLocaleDateString("en-US",{weekday:"short",timeZone:"UTC"}) : "";
+}
+
 function scShowCard(seasonY,team){
   $("#scConfirm").hidden=true;
   $("#scPicker").hidden=true;
-  // #scCard itself is Task 3's empty shell — nothing to paint into it yet.
+  if(STATE.scTeam!==team||STATE.scSeason!==seasonY){
+    // fresh team/season — don't let a stale open pad or round override leak across.
+    STATE.scPadHole=null; STATE.scPadPending=null; STATE.scRoundOverride=null; STATE.scPadOtherOpen=false;
+  }
+  STATE.scTeam=team; STATE.scSeason=seasonY;
+  renderScCard();
 }
 function scShowPicker(seasonY){
   const teams=scorerTeams(seasonY);
@@ -2862,6 +2974,147 @@ function scShowConfirm(seasonY,team){
   });
   $("#scNotYou").addEventListener("click",e=>{ e.preventDefault(); scShowPicker(seasonY); });
 }
+
+/* ---------- SC-UI: card-first scorecard ----------
+   Renders journal-only cells (window.scLocalCells) — the sheet-value merge
+   is Task 6's job (brief's Task-6 seam note). Idempotent: every call
+   rebuilds #scCard's innerHTML from STATE + scLocalCells and re-wires
+   listeners from scratch, so calling it twice back-to-back (or on every
+   60s refresh) reproduces the identical DOM shape — no incremental
+   patching to drift out of sync. */
+function scTallyHTML(){
+  const cells=window.scLocalCells||{};
+  const filled=Object.keys(cells).map(Number).filter(h=>cells[h]&&cells[h].score!=null);
+  const strokes=filled.reduce((s,h)=>s+cells[h].score,0);
+  const pars=courseMap();
+  if(pars){
+    const parSum=filled.reduce((s,h)=>s+(pars[h]||0),0);
+    const rel=filled.length?strokes-parSum:null;
+    return `<p class="sc-tally" id="scTally" data-mode="topar">${filled.length?toPar(rel):"—"}`+
+      `<span class="sc-tally-lab"> thru ${filled.length}</span></p>`;
+  }
+  // SC-PAR degrade: course pars incomplete (one hole missing) — the tally
+  // can't honestly compute to-par, so it drops to strokes-only and says so
+  // via data-mode, rather than silently under-counting (X10).
+  return `<p class="sc-tally" id="scTally" data-mode="strokes">${filled.length?strokes:"—"}`+
+    `<span class="sc-tally-lab"> strokes thru ${filled.length}</span></p>`;
+}
+function scCellHTML(h){
+  const cell=window.scLocalCells[h];
+  const score=cell&&cell.score!=null?cell.score:null;
+  const par=scHolePar(h);
+  const cls=(score!=null&&par)?scoreClass(score,par).trim():"";
+  // over/under is never color-only: a ▾/▴ glyph rides alongside the color class.
+  const glyph=cls==="under"?"▾":(cls==="bogey"||cls==="blowup")?"▴":"";
+  return `<button type="button" class="sc-cell${cls?" "+cls:""}" data-hole="${h}" aria-label="Hole ${h}">`+
+    `<b>${score!=null?score:"–"}</b><span>${h}</span>`+
+    `${glyph?`<i class="sc-glyph" aria-hidden="true">${glyph}</i>`:""}</button>`;
+}
+function scNineHTML(a,b,lab){
+  const hs=HOLES.filter(h=>h>=a&&h<=b);
+  return `<div class="sc-nine"><span class="sc-lab">${lab}</span><div class="sc-row">`+
+    hs.map(scCellHTML).join("")+`</div></div>`;
+}
+function scPadHTML(){
+  const hole=STATE.scPadHole;
+  if(hole==null) return `<div id="scPad" hidden></div>`;
+  const existing=window.scLocalCells[hole];
+  const editMode=!!(existing&&existing.score!=null);
+  const par=scHolePar(hole);
+  const ydsMap=courseYards();
+  const yds=ydsMap?ydsMap[hole]:null;
+  const pending=STATE.scPadPending;
+  const numsHTML=scPadNumbers(hole).map(n=>
+    `<button type="button" class="sc-num" data-score="${n.score}"><b>${n.score}</b>`+
+    (n.label?`<span class="sc-num-lab">${esc(n.label)}</span>`:"")+`</button>`
+  ).join("");
+  const currentHTML=editMode?`<p class="sc-pad-current">currently ${existing.score}</p>`:"";
+  // Send-on-tap fires scJournalSave the instant a fresh cell's number is
+  // tapped (no confirm) — EXCEPT edit mode, which arms this replace button
+  // instead (NOCLOBBER: overwriting an already-saved score needs a second,
+  // explicit tap, per the controller's asymmetry ruling).
+  const replaceHTML=(editMode&&pending!=null)
+    ? `<button type="button" id="scPadReplace" class="sc-pad-replace">Replace ${existing.score} with ${pending}</button>`
+    : "";
+  const otherHTML=`<div class="sc-pad-other">`+
+    `<button type="button" class="sc-num sc-other" id="scPadOtherBtn">Other</button>`+
+    (STATE.scPadOtherOpen
+      ? `<input type="number" min="1" max="19" id="scPadOtherInput"><button type="button" id="scPadOtherSend">Send</button>`
+      : "")+
+    `</div>`;
+  return `<div id="scPad">`+
+    `<div class="sc-pad-head">Hole ${hole}${par?` · Par ${par}`:""}${yds?` · ${yds} yds`:""}</div>`+
+    currentHTML+
+    `<div class="sc-pad-nums">${numsHTML}</div>`+
+    otherHTML+
+    replaceHTML+
+    `<button type="button" class="sc-pad-close">Close</button>`+
+    `</div>`;
+}
+function scPadOpen(hole){
+  STATE.scPadHole=hole;
+  STATE.scPadPending=null;
+  STATE.scPadOtherOpen=false;
+  renderScCard();
+}
+function scSubmitScore(hole,score){
+  if(!(score>=1)) return;
+  const entry={round:scActiveRound(),hole,score,team:STATE.scTeam};
+  try{ window.scJournalSave(entry); }catch{}
+  window.scLocalCells[hole]={score,state:"local"};
+  STATE.scRoundOverride=null; // momentary toggle — consumed on send (SC-ROUND spring)
+  STATE.scPadHole=null; STATE.scPadPending=null; STATE.scPadOtherOpen=false;
+  renderScCard();
+}
+function scPadPick(hole,score){
+  if(!(score>=1&&score<=19)) return;
+  const existing=window.scLocalCells[hole];
+  const editMode=!!(existing&&existing.score!=null);
+  if(editMode&&existing.score!==score){ STATE.scPadPending=score; renderScCard(); return; }
+  scSubmitScore(hole,score);
+}
+function scWireCard(){
+  $("#scCard").querySelectorAll(".sc-cell").forEach(b=>
+    b.addEventListener("click",()=>scPadOpen(parseInt(b.dataset.hole,10))));
+  const roundBtn=$("#scRound");
+  if(roundBtn) roundBtn.addEventListener("click",()=>{
+    STATE.scRoundOverride = STATE.scRoundOverride ? null : scOtherRound(scRoundDefault());
+    renderScCard();
+  });
+  const pad=$("#scPad");
+  if(!pad||pad.hidden) return;
+  const hole=STATE.scPadHole;
+  pad.querySelectorAll(".sc-num[data-score]").forEach(b=>
+    b.addEventListener("click",()=>scPadPick(hole,parseInt(b.dataset.score,10))));
+  const replaceBtn=pad.querySelector("#scPadReplace");
+  if(replaceBtn) replaceBtn.addEventListener("click",()=>scSubmitScore(hole,STATE.scPadPending));
+  const otherBtn=pad.querySelector("#scPadOtherBtn");
+  if(otherBtn) otherBtn.addEventListener("click",()=>{ STATE.scPadOtherOpen=true; renderScCard(); });
+  const otherSend=pad.querySelector("#scPadOtherSend");
+  if(otherSend) otherSend.addEventListener("click",()=>{
+    const v=posInt(pad.querySelector("#scPadOtherInput")?.value);
+    if(v) scPadPick(hole,v);
+  });
+  const closeBtn=pad.querySelector(".sc-pad-close");
+  if(closeBtn) closeBtn.addEventListener("click",()=>{
+    STATE.scPadHole=null; STATE.scPadPending=null; STATE.scPadOtherOpen=false; renderScCard();
+  });
+}
+function renderScCard(){
+  const card=$("#scCard");
+  if(!card) return;
+  if(!STATE.scTeam){ card.innerHTML=""; return; }
+  const active=scActiveRound();
+  card.innerHTML=
+    `<div class="sc-round"><button type="button" id="scRound">Round ${esc(active)} · ${scDayAbbrev(active)}</button></div>`+
+    scTallyHTML()+
+    scNineHTML(1,9,"Out")+
+    scNineHTML(10,18,"In")+
+    `<div class="sc-legend">■ on the sheet · ⇡ saved on phone · ? sheet differs — tap</div>`+
+    scPadHTML();
+  scWireCard();
+}
+
 function renderScorer(){
   const bare=location.hash.slice(1).split("?")[0];
   if((VIEW_ALIASES[bare]||bare)!=="score") return;
