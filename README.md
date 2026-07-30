@@ -196,6 +196,11 @@ Course — both one-time, evidence-gated). To verify idempotence after an
 Apps Script edit: run `polish()` twice in a row and confirm no cell value
 changed between runs (File → Version history).
 
+Re-running `polish()` also rebuilds the START HERE tab (preserving the
+form URL pasted in the "Scoring form URL" cell) and reorders the sheet
+tabs by season — during the event week, tabs appear as START HERE, Scores,
+Field, Pairings; off-season shows START HERE, Field, Invites, Rooms.
+
 The polish script also OWNS conditional formatting on Field and Rooms — it
 replaces all conditional-format rules on those two tabs each run. Don't
 hand-add your own coloring there; it will be erased.
@@ -203,6 +208,53 @@ hand-add your own coloring there; it will be erased.
 Sheet edits reach the site in roughly 1–6 minutes (Google republishes ~every
 5 minutes; the site refreshes every 60 seconds). During a round, that's fast
 enough to keep the board honest — just don't panic-refresh.
+
+## Live scoring (the Form)
+
+During the tournament, a Google Form feeds live scores into the spreadsheet.
+Set it up once before the event:
+
+1. **Create the form** with these four questions, in order:
+   - **Team** (dropdown, menu items hand-filled at draft night — one item per team captain)
+   - **Round** (dropdown, menu items: `1`, `2`)
+   - **Hole** (dropdown, menu items: `1`, `2`, `3`, …, `18`)
+   - **Team score** (Number, validation: "Between 1 and 19")
+2. **Link responses**: In the form settings, click **Responses** → link to the
+   GFY spreadsheet (pick the sheet from the dropdown).
+3. **Paste the triggers**: Extensions → Apps Script (on the LIVE sheet) →
+   copy `tools/sheet-triggers.gs` from the repo and paste it into the script
+   editor (same project as the polish script is fine). Save, then run `setup()`
+   from the function dropdown and click **Run**. Authorize when prompted.
+4. **Paste the form URL**: Get the form's shareable link (blue **Send** button
+   in the form editor → copy the short URL). Paste it into the START HERE
+   tab's "Scoring form URL" cell. (The form URL stays in place when you
+   re-run `polish()`.)
+5. **Check the timezone**: On the LIVE sheet, open **File → Settings** and
+   confirm the time zone is set to **America/Boise** (used for `paid_date`
+   stamps — see **Collecting for next year**, below).
+
+**How it works:** When someone submits the form, a trigger fires
+`onScoreFormSubmit()`, which writes the score to the Scores tab (matching
+the team by name, case-insensitive) and marks the response row with a status:
+- **applied** — score was valid and written to Scores.
+- **rejected: …** — the submission failed (team not found, hole out of range,
+  invalid score, etc.). Resubmit the hole with corrections — last write wins,
+  so a resubmit overwrites the old one.
+- **rejected: busy — resubmit** — a submission collided with another (both
+  sent at the exact same moment). Resubmit; the document lock ensures they
+  serialize.
+- **rejected: internal error** — check the sheet's time zone and the form's
+  target spreadsheet link, then re-run `setup()`.
+
+The responses sheet (auto-created by Google Forms) has a `status` column
+added by the trigger — open it to audit which submissions applied and which
+were rejected.
+
+When someone ticks the `deposit` checkbox on the Field tab, a trigger fires
+`onDepositEdit()` and stamps today's date (in the sheet's time zone) into
+the `paid_date` cell — only on the first tick; re-ticking never overwrites
+a date that's already there, and unticking never erases it. Paid order on
+the Next Year board follows `paid_date`.
 
 ## Year to year
 
