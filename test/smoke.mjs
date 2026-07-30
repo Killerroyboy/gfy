@@ -2129,6 +2129,13 @@ dom.window.close();
   check("J9: O-ADMINPATH — __file__-resolved output, __main__ guard, READ ME teaches --vault-url",
     /__file__/.test(adminSrc) && /__main__/.test(adminSrc) && adminSrc.includes("--vault-url"), "");
 }
+{
+  const readme = readFileSync(path.join(ROOT, "README.md"), "utf8");
+  check("J10: §19 docs — README teaches --extra-gid responses scan, check-template, check-gids, FORM TEAM LIST, and has ONE vault section with a pointer",
+    readme.includes("--extra-gid responses=") && readme.includes("npm run check-template")
+    && readme.includes("npm run check-gids") && readme.includes("FORM TEAM LIST")
+    && (readme.match(/^## .*[Vv]ault/gm) || []).length === 1, "");
+}
 
 /* ---------------------------------------------------------------------
    Group Y: crest v3 Park Badge (spec §16). Y1 = outline enforcement (the
