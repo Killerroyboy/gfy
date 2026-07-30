@@ -1,0 +1,339 @@
+<title>GFY crest — round 2: the frame</title>
+<style>
+  :root{
+    --pine:#0E2019; --pine-2:#132B21; --pine-deep:#0A1410;
+    --bone:#E9E3D3; --brass:#C8A24A; --brass-dim:#6F5A26; --rust:#B0705E;
+  }
+  html{background:var(--pine-deep)}
+  body{margin:0;background:var(--pine-deep);color:var(--bone);
+       font-family:"Avenir Next","Avenir",system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .page{max-width:1060px;margin:0 auto;padding:56px 24px 80px}
+  header{margin-bottom:44px}
+  .eyebrow{font-size:12px;letter-spacing:.32em;color:var(--brass);text-transform:uppercase;font-weight:600;margin:0 0 10px}
+  h1{font-family:"Futura-CondensedExtraBold","Futura","Avenir Next Condensed",sans-serif;
+     font-weight:800;font-size:44px;line-height:1.05;margin:0 0 12px;color:var(--bone);text-wrap:balance}
+  .lede{font-size:16px;line-height:1.55;color:#B9B29E;max-width:60ch;margin:0}
+  .lede strong{color:var(--bone);font-weight:600}
+
+  .current{display:flex;gap:28px;align-items:center;margin:40px 0 8px;padding:22px 26px;
+           background:var(--pine);border:1px solid #1E3328;border-radius:4px}
+  .current svg{flex:none}
+  .current h2{font-size:13px;letter-spacing:.24em;text-transform:uppercase;color:#8A9B8C;margin:0 0 8px;font-weight:600}
+  .current p{font-size:14px;line-height:1.55;color:#B9B29E;margin:0}
+
+  .cand{margin-top:56px;background:var(--pine);border:1px solid #1E3328;border-radius:4px;overflow:hidden}
+  .cand-head{display:flex;align-items:baseline;gap:14px;padding:20px 26px 0}
+  .cand-letter{font-family:"Futura-CondensedExtraBold","Futura","Avenir Next Condensed",sans-serif;
+               font-weight:800;font-size:30px;color:var(--brass)}
+  .cand-name{font-size:15px;letter-spacing:.18em;text-transform:uppercase;font-weight:600;color:var(--bone)}
+  .cand-tag{font-size:13px;color:#8A9B8C}
+  .cand-body{display:grid;grid-template-columns:minmax(300px,430px) 1fr;gap:8px 34px;padding:10px 26px 26px;align-items:center}
+  @media(max-width:760px){.cand-body{grid-template-columns:1fr}}
+  .stage{display:flex;align-items:center;justify-content:center;padding:14px 0}
+  .stage svg{width:100%;max-width:400px;height:auto;display:block}
+  .side p{font-size:14.5px;line-height:1.6;color:#CFC8B4;margin:0 0 14px;max-width:52ch}
+  .side p strong{color:var(--bone)}
+  .sizes{display:flex;align-items:flex-end;gap:26px;margin-top:8px}
+  .sizes figure{margin:0;text-align:center}
+  .sizes svg{display:block;height:auto}
+  .sizes figcaption{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#6E7F70;margin-top:8px}
+  .verdict{margin-top:56px;padding:26px;background:var(--pine);border:1px solid var(--brass-dim);border-radius:4px}
+  .verdict h2{font-size:13px;letter-spacing:.24em;text-transform:uppercase;color:var(--brass);margin:0 0 10px;font-weight:600}
+  .verdict p{font-size:15px;line-height:1.6;color:#CFC8B4;margin:0;max-width:70ch}
+  .verdict p strong{color:var(--bone)}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- THE fist — MARK_PATH verbatim from index.html; identical in every candidate -->
+    <symbol id="mark" viewBox="0 0 200 260">
+      <path fill="currentColor" d="M 91 17 C 92 9, 100 3, 110 3 C 120 3, 128 9, 129 19 C 130 30, 129 40, 128 52 C 127 70, 126 90, 125 104 C 125 112, 125 117, 125 121 C 136 123, 145 129, 152 138 C 155 131, 161 128, 168 129 C 175 131, 181 138, 184 148 C 188 158, 190 170, 190 183 C 191 195, 190 206, 186 216 C 181 227, 172 235, 158 240 C 146 245, 134 247, 122 250 C 113 254, 104 257, 95 256 C 87 255, 79 249, 72 242 C 60 241, 48 240, 36 236 C 28 232, 24 224, 24 214 C 24 203, 26 192, 28 183 C 30 178, 30 172, 27 166 C 21 157, 16 146, 13 133 C 10 123, 8 114, 9 105 C 10 99, 16 95, 24 93 C 36 91, 49 91, 60 93 C 68 95, 74 99, 74 107 C 74 112, 73 117, 79 121 C 81 108, 83 95, 84 87 C 86 63, 88 40, 91 17 Z"/>
+      <g fill="none" stroke="var(--pine)" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 98 20 C 104 16, 117 16, 122 20 C 122 29, 119 46, 110 46 C 101 46, 98 29, 98 20 Z" stroke-width="5"/>
+        <path d="M 94 58 C 101 64, 116 64, 123 58 M 93 66 C 100 72, 115 72, 122 66 M 96 74 C 102 79, 114 79, 119 74" stroke-width="5"/>
+        <path d="M 88 128 C 95 120, 114 120, 120 126 M 88 132 C 95 140, 113 140, 119 132 M 92 141 C 98 148, 110 148, 115 141" stroke-width="5"/>
+        <path d="M 126 149 C 132 157, 140 158, 146 153 M 156 152 C 163 159, 173 160, 180 154 M 42 135 C 50 143, 60 144, 66 138 M 44 144 C 51 150, 59 151, 64 146" stroke-width="5"/>
+        <path d="M 47 100 C 52 97, 62 96, 67 98 C 71 102, 72 108, 71 113 C 65 115, 54 115, 49 113 C 46 110, 45 104, 47 100 Z" stroke-width="5"/>
+        <path d="M 79 121 C 78 140, 77 164, 74 194 C 72 212, 69 226, 68 234 M 125 121 C 124 140, 123 170, 120 200 C 118 218, 117 232, 116 238 M 152 138 C 153 157, 155 178, 156 199" stroke-width="5"/>
+        <path d="M 74 118 C 56 119, 41 123, 34 133 C 30 142, 29 151, 29 158" stroke-width="6"/>
+      </g>
+    </symbol>
+
+    <!-- filled pine tree, chunky (viewBox 0 0 60 90) -->
+    <symbol id="pinetree" viewBox="0 0 60 90">
+      <path fill="currentColor" d="M30 0 L46 26 L38 24 L52 50 L42 47 L56 74 L34 68 L34 90 L26 90 L26 68 L4 74 L18 47 L8 50 L22 24 L14 26 Z"/>
+    </symbol>
+
+    <!-- laurel leaf for candidate B -->
+    <symbol id="leaf" viewBox="0 0 22 10">
+      <path fill="currentColor" d="M0 5 C 5 0, 15 0, 22 5 C 15 10, 5 10, 0 5 Z"/>
+    </symbol>
+
+    <!-- thin keyline silhouette (separates the fist from same-colour ground in A) -->
+    <symbol id="markKeyline" viewBox="0 0 200 260" style="overflow:visible">
+      <path fill="none" stroke="currentColor" stroke-width="11" stroke-linejoin="round" d="M 91 17 C 92 9, 100 3, 110 3 C 120 3, 128 9, 129 19 C 130 30, 129 40, 128 52 C 127 70, 126 90, 125 104 C 125 112, 125 117, 125 121 C 136 123, 145 129, 152 138 C 155 131, 161 128, 168 129 C 175 131, 181 138, 184 148 C 188 158, 190 170, 190 183 C 191 195, 190 206, 186 216 C 181 227, 172 235, 158 240 C 146 245, 134 247, 122 250 C 113 254, 104 257, 95 256 C 87 255, 79 249, 72 242 C 60 241, 48 240, 36 236 C 28 232, 24 224, 24 214 C 24 203, 26 192, 28 183 C 30 178, 30 172, 27 166 C 21 157, 16 146, 13 133 C 10 123, 8 114, 9 105 C 10 99, 16 95, 24 93 C 36 91, 49 91, 60 93 C 68 95, 74 99, 74 107 C 74 112, 73 117, 79 121 C 81 108, 83 95, 84 87 C 86 63, 88 40, 91 17 Z"/>
+    </symbol>
+
+    <!-- thick silhouette outline of the fist (patch satin-stitch border for C) -->
+    <symbol id="markOutline" viewBox="0 0 200 260" style="overflow:visible">
+      <path fill="none" stroke="currentColor" stroke-width="18" stroke-linejoin="round" d="M 91 17 C 92 9, 100 3, 110 3 C 120 3, 128 9, 129 19 C 130 30, 129 40, 128 52 C 127 70, 126 90, 125 104 C 125 112, 125 117, 125 121 C 136 123, 145 129, 152 138 C 155 131, 161 128, 168 129 C 175 131, 181 138, 184 148 C 188 158, 190 170, 190 183 C 191 195, 190 206, 186 216 C 181 227, 172 235, 158 240 C 146 245, 134 247, 122 250 C 113 254, 104 257, 95 256 C 87 255, 79 249, 72 242 C 60 241, 48 240, 36 236 C 28 232, 24 224, 24 214 C 24 203, 26 192, 28 183 C 30 178, 30 172, 27 166 C 21 157, 16 146, 13 133 C 10 123, 8 114, 9 105 C 10 99, 16 95, 24 93 C 36 91, 49 91, 60 93 C 68 95, 74 99, 74 107 C 74 112, 73 117, 79 121 C 81 108, 83 95, 84 87 C 86 63, 88 40, 91 17 Z"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="page">
+<header>
+  <p class="eyebrow">GFY · Crest · Round 2</p>
+  <h1>The finger stays.<br>Pick the frame it deserves.</h1>
+  <p class="lede">The fist (Candidate F, from your reference photo) is untouched in all three —
+  same path, same authority. What changes is everything around it: weight, type, scenery,
+  attitude. All three are drawn <strong>embroidery-honest</strong>: no hairlines, nothing thinner than thread.</p>
+</header>
+
+<div class="current">
+  <svg viewBox="0 0 400 400" width="150" height="150" style="color:var(--brass)">
+    <g fill="none" stroke="currentColor">
+      <circle cx="200" cy="200" r="192" stroke-width="2"/><circle cx="200" cy="200" r="160" stroke-width="1"/>
+    </g>
+    <g fill="currentColor" font-family="Jost,'Avenir Next',sans-serif" font-size="17" letter-spacing="5.5">
+      <text><textPath href="#c0top" startOffset="50%" text-anchor="middle">GO FUCK YOURSELF</textPath></text>
+      <text font-size="15" letter-spacing="6.5"><textPath href="#c0bot" startOffset="50%" text-anchor="middle">McCALL · IDAHO</textPath></text>
+    </g>
+    <defs>
+      <path id="c0top" d="M 34.6 139.8 A 176 176 0 0 1 365.4 139.8"/>
+      <path id="c0bot" d="M 34.6 260.2 A 176 176 0 0 0 365.4 260.2"/>
+    </defs>
+    <g fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round">
+      <g transform="translate(114,154)"><path d="M0 100 C -9 72 -9 38 -3 4"/><path d="M-1 90 l -19 10 M-1 90 l -16 -5"/><path d="M-3 75 l -21 8 M-3 75 l -17 -6"/><path d="M-5 60 l -21 6 M-5 60 l -17 -8"/><path d="M-6 45 l -20 4 M-6 45 l -16 -9"/><path d="M-5 30 l -18 2 M-5 30 l -14 -10"/><path d="M-4 15 l -15 0"/></g>
+      <g transform="translate(286,154) scale(-1,1)"><path d="M0 100 C -9 72 -9 38 -3 4"/><path d="M-1 90 l -19 10 M-1 90 l -16 -5"/><path d="M-3 75 l -21 8 M-3 75 l -17 -6"/><path d="M-5 60 l -21 6 M-5 60 l -17 -8"/><path d="M-6 45 l -20 4 M-6 45 l -16 -9"/><path d="M-5 30 l -18 2 M-5 30 l -14 -10"/><path d="M-4 15 l -15 0"/></g>
+    </g>
+    <use href="#mark" x="149" y="120" width="102" height="133"/>
+    <text x="200" y="298" fill="currentColor" text-anchor="middle" font-family="Jost,'Avenir Next',sans-serif" font-size="13" letter-spacing="5">EST. 2019</text>
+  </svg>
+  <div>
+    <h2>Where we are</h2>
+    <p>Good fist, timid frame. The pine boughs read as fish bones, the rings are hairlines
+    thread can't stitch, the type whispers, and half the badge is dead air. Nothing below keeps
+    any of it except the fist and the words.</p>
+  </div>
+</div>
+
+<!-- ============ CANDIDATE A — NATIONAL PARK BADGE ============ -->
+<section class="cand">
+  <div class="cand-head"><span class="cand-letter">A</span><span class="cand-name">The Park Badge</span><span class="cand-tag">WPA poster · McCall scenery · my recommendation</span></div>
+  <div class="cand-body">
+    <div class="stage">
+      <svg viewBox="0 0 400 400" role="img" aria-label="Candidate A: national-park style badge"><g id="candA-art">
+        <defs>
+          <path id="aTop" d="M 51.9 141.2 A 159 159 0 0 1 348.1 141.2"/>
+          <path id="aBot" d="M 51.9 258.8 A 159 159 0 0 0 348.1 258.8"/>
+          <clipPath id="aScene"><circle cx="200" cy="200" r="134"/></clipPath>
+        </defs>
+        <!-- chunky ring + solid lettering band -->
+        <circle cx="200" cy="200" r="194" fill="var(--brass)"/>
+        <circle cx="200" cy="200" r="186" fill="var(--pine)"/>
+        <circle cx="200" cy="200" r="180" fill="var(--brass)"/>
+        <circle cx="200" cy="200" r="138" fill="var(--pine)" stroke="var(--pine)" stroke-width="1"/>
+        <!-- band lettering -->
+        <g fill="var(--pine)" font-family="Futura-CondensedExtraBold,Futura,'Avenir Next Condensed',sans-serif" font-weight="800">
+          <text font-size="26" letter-spacing="4"><textPath href="#aTop" startOffset="50%" text-anchor="middle">GO FUCK YOURSELF</textPath></text>
+          <text font-size="21" letter-spacing="5"><textPath href="#aBot" startOffset="50%" text-anchor="middle">McCALL &#183; IDAHO</textPath></text>
+        </g>
+        <g fill="var(--pine)">
+          <path d="M 41 200 l 7 -9 l 7 9 l -7 9 Z"/>
+          <path d="M 345 200 l 7 -9 l 7 9 l -7 9 Z"/>
+        </g>
+        <!-- the scene -->
+        <g clip-path="url(#aScene)">
+          <!-- moon -->
+          <circle cx="200" cy="152" r="64" fill="var(--bone)"/>
+          <!-- back ridge -->
+          <path fill="var(--brass-dim)" d="M 60 246 L 106 176 L 132 210 L 163 168 L 188 204 L 214 172 L 246 214 L 276 178 L 306 222 L 340 246 Z"/>
+          <!-- front ridge -->
+          <path fill="var(--brass)" d="M 52 258 L 96 206 L 124 236 L 158 196 L 200 244 L 238 200 L 270 238 L 302 210 L 348 258 Z"/>
+          <!-- lake -->
+          <rect x="60" y="252" width="280" height="90" fill="var(--pine-2)"/>
+          <g stroke="var(--bone)" stroke-width="5" stroke-linecap="round">
+            <path d="M 120 266 h 52 M 196 266 h 66"/>
+            <path d="M 96 282 h 66 M 186 282 h 40 M 250 282 h 52"/>
+            <path d="M 132 298 h 44 M 206 298 h 60"/>
+          </g>
+          <!-- flanking pines (bone — paper-colour trees, WPA style) -->
+          <use href="#pinetree" x="66" y="170" width="54" height="82" style="color:var(--bone)"/>
+          <use href="#pinetree" x="280" y="170" width="54" height="82" style="color:var(--bone)"/>
+          <!-- the fist, big, riding the ridge into the lake -->
+          <g style="color:var(--pine)"><use href="#markKeyline" x="141" y="96" width="118" height="153"/></g>
+          <g style="color:var(--brass)"><use href="#mark" x="141" y="96" width="118" height="153"/></g>
+        </g>
+        <circle cx="200" cy="200" r="138" fill="none" stroke="var(--brass)" stroke-width="6"/>
+        <!-- EST ribbon -->
+        <g>
+          <path fill="var(--brass)" d="M 143 306 L 257 306 L 257 330 L 143 330 Z"/>
+          <path fill="var(--brass-dim)" d="M 143 306 L 127 318 L 143 330 Z M 257 306 L 273 318 L 257 330 Z"/>
+          <text x="200" y="324" fill="var(--pine)" text-anchor="middle" font-family="Futura-CondensedExtraBold,Futura,'Avenir Next Condensed',sans-serif" font-weight="800" font-size="17" letter-spacing="3">EST. 2019</text>
+        </g>
+      </g></svg>
+    </div>
+    <div class="side">
+      <p><strong>The joke wears a ranger uniform.</strong> Payette Lake, the ridgeline, real pines,
+      a moon — a legitimate Idaho heritage badge in every detail, except the thing rising out of
+      the lake is your fist. Reads sincere at ten feet, lands at three.</p>
+      <p>Dense, flat, three inks — this is drawn the way patch embroiderers want art delivered.
+      The moon disc exists to silhouette the fingertip; the scenery gives the crest a place,
+      which is what the current one is missing.</p>
+      <div class="sizes">
+        <figure><svg viewBox="0 0 400 400" width="120"><use href="#candA-art"/></svg><figcaption>Cap patch · 2.5&#8243;</figcaption></figure>
+        <figure><svg viewBox="0 0 400 400" width="56"><use href="#candA-art"/></svg><figcaption>Mark</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CANDIDATE B — COUNTRY CLUB CREST ============ -->
+<section class="cand">
+  <div class="cand-head"><span class="cand-letter">B</span><span class="cand-name">The Club Crest</span><span class="cand-tag">maximum pomp, minimum respect</span></div>
+  <div class="cand-body">
+    <div class="stage">
+      <svg viewBox="0 0 400 400" role="img" aria-label="Candidate B: heraldic country-club crest parody"><g id="candB-art">
+        <defs>
+          <pattern id="bStripe" width="14" height="14" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+            <rect width="14" height="14" fill="var(--pine-2)"/>
+            <rect width="4" height="14" fill="var(--pine)"/>
+          </pattern>
+          <path id="bArc" d="M 92 92 A 150 150 0 0 1 308 92"/>
+        </defs>
+        <!-- crossed clubs -->
+        <g stroke="var(--brass-dim)" stroke-width="9" stroke-linecap="round">
+          <path d="M 122 108 L 278 322"/>
+          <path d="M 278 108 L 122 322"/>
+        </g>
+        <!-- grips -->
+        <g stroke="var(--bone)" stroke-width="13" stroke-linecap="round">
+          <path d="M 256 292 L 278 322"/>
+          <path d="M 144 292 L 122 322"/>
+        </g>
+        <!-- driver head (top left) + iron blade (top right) -->
+        <path fill="var(--brass)" d="M 122 108 C 108 94 92 96 88 108 C 84 120 96 132 112 128 C 122 125 126 116 122 108 Z"/>
+        <path fill="var(--brass)" d="M 278 108 L 302 86 L 312 96 L 288 120 C 282 124 274 116 278 108 Z"/>
+        <!-- laurel -->
+        <g style="color:var(--brass)">
+          <g>
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(98 308) rotate(-58)"/>
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(84 284) rotate(-72)"/>
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(76 258) rotate(-82)"/>
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(74 230) rotate(-92)"/>
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(78 202) rotate(-102)"/>
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(88 176) rotate(-112)"/>
+          </g>
+          <g transform="translate(400 0) scale(-1 1)">
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(98 308) rotate(-58)"/>
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(84 284) rotate(-72)"/>
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(76 258) rotate(-82)"/>
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(74 230) rotate(-92)"/>
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(78 202) rotate(-102)"/>
+            <use href="#leaf" x="0" y="0" width="26" height="12" transform="translate(88 176) rotate(-112)"/>
+          </g>
+        </g>
+        <!-- shield -->
+        <path d="M 132 108 L 268 108 L 268 196 C 268 254 224 286 200 298 C 176 286 132 254 132 196 Z"
+              fill="url(#bStripe)" stroke="var(--brass)" stroke-width="6"/>
+        <!-- golf ball crest -->
+        <circle cx="200" cy="92" r="17" fill="var(--bone)" stroke="var(--pine)" stroke-width="2"/>
+        <g fill="var(--pine)">
+          <circle cx="194" cy="86" r="1.6"/><circle cx="202" cy="84" r="1.6"/><circle cx="208" cy="90" r="1.6"/>
+          <circle cx="192" cy="94" r="1.6"/><circle cx="200" cy="92" r="1.6"/><circle cx="207" cy="98" r="1.6"/>
+          <circle cx="196" cy="101" r="1.6"/>
+        </g>
+        <!-- arc caption -->
+        <text fill="var(--bone)" font-family="Baskerville,'Hoefler Text',serif" font-size="17" letter-spacing="4">
+          <textPath href="#bArc" startOffset="50%" text-anchor="middle">McCALL &#183; IDAHO</textPath>
+        </text>
+        <!-- fist on shield -->
+        <g style="color:var(--brass)"><use href="#mark" x="152" y="122" width="96" height="125"/></g>
+        <!-- scroll -->
+        <g>
+          <path fill="var(--brass-dim)" d="M 96 330 L 76 356 L 108 356 L 118 342 Z"/>
+          <path fill="var(--brass-dim)" d="M 304 330 L 324 356 L 292 356 L 282 342 Z"/>
+          <path fill="var(--bone)" stroke="var(--brass)" stroke-width="3"
+                d="M 96 326 C 140 318 260 318 304 326 L 304 352 C 260 344 140 344 96 352 Z"/>
+          <text x="200" y="342" fill="var(--pine)" text-anchor="middle"
+                font-family="Baskerville,'Hoefler Text',serif" font-weight="600" font-size="16.5" letter-spacing="2.5">GO FUCK YOURSELF</text>
+        </g>
+        <text x="200" y="381" fill="var(--brass)" text-anchor="middle" font-family="Baskerville,'Hoefler Text',serif" font-size="13" letter-spacing="4">EST. MMXIX</text>
+      </g></svg>
+    </div>
+    <div class="side">
+      <p><strong>Augusta pomp around a middle finger.</strong> Regimental pinstripes on the shield,
+      crossed driver and iron, laurels, a dimpled golf ball where the heraldic crest goes, and a
+      hand-lettered scroll delivering the club motto. EST&#160;MMXIX because Roman numerals make
+      everything more disrespectful.</p>
+      <p>Densest of the three and the hardest "holy shit" on first read. More parts to embroider —
+      it wants to be a woven patch or a chest crest on a polo more than a flat cap stitch.</p>
+      <div class="sizes">
+        <figure><svg viewBox="0 0 400 400" width="120"><use href="#candB-art"/></svg><figcaption>Cap patch · 2.5&#8243;</figcaption></figure>
+        <figure><svg viewBox="0 0 400 400" width="56"><use href="#candB-art"/></svg><figcaption>Mark</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CANDIDATE C — VARSITY PATCH ============ -->
+<section class="cand">
+  <div class="cand-head"><span class="cand-letter">C</span><span class="cand-name">The Rope-Hat Patch</span><span class="cand-tag">70s trucker · loudest · simplest</span></div>
+  <div class="cand-body">
+    <div class="stage">
+      <svg viewBox="0 0 400 400" role="img" aria-label="Candidate C: bold varsity rope-hat patch"><g id="candC-art">
+        <defs>
+          <clipPath id="cClip"><circle cx="200" cy="200" r="174"/></clipPath>
+          <path id="cGfy" d="M 78 178 A 140 140 0 0 1 322 178"/>
+        </defs>
+        <circle cx="200" cy="200" r="192" fill="var(--pine)"/>
+        <circle cx="200" cy="200" r="184" fill="var(--brass)"/>
+        <circle cx="200" cy="200" r="174" fill="var(--bone)"/>
+        <g clip-path="url(#cClip)">
+          <rect x="10" y="229" width="380" height="160" fill="var(--pine)"/>
+          <rect x="10" y="222" width="380" height="7" fill="var(--brass)"/>
+        </g>
+        <!-- big arched letters -->
+        <text fill="var(--pine)" font-family="Impact,'Avenir Next Condensed',sans-serif" font-size="76" letter-spacing="12">
+          <textPath href="#cGfy" startOffset="50%" text-anchor="middle">GFY</textPath>
+        </text>
+        <!-- stars -->
+        <g fill="var(--rust)" transform="translate(0,-22)">
+          <path d="M 84 208 l 5.5 11 l 12 1.8 l -8.7 8.6 l 2 12.1 l -10.8 -5.7 l -10.8 5.7 l 2 -12.1 l -8.7 -8.6 l 12 -1.8 Z"/>
+          <path d="M 316 208 l 5.5 11 l 12 1.8 l -8.7 8.6 l 2 12.1 l -10.8 -5.7 l -10.8 5.7 l 2 -12.1 l -8.7 -8.6 l 12 -1.8 Z"/>
+        </g>
+        <!-- the fist, huge, with a satin-stitch border -->
+        <g style="color:var(--pine)"><use href="#markOutline" x="127" y="116" width="146" height="190"/></g>
+        <g style="color:var(--brass)"><use href="#mark" x="127" y="116" width="146" height="190"/></g>
+        <!-- bottom lockup -->
+        <g fill="var(--bone)" font-family="'Avenir Next Condensed','Avenir Next',sans-serif" font-weight="700">
+          <text x="200" y="330" text-anchor="middle" font-size="21" letter-spacing="5">McCALL &#183; IDAHO</text>
+        </g>
+        <text x="200" y="356" fill="var(--brass)" text-anchor="middle" font-family="'Avenir Next Condensed','Avenir Next',sans-serif" font-weight="600" font-size="14" letter-spacing="4">EST. 2019</text>
+      </g></svg>
+    </div>
+    <div class="side">
+      <p><strong>Zero subtlety, maximum hat.</strong> Two-tone field, rope-hat borders, three-letter
+      arch, one huge fist. This is the one strangers can read across a parking lot, and the one a
+      patch shop could stitch tomorrow without simplifying anything.</p>
+      <p>The trade: it says GFY loud but tells the least story — no lake, no pines, no country-club
+      joke. Pure gear energy.</p>
+      <div class="sizes">
+        <figure><svg viewBox="0 0 400 400" width="120"><use href="#candC-art"/></svg><figcaption>Cap patch · 2.5&#8243;</figcaption></figure>
+        <figure><svg viewBox="0 0 400 400" width="56"><use href="#candC-art"/></svg><figcaption>Mark</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="verdict">
+  <h2>Recommendation</h2>
+  <p><strong>A — the Park Badge.</strong> It keeps the site's quiet-menace tone, gives the crest an
+  actual place (the lake, the ridge, the pines you drive past to get there), and it's the one that
+  looks better the longer you look — which is what you want on a hat you'll wear for years.
+  B is the funniest single image; C is the most legible gear. All three stitch. Happy to iterate
+  on any of them, or cross-breed (A's scene with C's weight, B's scroll under A's badge…).</p>
+</div>
+</div>

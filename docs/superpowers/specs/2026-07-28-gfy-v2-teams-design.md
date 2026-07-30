@@ -365,3 +365,56 @@ Context shift: teams are FOUR players (12–15 teams, ~48–60 attendees), not t
 - **U-POOL**: draft pool filter = year==activeSeason AND team blank AND status not in {out, wd}; current-season `declined` (legacy fallback) also excluded.
 - **B-CAPTAIN scope pin**: captain-only applies to the leaderboard rows AND the scorecard grid's sticky team column (width-critical at 15 teams); the tap-open card gains a roster header (all four names — currently missing); Calcutta/Money/Shame keep their existing joined labels (width acceptable, not §15 scope).
 - Tests: group U fixtures include at least one 4-player team; suite baseline at build time = 143.
+
+## §16 — crest v3: the Park Badge (Riley approved 2026-07-29 eve)
+
+Provenance: crest round 2, candidate A ("The Park Badge"), artifact
+`https://claude.ai/code/artifact/a871d138-09cc-452b-a76b-c47ae996c7bd`; Riley: "I like the
+image that I saw in the link." **The fidelity target is that exact render** — the build
+reproduces it, it does not redesign it. Durable references, both in-repo: mockup source =
+`tools/crest-round2.html` (candidate A markup); approved-state render of record =
+`docs/superpowers/specs/assets/crest-v3-approved.png`.
+
+- **C3-FIST (single authority preserved)**: the fist stays `MARK_PATH` verbatim — hero uses
+  the injected `<symbol id="mark">` exactly as today. The new pine keyline that separates the
+  fist from the brass ridge is a second path whose `d` is **injected from the same MARK_PATH
+  const at script start** (stroke-only rendering); the path string continues to exist exactly
+  once in `index.html`. Nav mark, footer mark, favicon/app-icon pipeline untouched.
+- **C3-ART**: hero crest = 400×400 badge: chunky brass ring + solid brass lettering band
+  (r≈138–180), pine inner disc with the scene — bone moon disc haloing the fingertip, brass-dim
+  back ridge, brass front ridge, pine-2 lake with bone water dashes, two bone pines, fist over
+  keyline center, brass EST ribbon with dim folded tails; pine diamond separators at 3/9
+  o'clock in the band. Palette = existing tokens only: pine, pine-2, bone, brass, brass-dim
+  (5 fills on screen; a patch vendor can quantize to 3 threads by merging the two dim shades —
+  documented in the asset header comment, not a new constraint on the site).
+- **C3-TYPE (lettering cannot break)**: the two band arcs ("GO FUCK YOURSELF",
+  "McCALL · IDAHO") are converted to **outlined SVG paths traced from the same face the
+  approved render resolved** (macOS Futura bold as rendered in the artifact; the build
+  measures which face Chrome resolved before tracing) — zero font dependency for band
+  lettering; visitors on any OS see what Riley approved. The ribbon line is NOT outlined on
+  the site — it is the live element per C3-EST (outlined "EST. 2019" exists only in the
+  standalone asset). Fidelity check = side-by-side S11 review of the built hero against
+  `crest-v3-approved.png` at 330px and 120px.
+- **C3-EST (sheet-driven year survives)**: the ribbon keeps a LIVE `<text id="crestEst">`
+  (Jost, already site-loaded; pine fill, letterspaced caps) carrying "EST. 2019" as the static
+  default, overwritten by Info `est_year` exactly as today (`index.html` est_year hook
+  unchanged). This is the only `<text>` element in the hero crest.
+- **C3-A11Y**: `role="img"` retained; aria-label updated to describe the scene ("GFY crest: a
+  raised middle finger over a mountain lake at night, flanked by pines").
+- **C3-ASSETS (hat-ready)**: commit `assets/gfy-crest.svg` — fully self-contained standalone
+  (hex colors hardcoded, all lettering outlined INCLUDING a static "EST. 2019", no CSS vars,
+  no cross-document `<use>`) — plus `assets/gfy-crest-2048.png` rendered from it. These are
+  the files a patch/hat vendor receives.
+- **C3-SCOPE-OUT**: the old flanking pine-bough stroke groups die with the replaced hero
+  block; nothing else changes — nav, footer, favicon, site palette, all other views untouched.
+- **C3-TESTS**: full suite green at current baseline before commit; new smoke assertions:
+  (a) hero crest svg contains exactly one `<text>` and its id is `crestEst` (outline
+  enforcement), (b) the MARK_PATH string occurs exactly once in `index.html`, (c) `#crestEst`
+  still receives `est_year` from a fixture with a non-2019 year.
+- **Residual (surfaced, Riley's call later, non-blocking)**: outlined letterforms traced from
+  a licensed system font are standard logo practice (outlines, not font embedding), but if GFY
+  merch ever goes beyond personal hats and Riley wants zero font-license thought, the band
+  lettering can be re-outlined from an OFL face (e.g. Oswald SemiBold) in one commit without
+  touching anything else.
+- Rollback: `git revert` of the crest commit(s) on `v2.1-invites`; prod gate unchanged (Riley
+  push).
