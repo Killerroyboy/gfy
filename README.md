@@ -219,8 +219,7 @@ Set it up once before the event:
    - **Round** (dropdown, menu items: `1`, `2`)
    - **Hole** (dropdown, menu items: `1`, `2`, `3`, …, `18`)
    - **Team score** (Number, validation: "Between 1 and 19")
-2. **Link responses**: In the form settings, click **Responses** → link to the
-   GFY spreadsheet (pick the sheet from the dropdown).
+2. **Link responses**: In the form settings, click **Responses** → link responses to the GFY spreadsheet (Responses → Link to Sheets → Select existing spreadsheet → pick the GFY sheet file).
 3. **Paste the triggers**: Extensions → Apps Script (on the LIVE sheet) →
    copy `tools/sheet-triggers.gs` from the repo and paste it into the script
    editor (same project as the polish script is fine). Save, then run `setup()`
@@ -243,8 +242,7 @@ the team by name, case-insensitive) and marks the response row with a status:
 - **rejected: busy — resubmit** — a submission collided with another (both
   sent at the exact same moment). Resubmit; the document lock ensures they
   serialize.
-- **rejected: internal error** — check the sheet's time zone and the form's
-  target spreadsheet link, then re-run `setup()`.
+- **rejected: internal error** — usually means a tab was renamed or is missing (the writer needs Scores, Field, and Info with their standard headers) — check those, and see Extensions → Apps Script → Executions for the exact error.
 
 The responses sheet (auto-created by Google Forms) has a `status` column
 added by the trigger — open it to audit which submissions applied and which
@@ -284,6 +282,8 @@ whenever someone pays — you don't wait for the season to turn over:
 1. Add a row with **next year** in the `year` column and the payer's name.
 2. Tick their `deposit` checkbox.
 3. Type the date it landed into `paid_date`.
+
+(Once the triggers are installed, ticking the deposit checkbox stamps paid_date automatically — type it by hand only to backdate.)
 
 That's it — no other columns need filling in yet. The site builds the paid
 list ordered by `paid_date`, earliest first (this is also the room-
