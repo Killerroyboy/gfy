@@ -26,21 +26,23 @@ function onScoreFormSubmit(e){
   try { lock.waitLock(10000); }
   catch(_) { markResponse_(e, "rejected: busy — resubmit"); return; }
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const ans = namedAnswers_(e);                            // {team, round, hole, score} by header prefix
-    const roster = rosterTeams_(ss);                         // Map NORM(team) -> canonical casing
-    const team = roster.get(NORM(ans.team));
-    const round = String(parseInt(ans.round, 10));
-    const hole = parseInt(ans.hole, 10);
-    const score = parseInt(ans.score, 10);
-    if (!team){ markResponse_(e, "rejected: team not in roster"); return; }
-    if (!(round === "1" || round === "2")){ markResponse_(e, "rejected: invalid round"); return; }
-    if (!(hole >= 1 && hole <= 18)){ markResponse_(e, "rejected: invalid hole"); return; }
-    if (!(score >= 1 && score <= 19)){ markResponse_(e, "rejected: invalid score"); return; }
-    const year = firstTeeYear_(ss);                          // F-YEAR: the form serves the current event only
-    if (!year){ markResponse_(e, "rejected: Info first_tee unreadable — check sheet setup"); return; }
-    writeScore_(ss, year, team, round, hole, score);
-    markResponse_(e, "applied");
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const ans = namedAnswers_(e);                            // {team, round, hole, score} by header prefix
+      const roster = rosterTeams_(ss);                         // Map NORM(team) -> canonical casing
+      const team = roster.get(NORM(ans.team));
+      const round = String(parseInt(ans.round, 10));
+      const hole = parseInt(ans.hole, 10);
+      const score = parseInt(ans.score, 10);
+      if (!team){ markResponse_(e, "rejected: team not in roster"); return; }
+      if (!(round === "1" || round === "2")){ markResponse_(e, "rejected: invalid round"); return; }
+      if (!(hole >= 1 && hole <= 18)){ markResponse_(e, "rejected: invalid hole"); return; }
+      if (!(score >= 1 && score <= 19)){ markResponse_(e, "rejected: invalid score"); return; }
+      const year = firstTeeYear_(ss);                          // F-YEAR: the form serves the current event only
+      if (!year){ markResponse_(e, "rejected: Info first_tee unreadable — check sheet setup"); return; }
+      writeScore_(ss, year, team, round, hole, score);
+      markResponse_(e, "applied");
+    } catch(err) { markResponse_(e, "rejected: internal error — " + String(err).slice(0, 80)); }
   } finally { lock.releaseLock(); }
 }
 function namedAnswers_(e){
