@@ -2175,15 +2175,23 @@ dom.window.close();
     (domX4.window.document.querySelectorAll("#scPicker .sc-pick") || []).length >= 2, "");
   domX4.window.close();
 
-  // X5: SC-YEAR — scorer season comes from first_tee, not Scores max-year.
-  // Variant: Scores holds a rogue 2031 row; scorer must still resolve 2026 teams.
-  const rogue = FIXTURES.scores + "2031,Ghost,1,4,,,,,,,,,,,,,,,,,\n";
-  const domX5 = makeDom("#score?team=Duck", withOverride({
-    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => rogue }),
+  // X5: SC-YEAR — scorer season must come from Info first_tee, NOT activeSeason()
+  // (Scores-derived). Discriminating variant (review round 1): bump first_tee to 2027
+  // and give Field a 2027-only team (Walrus, absent from 2026) — but leave Scores
+  // untouched so activeSeason() still resolves 2026 on its own Scores-derived logic.
+  // A scorerSeason() that mistakenly delegated to activeSeason() would look for
+  // "Walrus" in the 2026 Field set, not find it, and fall through to the picker —
+  // so this variant actually proves SC-YEAR, unlike the prior rogue-Scores-row one.
+  const infoX5 = FIXTURES.info.replace("2026-08-15T09:00:00-06:00", "2027-08-15T09:00:00-06:00");
+  const fieldX5 = FIXTURES.field + "2027,Walrus,Walrus,2027,10,In,TRUE,\n";
+  const domX5 = makeDom("#score?team=Walrus", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX5 }),
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldX5 }),
   }));
-  await until(() => /Duck/.test(domX5.window.document.querySelector("#scConfirm")?.textContent || ""));
-  check("X5: SC-YEAR — first_tee season pins team matching despite rogue Scores year",
-    /Duck/.test(domX5.window.document.querySelector("#scConfirm")?.textContent || ""), "");
+  await until(() => /Walrus/.test(domX5.window.document.querySelector("#scConfirm")?.textContent || ""));
+  const pickerHiddenX5 = domX5.window.document.querySelector("#scPicker")?.hidden === true;
+  check("X5: SC-YEAR — scorer matches teams from the first_tee season even when activeSeason() (Scores-derived) is a different year",
+    /Walrus/.test(domX5.window.document.querySelector("#scConfirm")?.textContent || "") && pickerHiddenX5, "");
   domX5.window.close();
 
   // X6: nav has NO score link (link-only view)
