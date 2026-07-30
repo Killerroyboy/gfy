@@ -458,6 +458,9 @@
     border:1px solid rgba(200,162,74,.3);color:var(--bone)}
   .sc-pad-replace{display:block;width:100%;font-size:15px;padding:12px;margin:0 0 10px;
     background:var(--brass);color:var(--pine);border:0;cursor:pointer;font-family:var(--ui)}
+  /* Review round 2 — conflict-pad exits disabled while a send is in flight. */
+  .sc-pad-replace[disabled]{background:var(--pine-2);color:var(--sage);cursor:default;
+    border:1px solid rgba(200,162,74,.22)}
   .sc-pad-close{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);
     background:none;border:1px solid rgba(200,162,74,.22);padding:6px 12px;cursor:pointer}
   /* Task 5 — conflict (SC-NOCLOBBER) + rejected-verdict pad content. */
@@ -3275,9 +3278,19 @@ async function scDrain(){
       const root=scJournalRead(key);
       const queued=Object.keys(root.entries).map(k=>root.entries[k])
         .filter(e=>e.state==="queued").sort((a,b)=>a.seq-b.seq);
-      let candidate=null;
-      for(const e of queued){ if(!scEntryHeld(e)){ candidate=e; break; } }
-      if(!candidate) break; // nothing eligible — done, or everything left is HELD
+      let candidate=null, heldFound=false;
+      for(const e of queued){ if(!scEntryHeld(e)){ candidate=e; break; } else { heldFound=true; } }
+      if(!candidate){
+        // Review round 2 (finding #2): a hold discovered THIS pass (e.g. a
+        // fresh sheet value just made a previously-plain entry into a
+        // conflict) must repaint immediately — otherwise the card keeps
+        // showing whatever it last rendered (typically "queued") until
+        // some UNRELATED interaction happens to call renderScCard() next.
+        // No repaint needed when there was simply nothing queued at all —
+        // nothing NEW to show.
+        if(heldFound) renderScCard();
+        break;
+      }
       const entryKey=scEntryKeyOf(candidate.round,candidate.hole);
       const seq=candidate.seq;
       scStore(key,r=>{ const e=r.entries[entryKey]; if(e&&e.seq===seq) e.state="sending"; });
@@ -3347,8 +3360,14 @@ function scPadForceSend(hole){
   const key=scCurrentJournalKey();
   if(!key) return;
   const round=scActiveRound();
+  const entryKey=scEntryKeyOf(round,hole);
+  // Review round 2 (NEW CRITICAL): defense in depth alongside the pad's
+  // own `disabled` rendering — never re-arm/re-trigger a send for an entry
+  // that's ALREADY in flight, regardless of how the click reached here.
+  const existing=scJournalRead(key).entries[entryKey];
+  if(existing&&existing.state==="sending") return;
   scStore(key,root=>{
-    const e=root.entries[scEntryKeyOf(round,hole)];
+    const e=root.entries[entryKey];
     if(e) e.override=true;
   });
   STATE.scPadHole=null;
@@ -3576,7 +3595,23 @@ function scPadHTML(){
   //   3. "Send N anyway" — the one explicit override past the hold
   //      (scPadForceSend), for a conflict discovered with no replace flow
   //      at all (drain-time discovery — X20/I4).
+  // Review round 2 (NEW CRITICAL): force-send can be in flight for up to
+  // C2's 12s deadline. Nothing previously disabled "Keep the sheet's N"
+  // during that window — reopening the pad mid-flight and tapping it would
+  // unconditionally delete the journal entry while the SAME entry's POST
+  // was still travelling, so an "ok" response could land on the server
+  // AFTER the captain explicitly discarded it: the sheet-of-record ends up
+  // holding the value the captain just said to throw away, silently. Both
+  // exits that could race an in-flight send (Keep-the-sheet, Force-send —
+  // a second force-send tap while one is already in flight is equally
+  // redundant/hazardous) render disabled with "sending — wait" while
+  // cellState.entry.state==="sending". The number grid/Other stay ACTIVE:
+  // a fresh pick coalesces to a brand-new seq (scJournalSave always
+  // replaces), and the drain's existing stale-seq guard silently drops the
+  // in-flight response for the superseded seq when it eventually lands —
+  // no race there, that mechanism already existed (X18).
   if(cellState.kind==="conflict"){
+    const sendingC=cellState.entry&&cellState.entry.state==="sending";
     const numsHTML=scPadNumbers(hole).map(n=>
       `<button type="button" class="sc-num" data-score="${n.score}"><b>${n.score}</b>`+
       (n.label?`<span class="sc-num-lab">${esc(n.label)}</span>`:"")+`</button>`
@@ -3588,12 +3623,18 @@ function scPadHTML(){
         ? `<input type="number" min="1" max="19" id="scPadOtherInput" value="${otherVal}"><button type="button" id="scPadOtherSend">Send</button>`
         : "")+
       `</div>`;
+    const keepSheetHTML=sendingC
+      ? `<button type="button" id="scPadKeepSheet" class="sc-pad-replace" disabled>sending — wait</button>`
+      : `<button type="button" id="scPadKeepSheet" class="sc-pad-replace">Keep the sheet's ${cellState.sheetVal}</button>`;
+    const forceSendHTML=sendingC
+      ? `<button type="button" id="scPadForceSend" class="sc-pad-replace" disabled>sending — wait</button>`
+      : `<button type="button" id="scPadForceSend" class="sc-pad-replace">Send ${cellState.phoneVal} anyway</button>`;
     return `<div id="scPad">`+headHTML+
       `<p class="sc-pad-conflict">Sheet has ${cellState.sheetVal} · your phone has ${cellState.phoneVal}</p>`+
       `<div class="sc-pad-nums">${numsHTML}</div>`+
       otherHTML+
-      `<button type="button" id="scPadKeepSheet" class="sc-pad-replace">Keep the sheet's ${cellState.sheetVal}</button>`+
-      `<button type="button" id="scPadForceSend" class="sc-pad-replace">Send ${cellState.phoneVal} anyway</button>`+
+      keepSheetHTML+
+      forceSendHTML+
       `<button type="button" class="sc-pad-close">Close</button>`+
       `</div>`;
   }
@@ -3696,7 +3737,19 @@ function scPadKeepSheet(hole){
   const key=scCurrentJournalKey();
   if(!key) return;
   const round=scActiveRound();
-  scStore(key,root=>{ delete root.entries[scEntryKeyOf(round,hole)]; });
+  const entryKey=scEntryKeyOf(round,hole);
+  // Review round 2 (NEW CRITICAL): the race the reviewer reproduced —
+  // force-send in flight (up to C2's 12s deadline), captain reopens the
+  // pad, taps Keep-the-sheet, an unconditional delete here would let the
+  // in-flight POST land "ok" on the server AFTER the entry it belongs to
+  // was already discarded locally: the sheet-of-record ends up holding the
+  // exact value the captain just said to throw away, with the phone
+  // showing something else and no error anywhere. Defense in depth
+  // alongside the pad's own `disabled` rendering — never delete an entry
+  // that's currently in flight, regardless of how the click reached here.
+  const existing=scJournalRead(key).entries[entryKey];
+  if(existing&&existing.state==="sending") return;
+  scStore(key,root=>{ delete root.entries[entryKey]; });
   STATE.scPadHole=null;
   renderScCard();
 }

@@ -2375,11 +2375,51 @@ async function openScorer(dom) {
   domX12.window.renderScCard(); // simulate the periodic-refresh's unconditional rebuild
   const otherSurvivedX12 = docX12.querySelector("#scPadOtherInput")?.value === "13";
 
-  check("X12: edit mode — re-tapping a filled cell shows 'currently N'; picking M arms 'Replace N with M' (no immediate send); an in-progress 'Other' entry survives a forced renderScCard() rebuild (periodic-refresh regression)",
-    currentOkX12 && replaceOkX12 && otherSurvivedX12,
-    "currentOk=" + currentOkX12 + " replaceOk=" + replaceOkX12 + " otherSurvived=" + otherSurvivedX12 + " text=" +
-      (docX12.querySelector("#scPad")?.textContent || "").slice(0, 160));
   domX12.window.close();
+
+  // Review round 2 (finding #3, CONFIRMED GAP): I2's auto-override-through-
+  // replace-confirm path (scSubmitScore's overrideSheet check, Task 5 fix
+  // round 1) had ZERO committed coverage — a mutation forcing
+  // overrideSheet to false slipped through 182/182 undetected (reviewer-
+  // proven). Folded in here, same edit-mode/Replace theme as the rest of
+  // X12: stub the sheet to a DIFFERING value for hole 7 (par 3, sheet
+  // already says 3), tap the cell — this opens in edit mode against the
+  // SHEET's value (not a plain fresh pad, since scCellState's "sheet" kind
+  // behaves like an existing score for pad purposes) — pick a new number,
+  // confirm via the SAME single Replace control used everywhere else in
+  // this suite (no second confirm, no force-send tap anywhere), and assert
+  // the POST actually reaches the network while the hole was genuinely
+  // sheet-differing the whole time.
+  const epUrlX12b = "https://script.example/exec";
+  const bodiesX12b = [];
+  const fetchX12b = (url, opts) => {
+    if (String(url).indexOf(epUrlX12b) === 0) {
+      bodiesX12b.push(JSON.parse(opts.body));
+      return Promise.resolve({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 1, holes: {} }) });
+    }
+    return withScEndpoint()(url);
+  };
+  const domX12b = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX12b);
+  const docX12b = await openScorer(domX12b);
+  domX12b.window.scSheetHoles = () => ({ 7: 3 }); // hole 7, par 3 — sheet already shows 3
+  docX12b.querySelector('.sc-cell[data-hole="7"]').click();
+  await until(() => /currently 3/.test(docX12b.querySelector("#scPad")?.textContent || ""));
+  const editModeFromSheetX12b = /currently 3/.test(docX12b.querySelector("#scPad")?.textContent || "");
+  docX12b.querySelector('#scPad .sc-num[data-score="5"]').click(); // par 3, delta +2 ("+2" label) — a valid preset
+  await until(() => /Replace 3 with 5/.test(docX12b.querySelector("#scPad")?.textContent || ""));
+  docX12b.querySelector("#scPadReplace").click(); // the ONE confirm — I2: carries override through, no second tap anywhere
+  await until(() => bodiesX12b.some(b => b.hole === 7));
+  await settle(150);
+  const overrideSentX12b = bodiesX12b.length === 1 && bodiesX12b[0].hole === 7 && bodiesX12b[0].score === 5;
+  domX12b.window.close();
+
+  check("X12: edit mode — re-tapping a filled cell shows 'currently N'; picking M arms 'Replace N with M' (no immediate send); an in-progress 'Other' entry survives a forced renderScCard() rebuild (periodic-refresh regression); replace-confirming an ALREADY-KNOWN differing sheet value (I2) sends via the SAME single confirm, no second tap anywhere",
+    currentOkX12 && replaceOkX12 && otherSurvivedX12 && editModeFromSheetX12b && overrideSentX12b,
+    "currentOk=" + currentOkX12 + " replaceOk=" + replaceOkX12 + " otherSurvived=" + otherSurvivedX12 +
+      " editModeFromSheet=" + editModeFromSheetX12b + " overrideSent=" + overrideSentX12b +
+      " bodiesX12b=" + JSON.stringify(bodiesX12b) + " text=" +
+      (docX12.querySelector("#scPad")?.textContent || "").slice(0, 160));
 }
 
 /* ---------------------------------------------------------------------
@@ -2786,15 +2826,30 @@ async function cellSettledOk(doc, hole) {
   // fresh tap, no edit flow at all), and ONLY AFTER that save does the
   // sheet value (4) become known — exactly the scenario the separate
   // scPadForceSend override still exists for.
+  //
+  // Review round 2 (finding #2): the ORIGINAL cellTextX20 assertion
+  // matched the WHOLE cell's textContent, which also contains the
+  // hole-NUMBER span ("14") — a "4" appears there regardless of any real
+  // conflict, so `/4/.test(cellTextX20)` was a false positive that never
+  // actually proved the sheet value rendered. Fixed to read the score <b>
+  // span specifically ("6·4", not "6⇡14"). The conflict marker is now also
+  // asserted with NO intervening tap (fix #2a made scDrain's hold-discovery
+  // exit repaint immediately, so this needs no reopen-pad click to appear).
   const pastTeeX20 = new Date(Date.now() - 2 * 86400000).toISOString();
   const infoX20 = FIXTURES.info.replace(/^first_tee,.*$/m, "first_tee," + pastTeeX20) +
     "score_endpoint," + epUrl + "\n";
   const bodiesX20 = [];
+  // Review round 2 (NEW CRITICAL, finding #1): the force-send request's
+  // resolution is held open under test control (deliverForceSendX20) so
+  // the mid-flight race window (up to C2's real 12s deadline in
+  // production) can be exercised deterministically and fast here.
+  let deliverForceSendX20;
+  const forceSendGateX20 = new Promise(resolve => { deliverForceSendX20 = resolve; });
   const fetchX20 = (url, opts) => {
     if (String(url).indexOf(epUrl) === 0) {
       bodiesX20.push(JSON.parse(opts.body));
-      return Promise.resolve({ ok: true, status: 200,
-        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: {} }) });
+      return forceSendGateX20.then(() => ({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: {} }) }));
     }
     return withOverride({ info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX20 }) })(url);
   };
@@ -2814,17 +2869,22 @@ async function cellSettledOk(doc, hole) {
   // the very FIRST drain attempt already sees the conflict — never a race
   // where an unheld send could slip out before the stub lands.
   domX20.window.scSheetHoles = () => ({ 14: 4 });
+  // NO intervening tap between here and the assertions below — fix #2a
+  // (scDrain's hold-discovery repaint) must be what paints "conflict".
   await until(() => docX20.querySelector('.sc-cell[data-hole="14"]')?.classList.contains("sc-conflict"));
   await settle(300); // give the auto-drain every chance to (wrongly) fire before asserting it didn't
   const cellX20 = docX20.querySelector('.sc-cell[data-hole="14"]');
-  const cellTextX20 = cellX20?.textContent || "";
-  const noPostYetX20 = !bodiesX20.some(b => b.hole === 14);
+  const cellConflictClassX20 = !!cellX20 && cellX20.classList.contains("sc-conflict");
+  const cellGlyphX20 = (cellX20?.querySelector(".sc-state-glyph")?.textContent || "") === "?";
+  const scoreSpanX20 = cellX20?.querySelector("b")?.textContent || "";
+  const scoreSpanOkX20 = scoreSpanX20 === "6·4";
+  const noPostYetX20 = bodiesX20.length === 0;
 
   // Read the held entry's seq directly from the journal (scKey/nkey are
   // `const`-bound and never become window properties — scJournalRead,
   // scEntryKeyOf, scorerSeason, scActiveRound are all plain top-level
   // `function` declarations, which DO, so this is the legitimate route).
-  const seasonX20 = docX20 && domX20.window.scorerSeason();
+  const seasonX20 = domX20.window.scorerSeason();
   const roundActiveX20 = domX20.window.scActiveRound();
   const journalKeyX20 = "gfy-scorer:" + seasonX20 + ":duck"; // nkey("Duck") === "duck", established elsewhere
   const entryKeyX20 = domX20.window.scEntryKeyOf(roundActiveX20, 14);
@@ -2836,26 +2896,50 @@ async function cellSettledOk(doc, hole) {
   const padTextX20 = docX20.querySelector("#scPad")?.textContent || "";
   const padHasNumsX20 = !!docX20.querySelector("#scPad .sc-num[data-score]");
   const padHasKeepSheetX20 = !!docX20.querySelector("#scPad #scPadKeepSheet");
+  const keepSheetEnabledBeforeX20 = docX20.querySelector("#scPad #scPadKeepSheet")?.disabled !== true;
 
-  // I4: force-send liveness — click it, and the captured send must be
-  // EXACTLY [14], carrying the SAME seq the held entry already had (proof
-  // this is a resend of the existing entry, not a freshly-minted one).
+  // I4 + NEW CRITICAL fix (round 2): click force-send — the request goes
+  // out (captured) but stays UNRESOLVED (forceSendGateX20). Reopen the pad
+  // MID-FLIGHT: "Keep the sheet's N" must render disabled. Attempt the
+  // race anyway (click it) — it must be a no-op: the held entry must still
+  // exist in the journal, untouched, while the send is still in flight.
   docX20.querySelector("#scPadForceSend").click();
-  await until(() => bodiesX20.some(b => b.hole === 14));
+  await until(() => bodiesX20.some(b => b.hole === 14)); // request captured...
+  await until(() => docX20.querySelector('.sc-cell[data-hole="14"]')?.classList.contains("sc-sending")); // ...state flips synchronously, before the await
+  docX20.querySelector('.sc-cell[data-hole="14"]').click(); // reopen mid-flight
+  await until(() => !!docX20.querySelector("#scPad #scPadKeepSheet"));
+  const keepSheetDisabledMidFlightX20 = docX20.querySelector("#scPad #scPadKeepSheet")?.disabled === true;
+  const forceSendDisabledMidFlightX20 = docX20.querySelector("#scPad #scPadForceSend")?.disabled === true;
+  docX20.querySelector("#scPad #scPadKeepSheet")?.click(); // the race — must no-op (disabled attr AND function-level guard)
+  await settle(150);
+  const entrySurvivedRaceX20 = !!domX20.window.scJournalRead(journalKeyX20).entries[entryKeyX20];
+
+  // Now let the send actually resolve and settle to completion.
+  deliverForceSendX20();
+  await until(() => {
+    const c = docX20.querySelector('.sc-cell[data-hole="14"]');
+    return !!c && !c.classList.contains("sc-sending");
+  });
   await settle(200); // let scDrain's own async continuation (post-await renderScCard + loop) fully finish before tearing the window down
   const sentHolesX20 = bodiesX20.map(b => b.hole);
   const forceSendBodyX20 = bodiesX20.find(b => b.hole === 14);
   domX20.window.close();
 
-  check("X20: SC-NOCLOBBER — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict (contains both numbers); pad(14) opens in replace-confirm naming both (C3 layout: numbers + Keep-the-sheet + Force-send); force-send (I4) carries the SAME seq the held entry already had",
-    roundOkX20 && noPostYetX20 && /6/.test(cellTextX20) && /4/.test(cellTextX20) &&
+  check("X20: SC-NOCLOBBER — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict IMMEDIATELY with no intervening tap (score span '6·4', .sc-conflict class, ? glyph); pad(14) opens in replace-confirm naming both (C3 layout: numbers + Keep-the-sheet + Force-send); Keep-the-sheet/Force-send disable mid-flight and a race-click while sending never deletes the entry; force-send (I4) carries the SAME seq the held entry already had",
+    roundOkX20 && noPostYetX20 && cellConflictClassX20 && cellGlyphX20 && scoreSpanOkX20 &&
       /6/.test(padTextX20) && /4/.test(padTextX20) && /anyway/i.test(padTextX20) &&
-      padHasNumsX20 && padHasKeepSheetX20 &&
+      padHasNumsX20 && padHasKeepSheetX20 && keepSheetEnabledBeforeX20 &&
+      keepSheetDisabledMidFlightX20 && forceSendDisabledMidFlightX20 && entrySurvivedRaceX20 &&
       JSON.stringify(sentHolesX20) === JSON.stringify([14]) &&
       !!forceSendBodyX20 && forceSendBodyX20.score === 6 && forceSendBodyX20.seq === heldSeqX20 &&
       typeof heldSeqX20 === "number",
-    "roundOk=" + roundOkX20 + " noPostYet=" + noPostYetX20 + " cellText=" + cellTextX20 +
+    "roundOk=" + roundOkX20 + " noPostYet=" + noPostYetX20 + " cellConflictClass=" + cellConflictClassX20 +
+      " cellGlyph=" + cellGlyphX20 + " scoreSpan=" + scoreSpanX20 +
       " padHasNums=" + padHasNumsX20 + " padHasKeepSheet=" + padHasKeepSheetX20 +
+      " keepSheetEnabledBefore=" + keepSheetEnabledBeforeX20 +
+      " keepSheetDisabledMidFlight=" + keepSheetDisabledMidFlightX20 +
+      " forceSendDisabledMidFlight=" + forceSendDisabledMidFlightX20 +
+      " entrySurvivedRace=" + entrySurvivedRaceX20 +
       " sentHoles=" + JSON.stringify(sentHolesX20) + " heldSeq=" + heldSeqX20 +
       " forceSendBody=" + JSON.stringify(forceSendBodyX20) + " padText=" + padTextX20.slice(0, 200));
 }
