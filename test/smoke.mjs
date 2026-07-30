@@ -2111,6 +2111,15 @@ dom.window.close();
   check("Y3: crest v3 — #crestEst renders sheet est_year (variant 1987)",
     estY3 === "EST. 1987", "got=" + estY3);
   domY3.window.close();
+
+  // Y4: the standalone asset's fist must equal MARK_PATH (S8 parity — the
+  // asset is a copy by necessity; this is the lockstep gate).
+  let assetSvg = "";
+  try { assetSvg = readFileSync(path.join(ROOT, "assets", "gfy-crest.svg"), "utf8"); } catch {}
+  const markConst = (html.match(/const MARK_PATH="([^"]+)"/) || [])[1] || "";
+  check("Y4: crest v3 — assets/gfy-crest.svg fist d === MARK_PATH (asset parity)",
+    !!assetSvg && !!markConst && assetSvg.includes('d="' + markConst + '"'),
+    assetSvg ? "fist d mismatch" : "asset file missing");
 }
 
 /* ---------------------------------------------------------------------
