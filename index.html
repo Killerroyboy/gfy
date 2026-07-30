@@ -609,7 +609,6 @@
     <div class="hero-actions rise d4">
       <button class="btn" id="icsBtn" type="button">Add to calendar</button>
       <button class="btn" id="installBtn" type="button" hidden>Install app</button>
-      <a class="btn" id="sheetBtn" href="#" target="_blank" rel="noopener" hidden>Enter scores</a>
     </div>
 
     <div id="homeStatus"></div>
@@ -2724,7 +2723,6 @@ $("#installBtn").addEventListener("click",async()=>{
   deferredPrompt=null; $("#installBtn").hidden=true;
 });
 
-if(CONFIG.SHEET_EDIT_URL){ const b=$("#sheetBtn"); b.href=CONFIG.SHEET_EDIT_URL; b.hidden=false; }
 if(CONFIG.DRIVE_FOLDER_ID){
   $("#photoFrame").innerHTML=`<iframe title="GFY photo album" loading="lazy" src="https://drive.google.com/embeddedfolderview?id=${CONFIG.DRIVE_FOLDER_ID}#grid"></iframe>`;
   const d=$("#driveBtn");

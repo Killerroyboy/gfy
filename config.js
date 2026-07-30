@@ -34,10 +34,13 @@ window.CONFIG = {
     rooms: "85901482"
   },
 
-  // The normal EDITING url of the sheet — powers the "Enter scores" button
-  // in the hero. Leave "" to hide the button.
-  // Example: SHEET_EDIT_URL: "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKl/edit",
-  SHEET_EDIT_URL: "https://docs.google.com/spreadsheets/d/16Co2b3_uaBhg1tzFw56aGJVsicgPx_xeQr_mCgHPNBw/edit",
+  // RETIRED (v2.6): the public "Enter scores" button that used to open this
+  // URL is gone — scoring now runs through the live scorer / scoring form
+  // instead (see README's "Live scoring" section; Info tab keys
+  // score_endpoint + form_url). Key kept here at "" only in case other
+  // tooling still reads it as optional — nothing in the site consumes it
+  // anymore, so there is no button to repopulate it for.
+  SHEET_EDIT_URL: "",
 
   // Google Drive photo folder id — the token after "/folders/" in the
   // folder's URL. The folder must be shared "Anyone with the link: Viewer"

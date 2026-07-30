@@ -120,12 +120,23 @@ function buildStartHere_(ss){
   let sh = ss.getSheetByName(name); if (!sh) sh = ss.insertSheet(name, 0);
   const existing = sh.getLastRow() > 0 && sh.getLastColumn() > 0
     ? sh.getDataRange().getValues() : [];
-  const urlRowExisting = existing.find(r => String(r[0]).indexOf("Scoring form URL") === 0);
-  const keep = urlRowExisting ? urlRowExisting[1] : "";        // preserve Riley's pasted form URL, content-anchored not coordinate-anchored (E-IDEM)
+  // CONFIG-HOME MIGRATION: the old "Scoring form URL (paste once)" cell is
+  // retired — score_endpoint/form_url now live on the Info tab. Never
+  // silently drop a value someone already pasted here (E-IDEM): an
+  // old-style row (from a polish() run before this migration) hands its
+  // value forward into the new migrated slot below; once migrated, every
+  // later run keeps carrying forward whatever sits in that slot, content-
+  // anchored not coordinate-anchored, exactly like the old preserve did.
+  const oldStyleRow = existing.find(r => String(r[0]).indexOf("Scoring form URL") === 0);
+  const movedLabelIdx = existing.findIndex(r => String(r[0]).indexOf("Scoring config moved") === 0);
+  const movedValueRow = movedLabelIdx >= 0 ? existing[movedLabelIdx + 1] : null;
+  const keep = oldStyleRow ? oldStyleRow[1] : (movedValueRow ? movedValueRow[1] : "");
   sh.clear();
   const url = ss.getUrl();                                    // runtime — no ids in source (F-START-LINKS)
   const link = tab => { const s = ss.getSheetByName(tab); return s ? `=HYPERLINK("${url}#gid=${s.getSheetId()}","${tab}")` : tab; };
   const eventWindow = inEventWindow_(ss);
+  const roster = startHereRoster_(ss);                        // current season's team labels, F-START-LINKS
+  const captainUrl_ = team => "https://killerroyboy.github.io/gfy/#score?team=" + encodeURIComponent(team);
   const rows = [
     ["GFY — START HERE", ""],
     ["", ""],
@@ -134,20 +145,58 @@ function buildStartHere_(ss){
       ? [["Scores land via the scoring form (link below)", ""], ["Watch the board", link("Scores")]]
       : [["Collections: tick deposits on", link("Field")], ["Invites: tick invited/responded on", link("Invites")], ["Rooms:", link("Rooms")]]),
     ["", ""],
-    ["Scoring form URL (paste once):", ""],
+    ["Scoring config moved → Info tab (score_endpoint + form_url)" + (keep ? " — old value preserved below, copy it to Info!" : ""), ""],
+    ["", keep],
     ["", ""],
     ["COLOR LEGEND", ""],
     ["Red row = deposit unpaid", ""], ["Gold tint = rookie (since == this season)", ""], ["Orange tint = Rooms name not on Field", ""],
-    ["Names: FIRST + LAST on Field / Invites / Rooms (and the vault), spelled identically everywhere. Short team labels are fine on Scores / Pairings.", ""],
+    ["Names: FIRST + LAST on Field / Invites / Rooms (and the vault), spelled identically everywhere.", ""],
+    ["", ""],
+    ["CAPTAIN SCORING LINKS — one per team, share directly:", ""],
+    ...roster.map(team => [team, `=HYPERLINK("${captainUrl_(team)}","${captainUrl_(team)}")`]),
+    ["", ""],
+    ["FORM TEAM DROPDOWN — paste exactly this list (select column A rows below, copy, paste into the Form's Team option field):", ""],
+    ...roster.map(team => [team, ""]),
+    ["", ""],
+    ["Team names freeze once links go out; a rename must also be applied to Scores.", ""],
     ["", ""],
     ["Before ANY email send round: npm run presend (see repo README)", ""],
     ["Polish/repair the sheet: Extensions → Apps Script → run polish()", ""],
   ];
   sh.getRange(1, 1, rows.length, 2).setValues(rows);
-  const urlRow = rows.findIndex(r => String(r[0]).indexOf("Scoring form URL") === 0) + 1;
-  if (keep && urlRow) sh.getRange(urlRow, 2).setValue(keep);  // restore the form URL after rebuild, content-anchored
   sh.setColumnWidth(1, 340); sh.getRange("A1").setFontSize(14).setFontWeight("bold");
   orderTabs_(ss, eventWindow);
+}
+function startHereYear_(ss){
+  const info = ss.getSheetByName("Info"); if (!info) return null;
+  for (const r of info.getDataRange().getValues()){
+    if (String(r[0]).trim().toLowerCase() === "first_tee"){
+      const v = r[1]; const y = v instanceof Date ? v.getFullYear() : parseInt(String(v).slice(0, 4), 10);
+      return (y > 2000 && y < 2100) ? y : null;
+    }
+  }
+  return null;
+}
+function startHereRoster_(ss){
+  // Self-contained on purpose — does NOT call tools/sheet-triggers.gs's
+  // rosterTeams_. polish() must work whether or not that file has been
+  // pasted into this Apps Script project yet (README has admins run polish()
+  // well before the live-scoring triggers setup). Same semantics: Field's
+  // team column, deduped by normalized text, scoped to the current
+  // first_tee year when Field has a year column.
+  const sh = ss.getSheetByName("Field"); if (!sh) return [];
+  const tCol = headerIndex_(sh, "team"); if (!tCol) return [];
+  const yCol = headerIndex_(sh, "year");
+  const year = startHereYear_(ss);
+  const vals = sh.getDataRange().getValues();
+  const seen = new Set(); const out = [];
+  for (let i = 1; i < vals.length; i++){
+    if (yCol && year != null && String(vals[i][yCol - 1]) !== String(year)) continue;
+    const raw = String(vals[i][tCol - 1] || "").trim(); if (!raw) continue;
+    const key = raw.toLowerCase();
+    if (!seen.has(key)){ seen.add(key); out.push(raw); }
+  }
+  return out;
 }
 function inEventWindow_(ss){
   const info = ss.getSheetByName("Info"); if (!info) return false;

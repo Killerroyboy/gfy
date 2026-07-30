@@ -102,8 +102,6 @@ format. Fill in:
 
 - `PUB_ID` — from step 3
 - `GID` — one number per tab, from step 4
-- `SHEET_EDIT_URL` — the normal editing link, so the "Enter scores" button
-  works (share the sheet with the group as editors)
 - `DRIVE_FOLDER_ID` — from step 5, or leave `""`
 
 Easiest way to edit without any tools: open the file on github.com, click
@@ -179,15 +177,6 @@ The Next-Year room queue orders people by `paid_date` (real dates — ISO like
 2026-08-20 preferred). Blank or unparseable dates sort last. Ties on the
 same day keep sheet order.
 
-### Sheet sharing (the "Enter scores" button)
-
-The site's Enter-scores button opens the sheet's edit URL. Today the sheet
-is restricted (anonymous visitors get a login wall — verified). If you ever
-switch sharing to "anyone with the link can edit" so the guys can score
-without Google accounts, know what that trades: the button is on a public
-site, so anyone who finds the page could edit the sheet. Restricted +
-named editors is the safe default.
-
 ### Polish script (run after big sheet edits)
 
 `tools/sheet-polish.gs` → Extensions → Apps Script on the LIVE sheet →
@@ -197,10 +186,22 @@ Course — both one-time, evidence-gated). To verify idempotence after an
 Apps Script edit: run `polish()` twice in a row and confirm no cell value
 changed between runs (File → Version history).
 
-Re-running `polish()` also rebuilds the START HERE tab (preserving the
-form URL pasted in the "Scoring form URL" cell) and reorders the sheet
-tabs by season — during the event week, tabs appear as START HERE, Scores,
-Field, Pairings; off-season shows START HERE, Field, Invites, Rooms.
+Re-running `polish()` also rebuilds the START HERE tab and reorders the
+sheet tabs by season — during the event week, tabs appear as START HERE,
+Scores, Field, Pairings; off-season shows START HERE, Field, Invites, Rooms.
+START HERE's rebuild includes:
+
+- **Captain scoring links** — one row per current-season team (from Field's
+  `team` column), each a ready-to-text link straight to that team's scorer.
+- **Form Team dropdown** — the same team list, one per row, meant to be
+  selected and pasted directly into the Google Form's Team dropdown options.
+- A reminder that **team names freeze once those links go out** — renaming a
+  team after captain links are sent means updating Scores' `team` values to
+  match, or the writer can no longer find that team's rows.
+- If an old sheet still has a value pasted in the retired "Scoring form URL"
+  cell, `polish()` never drops it silently — it carries the value forward
+  under a "old value preserved below, copy it to Info!" label until you
+  move it over yourself (see **Live scoring** below).
 
 Pairings also has an optional `start` column — the hole a group starts on
 for a shotgun round; leave it blank for tee-time rounds and the site
@@ -234,11 +235,34 @@ Set it up once before the event:
    copy `tools/sheet-triggers.gs` from the repo and paste it into the script
    editor (same project as the polish script is fine). Save, then run `setup()`
    from the function dropdown and click **Run**. Authorize when prompted.
-4. **Paste the form URL**: Get the form's shareable link (blue **Send** button
-   in the form editor → copy the short URL). Paste it into the cell to the
-   RIGHT of the "Scoring form URL (paste once):" label (column B) — not over
-   the label itself. (The form URL stays in place when you re-run `polish()`.)
-5. **Check the timezone**: On the LIVE sheet, open **File → Settings** and
+   `setup()` checks the Scores tab's headers first and refuses to install
+   anything (throws, no triggers touched) if it's shaped wrong — a `team`
+   column missing (or a legacy `player` column in its place), or any of
+   `h1`..`h18` missing. Fix the headers and re-run.
+4. **Deploy the Web App**: still in Extensions → Apps Script, **Deploy → New
+   deployment** → gear icon → **Web app** → Execute as **Me**, Who has
+   access **Anyone** → **Deploy** → authorize → copy the **Web app URL**
+   (ends in `/exec`). Full walkthrough + a CORS proof you can run before
+   trusting it: `tools/spike-scorer-cors.md`.
+   **Once this URL has gone out to captains, never redeploy with "New
+   deployment" again** — that mints a different URL and silently orphans
+   every captain link and every `score_endpoint` value already handed out.
+   To ship a `sheet-triggers.gs` code change afterward, use **Manage
+   deployments → edit (pencil) → Version: New version → Deploy** instead —
+   same URL, new code.
+5. **Save the config to the Info tab** (not the old START HERE cell — that
+   one's retired; see the polish note above if you're upgrading a sheet
+   that still has a value pasted there). Add two rows to **Info** (`key` in
+   column A, `value` in column B):
+   - `score_endpoint` → the `/exec` URL from step 4.
+   - `form_url` → the form's shareable link (blue **Send** button in the
+     form editor → copy the short URL). This is the fallback link the site
+     shows before `score_endpoint` is configured, or if a captain prefers
+     the form UI directly.
+
+   Then re-run `polish()` — it rebuilds START HERE's **Captain scoring
+   links** and **Form Team dropdown** blocks from the current Field roster.
+6. **Check the timezone**: On the LIVE sheet, open **File → Settings** and
    confirm the time zone is set to **America/Boise** (used for `paid_date`
    stamps — see **Collecting for next year**, below).
 
@@ -270,7 +294,10 @@ Field.player, Invites.player, Rooms.player (and the vault's Contacts.player)
 carry **first + last name**, spelled identically everywhere — the site matches
 them by exact normalized text, so "Wade B." on Rooms will not match
 "Wade Boggs" on Field. Scores.team and Pairings follow the **team label**
-(the captain's name), not player names — short forms are fine there.
+(the captain's name), not player names. That label freezes once captain
+scoring links go out (START HERE's Captain scoring links block) — renaming
+a team afterward means updating its `team` value on Scores to match, or the
+live-scoring writer can no longer find that team's rows.
 
 ## Year to year
 

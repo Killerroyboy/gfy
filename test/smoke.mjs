@@ -3388,6 +3388,33 @@ async function cellSettledOk(doc, hole) {
       " confirmStillUp=" + confirmStillUpX26b + " pickerStillHidden=" + pickerStillHiddenX26b);
 }
 
+{
+  // X27: SC-PUBBTN — the public "Enter scores" hero button (and its
+  // CONFIG.SHEET_EDIT_URL wiring) are REMOVED, not just hidden. Checks the
+  // rendered DOM (no #sheetBtn node, any dom) AND the raw index.html source
+  // (no lingering "sheetBtn" identifier anywhere — markup or wiring code —
+  // so a hidden/dead remnant can't survive unnoticed).
+  const noBtnInDom = !doc.querySelector("#sheetBtn");
+  const noBtnInSource = !/sheetBtn/.test(html);
+  check("X27: SC-PUBBTN — no #sheetBtn anywhere in the DOM, and the raw index.html source contains no 'sheetBtn' reference at all (markup + wiring both fully removed, not hidden)",
+    noBtnInDom && noBtnInSource,
+    "domHasBtn=" + !noBtnInDom + " sourceHasSheetBtn=" + !noBtnInSource);
+}
+
+{
+  // X28: SC-PUBBTN — config.js's SHEET_EDIT_URL VALUE is retired to "" (the
+  // key itself stays, per the brief, in case other tooling reads it as
+  // optional) and the live sheet's document id that used to sit in that
+  // value is nowhere left in the file (a stray comment reintroducing it
+  // would defeat the point of clearing the value).
+  const configSrc = readFileSync(path.join(ROOT, "config.js"), "utf8");
+  const valueCleared = /SHEET_EDIT_URL:\s*""/.test(configSrc);
+  const noLiveId = !/16Co2b/.test(configSrc);
+  check("X28: SC-PUBBTN — config.js's SHEET_EDIT_URL value is \"\" (key preserved) and the live sheet's document id (16Co2b...) is nowhere in the file",
+    valueCleared && noLiveId,
+    "valueCleared=" + valueCleared + " noLiveId=" + noLiveId);
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */

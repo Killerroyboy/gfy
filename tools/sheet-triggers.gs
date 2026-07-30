@@ -8,6 +8,7 @@
 const NORM = s => String(s || "").trim().replace(/\s+/g, " ").toLowerCase(); // S-KEY / F-NKEY
 
 function setup(){
+  assertScoresHeaders_();                                    // fail loudly BEFORE touching any trigger (§18 SC-FORMLANE)
   teardown();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ScriptApp.newTrigger("onScoreFormSubmit").forSpreadsheet(ss).onFormSubmit().create();
@@ -18,6 +19,32 @@ function teardown(){
   ScriptApp.getProjectTriggers().forEach(t => {
     if (["onScoreFormSubmit","onDepositEdit"].includes(t.getHandlerFunction())) ScriptApp.deleteTrigger(t);
   });
+}
+// §18 SC-FORMLANE: writeScore_ keys every Scores row by `team` (captain-
+// keyed) and writes into h1..h18 — a sheet still shaped for the OLD
+// player-per-row layout (a legacy `player` column, no `team`, or missing
+// hole columns) silently loses every score the form submits, with no error
+// visible until someone notices the board is wrong. setup() refuses to
+// install the triggers against a Scores tab shaped like that — throw loud
+// and early, at setup time, not silently at form-submit time.
+function assertScoresHeaders_(){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName("Scores");
+  if (!sh) throw new Error("setup() aborted: no 'Scores' tab found — create it before installing the live-scoring triggers.");
+  const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(h => NORM(h));
+  if (head.indexOf("team") < 0){
+    const hint = head.indexOf("player") >= 0
+      ? " (found a legacy 'player' column instead — Scores is keyed by team/captain, not by player; rename the header to 'team')"
+      : "";
+    throw new Error("setup() aborted: Scores tab has no 'team' header" + hint + ".");
+  }
+  const missingHoles = [];
+  for (let h = 1; h <= 18; h++) if (head.indexOf("h" + h) < 0) missingHoles.push("h" + h);
+  if (missingHoles.length){
+    throw new Error("setup() aborted: Scores tab is missing hole column(s) " + missingHoles.join(", ") +
+      " — add all of h1..h18 before installing the live-scoring triggers.");
+  }
+  Logger.log("Scores headers OK: team + h1..h18 all present");
 }
 
 /* ---------- shared validator (§18 SC-VALIDATE) ---------- */
