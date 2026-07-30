@@ -1871,7 +1871,9 @@ dom.window.close();
   const ps = readFileSync(path.join(ROOT, "tools", "sheet-polish.gs"), "utf8");
   check("T5: buildStartHere_ dashboard + seasonal logic (F-START-LINKS, F-START, F-IDEM)",
     ps.includes("function buildStartHere_") && ps.includes('ss.getUrl()') && !/docs\.google\.com|spreadsheets\/d\//.test(ps)
-    && ps.includes('"START HERE"') && ps.includes("inEventWindow_") && ps.includes("first_tee"));
+    && ps.includes('"START HERE"') && ps.includes("inEventWindow_") && ps.includes("first_tee")
+    && ps.includes("Scoring form URL") && /findIndex|indexOf\("Scoring form URL"\)|indexOf\('Scoring form URL'\)/.test(ps)
+    && !/getRange\("B7"\)/.test(ps));
 }
 
 /* ---------------------------------------------------------------------

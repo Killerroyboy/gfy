@@ -118,7 +118,10 @@ function colLetter_(i){ let s = ""; while (i > 0){ s = String.fromCharCode(65 + 
 function buildStartHere_(ss){
   const name = "START HERE";
   let sh = ss.getSheetByName(name); if (!sh) sh = ss.insertSheet(name, 0);
-  const keep = sh.getRange("B7").getValue();                  // preserve Riley's pasted form URL (E-IDEM)
+  const existing = sh.getLastRow() > 0 && sh.getLastColumn() > 0
+    ? sh.getDataRange().getValues() : [];
+  const urlRowExisting = existing.find(r => String(r[0]).indexOf("Scoring form URL") === 0);
+  const keep = urlRowExisting ? urlRowExisting[1] : "";        // preserve Riley's pasted form URL, content-anchored not coordinate-anchored (E-IDEM)
   sh.clear();
   const url = ss.getUrl();                                    // runtime — no ids in source (F-START-LINKS)
   const link = tab => { const s = ss.getSheetByName(tab); return s ? `=HYPERLINK("${url}#gid=${s.getSheetId()}","${tab}")` : tab; };
@@ -140,9 +143,9 @@ function buildStartHere_(ss){
     ["Polish/repair the sheet: Extensions → Apps Script → run polish()", ""],
   ];
   sh.getRange(1, 1, rows.length, 2).setValues(rows);
-  if (keep) sh.getRange("B7").setValue(keep);                 // restore the form URL after rebuild
+  const urlRow = rows.findIndex(r => String(r[0]).indexOf("Scoring form URL") === 0) + 1;
+  if (keep && urlRow) sh.getRange(urlRow, 2).setValue(keep);  // restore the form URL after rebuild, content-anchored
   sh.setColumnWidth(1, 340); sh.getRange("A1").setFontSize(14).setFontWeight("bold");
-  ss.setActiveSheet(sh); ss.moveActiveSheet(1);
   orderTabs_(ss, eventWindow);
 }
 function inEventWindow_(ss){
