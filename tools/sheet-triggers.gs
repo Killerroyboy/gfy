@@ -182,7 +182,15 @@ function doPost(e){
     return jsonOut_({ok:false, verdict:"internal error", team:String((p && p.team) || ""), round:0, holes:null});
   }
   const out = JSON.stringify(r);
-  if (p.client_id && p.seq != null && r.verdict !== "busy — resubmit"){
+  // I2 (final review): cache ONLY a successful write. Every rejected verdict —
+  // bad team/round/hole/score, the totals-guard trip, or the busy/lock-timeout
+  // response — had no side effect on the sheet, so re-executing it is
+  // harmless; that re-execution is exactly what the captain's documented
+  // retry-after-fix flow (scRetryEntry, same seq forever by design) depends
+  // on. Caching a rejection here would make that retry impossible: the same
+  // seq would just replay the frozen rejected verdict forever, even after
+  // Riley fixes whatever caused it (e.g. a roster-name typo).
+  if (p.client_id && p.seq != null && r.ok === true){
     props.setProperty(key, out);                             // bounded: cleanupIdem_ below
     cleanupIdem_(props);
   }

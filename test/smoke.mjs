@@ -2163,9 +2163,25 @@ dom.window.close();
   const domX3 = makeDom("#score?team=NoSuchTeam");
   await until(() => (domX3.window.document.querySelectorAll("#scPicker .sc-pick") || []).length > 0);
   const picksX3 = [...domX3.window.document.querySelectorAll("#scPicker .sc-pick")].map(b => b.textContent);
-  check("X3: unmatched team renders picker with Field team values",
-    picksX3.some(t => /Duck/.test(t)) && picksX3.some(t => /Sully/.test(t)),
-    JSON.stringify(picksX3).slice(0, 160));
+  const noErrorsX3 = domX3.pageErrors.length === 0;
+
+  // I5 (final review): an SMS-truncated link's team= value can decode-throw
+  // (a lone "%2" is an invalid percent-escape — decodeURIComponent(m[1])
+  // was unguarded, so renderScorer's unguarded call to scorerTeamFromHash()
+  // threw a URIError on every paint, bricking the whole view). Malformed
+  // and unmatched must both fall through to the SAME picker path, and
+  // neither may leave an uncaught page error behind.
+  const domX3b = makeDom("#score?team=Big%2");
+  await until(() => (domX3b.window.document.querySelectorAll("#scPicker .sc-pick") || []).length > 0);
+  const picksX3b = [...domX3b.window.document.querySelectorAll("#scPicker .sc-pick")].map(b => b.textContent);
+  const noErrorsX3b = domX3b.pageErrors.length === 0;
+  domX3b.window.close();
+
+  check("X3: unmatched team renders picker with Field team values; a malformed/decode-throwing team= (SMS-truncated '%2') ALSO renders the picker rather than bricking on an uncaught URIError; neither case leaves a page error behind",
+    picksX3.some(t => /Duck/.test(t)) && picksX3.some(t => /Sully/.test(t)) && noErrorsX3 &&
+      picksX3b.some(t => /Duck/.test(t)) && noErrorsX3b,
+    "picks=" + JSON.stringify(picksX3).slice(0, 160) + " pageErrors=" + JSON.stringify(domX3.pageErrors) +
+      " picksMalformed=" + JSON.stringify(picksX3b).slice(0, 160) + " pageErrorsMalformed=" + JSON.stringify(domX3b.pageErrors));
   domX3.window.close();
 
   // X4: bare #score with no stored team -> picker too
@@ -3133,11 +3149,61 @@ async function cellSettledOk(doc, hole) {
   const drainedC1 = bodiesC1.length === 1 && bodiesC1[0].hole === 8 && bodiesC1[0].score === 4 && bodiesC1[0].seq === 5;
   domC1.window.close();
 
-  check("X22: idempotent seq — the same entry retried (stub: first network-reject, then success) sends the SAME seq both times; a stranded 'sending' entry from a killed-mid-POST prior session normalizes to queued on the FIRST read of a fresh load and drains with its ORIGINAL seq (C1)",
+  // C1 (final review — CRITICAL, cross-round NOCLOBBER, the "day-2 ghost
+  // resend"): a queued ROUND-1 entry whose round-1 SHEET hole holds a
+  // DIFFERENT value must NOT be posted by a drain running once round 2 is
+  // active — before this fix, scEntryHeld's round-scoping gave every
+  // non-active-round entry an unconditional pass, so a round-1 entry queued
+  // on a dead phone would drain UNCHECKED on day 2, silently overwriting a
+  // manual sheet correction. Active round forced to 2 via a first_tee 2
+  // days in the past (same technique as X20/X24/X25) — Duck's round-1
+  // fixture is also fully populated (18/18 holes), so I4's team-state-first
+  // rule independently agrees round 2 is active. Runs the REAL sheet
+  // derivation (no noSheet stub — this needs genuine round-1 sheet truth to
+  // check against). The conflicting entry is seeded directly into
+  // localStorage (same technique as the stranded-session case just above)
+  // as a plain queued entry with override:false — going through the actual
+  // replace-confirm UI tap flow would auto-carry override:true (I2's
+  // existing behavior) and mask the exact bug this proves fixed.
+  const pastTeeC1x = new Date(Date.now() - 2 * 86400000).toISOString();
+  const infoC1x = FIXTURES.info.replace(/^first_tee,.*$/m, "first_tee," + pastTeeC1x) +
+    "score_endpoint," + epUrl + "\n";
+  const bodiesC1x = [];
+  const fetchC1x = (url, opts) => {
+    if (String(url).indexOf(epUrl) === 0) {
+      bodiesC1x.push(JSON.parse(opts.body));
+      return Promise.resolve({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 1, holes: {} }) });
+    }
+    return withOverride({ info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoC1x }) })(url);
+  };
+  const domC1x = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchC1x);
+  const docC1x = domC1x.window.document;
+  await until(() => !!docC1x.querySelector("#scConfirmBtn")); // confirm screen shown, before any journal read
+  const seasonC1x = domC1x.window.scorerSeason();
+  const journalKeyC1x = "gfy-scorer:" + seasonC1x + ":duck";
+  const entryKeyC1x = domC1x.window.scEntryKeyOf("1", 4); // hole 4 — Duck R1 fixture h4=5 (par 5)
+  const staleRoot = { client_id: "c-day1-phone", seq: 1, confirmed: true,
+    entries: { [entryKeyC1x]: { round: "1", hole: 4, score: 8, seq: 1, state: "queued", verdict: null, ts: Date.now(), retries: 0, override: false } } };
+  domC1x.window.localStorage.setItem(journalKeyC1x, JSON.stringify(staleRoot));
+  docC1x.querySelector("#scConfirmBtn").click();
+  await until(() => docC1x.querySelectorAll("#scCard .sc-cell").length > 0);
+  const activeRoundC1x = domC1x.window.scActiveRound(); // must resolve to "2" — date rule AND I4 team-state-first agree for Duck
+  domC1x.window.dispatchEvent(new domC1x.window.Event("online")); // external trigger, same as every other drain test here
+  await settle(300); // give a wrongly-unheld drain every chance to (wrongly) fire before asserting it didn't
+  const heldEntryC1x = domC1x.window.scJournalRead(journalKeyC1x).entries[entryKeyC1x];
+  const stillQueuedC1x = !!heldEntryC1x && heldEntryC1x.state === "queued";
+  const noPostForHole4C1x = !bodiesC1x.some(b => b.hole === 4);
+  domC1x.window.close();
+
+  check("X22: idempotent seq — the same entry retried (stub: first network-reject, then success) sends the SAME seq both times; a stranded 'sending' entry from a killed-mid-POST prior session normalizes to queued on the FIRST read of a fresh load and drains with its ORIGINAL seq (C1); a queued ROUND-1 entry (hole 4, score 8) whose round-1 sheet hole holds a DIFFERENT value (Duck fixture h4=5) is NOT posted by a day-2/round-2-active drain — cross-round NOCLOBBER now applies identically to non-active-round entries (C1, final review)",
     attemptsX22 === 2 && seqsX22.length === 2 && seqsX22[0] === seqsX22[1] && typeof seqsX22[0] === "number" &&
-      normalizedToQueuedC1 && drainedC1,
+      normalizedToQueuedC1 && drainedC1 &&
+      activeRoundC1x === "2" && stillQueuedC1x && noPostForHole4C1x,
     "attempts=" + attemptsX22 + " seqs=" + JSON.stringify(seqsX22) +
-      " normalizedToQueued=" + normalizedToQueuedC1 + " drained=" + drainedC1 + " bodiesC1=" + JSON.stringify(bodiesC1));
+      " normalizedToQueued=" + normalizedToQueuedC1 + " drained=" + drainedC1 + " bodiesC1=" + JSON.stringify(bodiesC1) +
+      " activeRoundC1x=" + activeRoundC1x + " stillQueuedC1x=" + stillQueuedC1x + " noPostForHole4C1x=" + noPostForHole4C1x +
+      " bodiesC1x=" + JSON.stringify(bodiesC1x));
 }
 
 {

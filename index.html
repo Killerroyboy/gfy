@@ -1163,7 +1163,14 @@ function scorerTeamFromHash(){
   const q=location.hash.split("?")[1]||"";
   const m=/(?:^|&)team=([^&]*)/.exec(q);
   if(!m) return null;
-  const want=nkey(decodeURIComponent(m[1]));
+  // I5 (final review): an SMS-truncated link (…team=Big%2) carries an
+  // invalid percent-escape — decodeURIComponent throws a URIError on
+  // every paint (renderScorer runs this unguarded on load AND on every
+  // hashchange), bricking the whole view. A malformed team= is no
+  // different from an unmatched one: fall through to null -> the picker
+  // path in renderScorer, never an uncaught error.
+  let want;
+  try{ want=nkey(decodeURIComponent(m[1])); }catch(e){ return null; }
   return scorerTeams(scorerSeason()).find(t=>nkey(t)===want)||null;
 }
 const scKey=(y,tk)=>"gfy-scorer:"+y+":"+tk;
@@ -3033,16 +3040,21 @@ function scPadNumbers(hole){
 }
 
 /* ---------- SC-ROUND: momentary round toggle ----------
-   scRoundDefault() is the DATE rule ONLY at this task. The brief's other
-   branch ("if the team's R1 board row has 18 entries -> default R2") needs
-   a real sheet read — buildPlayers()'s season param, and the sheet-value
-   merge generally, are Task 6's job (see the brief's Task-6 seam note and
-   Interfaces line). Duck's fixture R1 IS complete, but that fact lives in
-   scores.csv; scLocalCells (the only "board" Task 3 can see) starts empty,
-   so there is nothing to evaluate that branch against yet — wiring it here
-   would just be reading a source this task doesn't own. It lands in Task 6
-   alongside the sheet merge (controller-scoped; see task-3-report.md). */
+   I4 (final review) lands the brief's other branch, held back at Task 3
+   pending the sheet merge: team-state-first. If the team's ROUND-1 SHEET
+   row is already complete (all 18 holes present — scSheetHolesFor(1), the
+   real per-round sheet derivation added alongside C1's cross-round
+   NOCLOBBER fix in this same commit), default straight to round 2
+   regardless of the date; otherwise fall back to the date rule exactly as
+   before. scSheetHolesFor routes through the SAME window.scSheetHoles seam
+   every test override already uses — a `noSheet`-style zero-arg stub
+   returns null for round 1 same as any other round, so every pre-existing
+   date-rule-only test (X7-X23, X26) keeps its exact behavior untouched;
+   only callers exercising the REAL derivation (X24/X25, any live
+   deployment) can ever see this branch fire. */
 function scRoundDefault(){
+  const r1=scSheetHolesFor("1");
+  if(r1 && Object.keys(r1).length===18) return "2";
   const ft=String(INFO.first_tee||CONFIG.FIRST_TEE||"");
   const teeMs=Date.parse(ft);
   if(isNaN(teeMs)) return "1";
@@ -3165,13 +3177,26 @@ window.scConfigBroken = window.scConfigBroken || false; // SC-LOUD-CONFIG carrie
 // r2·h1=0 row — group A's existing "R2 · 7" assertion already depends on
 // this). A totals-only round (r.total, no r.holes — e.g. Bear) has no
 // per-hole sheet truth to merge against; returns null, same as no data.
-function scSheetHoles(){
+// Final review (C1): now takes an OPTIONAL round — omitted/undefined still
+// means "the active round," so every pre-existing caller and every test's
+// `window.scSheetHoles = () => …` override (all zero-arg today) keeps
+// working byte-for-byte. scEntryHeld and scRoundDefault below use the new
+// round argument (via scSheetHolesFor) to ask about a SPECIFIC round's
+// sheet truth instead of only ever being able to answer for whichever
+// round happens to be active.
+function scSheetHoles(round){
   if(!STATE.scTeam) return null;
   const players=buildPlayers(scorerSeason());
   const p=players.find(pl=>pl.key===nkey(STATE.scTeam));
   if(!p) return null;
-  const r=p.rounds[scActiveRound()];
+  const r=p.rounds[round!=null?String(round):scActiveRound()];
   return (r&&r.holes) ? r.holes : null;
+}
+// Routed through window.scSheetHoles (not the bare identifier) — same
+// pattern scSheetValFor below already established, so a test override of
+// window.scSheetHoles is honored identically here.
+function scSheetHolesFor(round){
+  return (typeof window.scSheetHoles==="function") ? window.scSheetHoles(round) : null;
 }
 let scJournalCache={};   // key -> root, always current (populated by scJournalRead/scStore)
 let scDraining=false;    // single-flight guard for scDrain()
@@ -3243,6 +3268,16 @@ function scSheetValFor(hole){
   if(!map) return null;
   return posInt(map[hole]);
 }
+// Final review (C1): round-aware counterpart to scSheetValFor above, used
+// ONLY by the drain's held-check (scEntryHeld) so it can ask about a
+// SPECIFIC (possibly non-active) round. Display (scCellState, and every
+// pad/tally reader downstream of it) stays active-round-only via
+// scSheetValFor, per the controller's resolution — this one is deliberately
+// NOT wired into scCellState.
+function scSheetValForRound(round,hole){
+  const map=scSheetHolesFor(round);
+  return map ? posInt(map[hole]) : null;
+}
 // SC-HONEST/SC-NOCLOBBER precedence, exact (controller's four rules):
 //  1. sheet present + journal "ok" at the same value -> "on the sheet".
 //  2. sheet present + differs from the phone's latest entry (any state) ->
@@ -3266,16 +3301,22 @@ function scCellState(hole){
   return {kind:"empty"};
 }
 // Rule 2's HELD gate for the drain: never auto-send a sheet/phone mismatch.
-// Scoped to the ACTIVE round only — scSheetHoles() (Task 6 seam) takes no
-// round parameter, so there is no sheet data to check a non-active-round
-// entry against at this task; that entry drains normally (Task 6's real
-// per-round derivation can extend this later if needed). entry.override is
+// C1 (final review — CRITICAL): a queued entry from a round OTHER than the
+// active one used to get an unconditional pass here — the round-scoping
+// existed only because scSheetHoles() couldn't answer for a non-active
+// round at all. A round-1 entry queued on a dead phone would then drain
+// UNCHECKED the moment a later day's drain ran (the "day-2 ghost resend"),
+// silently overwriting a manual sheet correction. Now checks the SHEET for
+// the entry's OWN round via scSheetValForRound, regardless of which round
+// is currently active — the NOCLOBBER hold applies identically across
+// rounds. An entry whose round-of-record hole is EMPTY on the sheet still
+// drains normally (sheetVal==null, by design — a legitimately unsent score
+// should land); only a genuine value MISMATCH holds it. entry.override is
 // the one explicit, separate "send anyway" escape hatch (scPadForceSend) —
 // the ONLY way past a genuine hold.
 function scEntryHeld(entry){
   if(entry.override) return false;
-  if(String(entry.round)!==String(scActiveRound())) return false;
-  const sheetVal=scSheetValFor(entry.hole);
+  const sheetVal=scSheetValForRound(entry.round,entry.hole);
   return sheetVal!=null && sheetVal!==entry.score;
 }
 // Coalescing (X18): a fresh save ALWAYS gets a brand-new seq and REPLACES

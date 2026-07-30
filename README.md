@@ -227,9 +227,11 @@ paper scorecard — see below.
 Each team gets one link — `.../gfy/#score?team=<Team>` — generated for you (see
 "Captain links," below) and never hand-typed. First open shows a one-time
 "Scoring for **\<Team\>** — \<roster\>" confirmation; after that, that link (or
-a bare `#score`) resumes straight to that team's card, and a "Who's scoring?"
-picker in the header can always switch teams (a captain covering two teams, or
-Riley filling in).
+a bare `#score`) resumes straight to that team's card. To switch teams (a
+captain covering two teams, or Riley filling in), tap **"Not your team?"** on
+that one-time confirmation screen before confirming, or open the other team's
+own link — there's no standing "Who's scoring?" picker in the card view itself
+yet (future work).
 
 The card is 18 cells, Out and In. Tap a hole, tap the score — **it sends
 immediately**, no confirm screen, no undo timer, so a tap that ends up in a
@@ -581,6 +583,7 @@ their partial card and their Calcutta lot both stay exactly as they were.
 | Team missing from board | The captain's name in Scores' `team` column doesn't match any team in Field — check the health strip, it names the mismatch |
 | Edits don't show up | Google republishes on a short delay — wait ~5 min; also check File > Share > Publish to web is still active |
 | Album shows a permission error | Drive folder not shared "Anyone with the link" — step 5 |
+| Link shows every team, not just mine | the link's team doesn't match this season's Field roster (stale bookmark/typo/pre-draft link) — pick your team once, or re-copy your link from START HERE after the draft |
 | Anything else | Check the health strip, then add `?debug=1` to the URL and read the panel |
 
 ## Admin quick edits (cheat-sheet)
