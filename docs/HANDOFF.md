@@ -65,10 +65,15 @@ Event: **Aug 14–16, 2026** at MeadowCreek (New Meadows, ID). 12–15 four-play
    Accepted residuals + carried-minors triage live in the ledger's FINAL entry.
 2. **DONE — pushed + deployed 2026-07-30**: `49efa87` live, Pages built, live md5 == tip,
    `#draft` present in served HTML. Rollback ref for the NEXT push: `49efa87`.
-3. **Ops-hardening wave (PROPOSED, not built)**: 8 small judgment-free sheet-ops fixes
-   (top: repo `sheet-polish.gs` missing `@OnlyCurrentDoc`; template content-checker;
-   gid-check tool; presend V-PROBE silent-skip warning) + 4 Riley-judgment items —
-   grounded inventory at `.superpowers/sdd/ops-research.md` (gitignored scratch).
+3. **DONE — ops-hardening wave (§19) BUILT + reviewed at `7419c89`** (169/169; all 11
+   ratified items incl. the 4 Riley-ruled judgment calls; fable whole-wave review, final
+   verdict Yes). NOT YET LIVE on the sheet: the .gs half deploys ONLY when Riley
+   re-pastes BOTH files post-push — sheet-polish.gs as Code.gs, sheet-triggers.gs via
+   File → New → Script file (NEVER over Code.gs) — then runs `polish()` once (builds the
+   FORM TEAM LIST block). New tools: `npm run check-template`, `npm run check-gids`;
+   presend gains `--extra-gid responses=590385167` + loud V-PROBE skip. Residual:
+   whether imported TRUE/FALSE render ticked after polish() — observe at next template
+   upload.
 4. **Crest v3 (§16)**: parallel session's round — its plan at
    `docs/superpowers/plans/2026-07-29-gfy-crest-v3-park-badge.md`; do not collide.
 5. Form polish (Riley, 60s): Required toggles on Team/Round/Team score; retitle the form
