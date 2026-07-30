@@ -2448,8 +2448,15 @@ async function openScorer(dom) {
   const infoX14 = FIXTURES.info + "score_endpoint,https://script.example/exec\n";
   const scoresX14 = FIXTURES.scores.split("\n").filter(l => !l.startsWith("2026,duck,2,")).join("\n");
   const epUrlX14 = "https://script.example/exec";
-  const fetchX14 = (url) => {
+  // Review round 1 finding: the original stub branched only on URL prefix and
+  // returned canned JSON regardless of the POST body/options — a scSend
+  // regression that mangled the payload (wrong field name/casing, dropped
+  // client_id/seq, wrong types) would still pass 100%. Now captures the real
+  // request options so the check below can inspect them.
+  let capturedX14;
+  const fetchX14 = (url, opts) => {
     if (String(url).indexOf(epUrlX14) === 0) {
+      capturedX14 = opts;
       return Promise.resolve({
         ok: true, status: 200,
         text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: { h13: 6 } }),
@@ -2468,10 +2475,29 @@ async function openScorer(dom) {
   try {
     sendResultX14 = await domX14.window.scSend({ team: "Duck", round: 2, hole: 13, score: 6 }, "client-x14", 1);
   } catch (e) { sendErrX14 = e; }
-  check("X14: scSend resolves the endpoint's JSON verdict (stubbed)",
+
+  // Wire-format assertions (review round 1): the exact key set, values,
+  // method, and content-type of the REAL request scSend sent — not just the
+  // canned response it got back.
+  let bodyX14 = null, bodyParseErrX14;
+  try { bodyX14 = JSON.parse(capturedX14?.body); } catch (e) { bodyParseErrX14 = e; }
+  const bodyKeysX14 = bodyX14 ? Object.keys(bodyX14).sort() : [];
+  const expectedKeysX14 = ["client_id", "hole", "round", "score", "seq", "team"];
+  const keysOkX14 = JSON.stringify(bodyKeysX14) === JSON.stringify(expectedKeysX14);
+  const valuesOkX14 = !!bodyX14 && bodyX14.team === "Duck" && bodyX14.round === 2 && bodyX14.hole === 13 &&
+    bodyX14.score === 6 && typeof bodyX14.client_id === "string" && bodyX14.client_id.length > 0 && bodyX14.seq === 1;
+  const methodOkX14 = capturedX14?.method === "POST";
+  const contentTypeX14 = capturedX14?.headers?.["Content-Type"];
+  const ctOkX14 = contentTypeX14 === "text/plain;charset=utf-8";
+
+  check("X14: scSend resolves the endpoint's JSON verdict (stubbed) AND posts the exact wire format — key set {team,round,hole,score,client_id,seq} (no extras/missing), real values, POST, text/plain;charset=utf-8",
     cardVisibleX14 && !sendErrX14 && !!sendResultX14 &&
-      sendResultX14.ok === true && sendResultX14.verdict === "applied" && sendResultX14.holes?.h13 === 6,
-    "cardVisible=" + cardVisibleX14 + " result=" + JSON.stringify(sendResultX14) + " err=" + JSON.stringify(sendErrX14));
+      sendResultX14.ok === true && sendResultX14.verdict === "applied" && sendResultX14.holes?.h13 === 6 &&
+      keysOkX14 && valuesOkX14 && methodOkX14 && ctOkX14,
+    "cardVisible=" + cardVisibleX14 + " result=" + JSON.stringify(sendResultX14) + " err=" + JSON.stringify(sendErrX14) +
+      " bodyKeys=" + JSON.stringify(bodyKeysX14) + " body=" + JSON.stringify(bodyX14) +
+      " bodyParseErr=" + (bodyParseErrX14 ? bodyParseErrX14.message : "") +
+      " method=" + capturedX14?.method + " contentType=" + contentTypeX14);
   domX14.window.close();
 }
 
