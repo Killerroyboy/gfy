@@ -2573,48 +2573,112 @@ const epUrl = "https://script.example/exec";
   docX16.querySelector('#scPad .sc-num[data-score="3"]').click(); // fresh cell, send-on-tap
   const cellX16 = docX16.querySelector('.sc-cell[data-hole="3"]');
   const queuedNowX16 = !!cellX16 && cellX16.classList.contains("sc-queued") && cellX16.querySelector("b")?.textContent === "3";
+  // C4 (review round 1): the queued state was color-only (the sc-queued
+  // CSS class alone) — a regression that dropped the CSS class but kept
+  // the cell otherwise looking identical would be invisible to a
+  // class-only assertion. Requiring the ⇡ glyph's actual TEXT (not just a
+  // class name) closes that gap and matches the never-color-only rule.
+  const glyphShownX16 = /⇡/.test(cellX16?.textContent || "");
   const noErrorUIX16 = !docX16.querySelector(".sc-degrade") && !docX16.querySelector(".sc-loud-config");
-  check("X16: offline-first — stub fetch rejects (network): tap score -> cell shows queued state INSTANTLY, no error UI",
-    queuedNowX16 && noErrorUIX16 && domX16.pageErrors.length === 0,
-    "queuedNow=" + queuedNowX16 + " noErrorUI=" + noErrorUIX16 + " cellClass=" + cellX16?.className +
-      " pageErrors=" + domX16.pageErrors.length);
+  check("X16: offline-first — stub fetch rejects (network): tap score -> cell shows queued state INSTANTLY (class AND the ⇡ glyph — never color-only), no error UI",
+    queuedNowX16 && glyphShownX16 && noErrorUIX16 && domX16.pageErrors.length === 0,
+    "queuedNow=" + queuedNowX16 + " glyphShown=" + glyphShownX16 + " noErrorUI=" + noErrorUIX16 +
+      " cellClass=" + cellX16?.className + " cellText=" + cellX16?.textContent + " pageErrors=" + domX16.pageErrors.length);
   domX16.window.close();
 }
 
-{
-  // X17: drain on reconnect — flip the stub to succeed, dispatch window
-  // 'online' -> until cell state 'ok'; exactly ONE POST body seen for that
-  // hole. Bodies are captured ONLY on the branch that actually resolves —
-  // a genuine network failure never reaches "the server" to record a body,
-  // so the earlier failed attempt must not inflate the count.
-  let onlineX17 = false;
-  const bodiesX17 = [];
-  const fetchX17 = (url, opts) => {
+// Shared shape for X17's three independent trigger scenarios (online,
+// pageshow, visibilitychange): fetch stays "offline" (rejects) until the
+// test flips a flag, then captures the real body on the branch that
+// actually resolves — a genuine network failure never reaches "the
+// server" to record a body, so the earlier failed attempt never inflates
+// the count.
+function makeGatedEndpointFetch() {
+  const state = { online: false, bodies: [] };
+  state.fetch = (url, opts) => {
     if (String(url).indexOf(epUrl) === 0) {
-      if (!onlineX17) return Promise.reject(new TypeError("offline (simulated)"));
-      bodiesX17.push(JSON.parse(opts.body));
+      if (!state.online) return Promise.reject(new TypeError("offline (simulated)"));
+      state.bodies.push(JSON.parse(opts.body));
       return Promise.resolve({ ok: true, status: 200,
         text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: {} }) });
     }
     return withScEndpoint()(url);
   };
-  const domX17 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX17);
-  const docX17 = await openScorer(domX17);
-  docX17.querySelector('.sc-cell[data-hole="4"]').click();        // hole 4, par 5
-  await until(() => !docX17.querySelector("#scPad")?.hidden);
-  docX17.querySelector('#scPad .sc-num[data-score="5"]').click();
-  await until(() => docX17.querySelector('.sc-cell[data-hole="4"]')?.classList.contains("sc-queued"));
-  onlineX17 = true;
-  domX17.window.dispatchEvent(new domX17.window.Event("online"));
-  await until(() => {
-    const c = docX17.querySelector('.sc-cell[data-hole="4"]');
+  return state;
+}
+async function cellSettledOk(doc, hole) {
+  return until(() => {
+    const c = doc.querySelector('.sc-cell[data-hole="' + hole + '"]');
     return !!c && !c.classList.contains("sc-queued") && !c.classList.contains("sc-sending") &&
-      !c.classList.contains("sc-rejected") && c.querySelector("b")?.textContent === "5";
+      !c.classList.contains("sc-rejected") && c.querySelector("b")?.textContent != null;
   });
-  check("X17: drain on reconnect — flip the stub to succeed, dispatch window 'online' -> until cell state 'ok'; exactly ONE POST body seen for that hole",
-    bodiesX17.length === 1 && bodiesX17[0].hole === 4 && bodiesX17[0].score === 5,
-    "bodies=" + JSON.stringify(bodiesX17));
-  domX17.window.close();
+}
+
+{
+  // X17: drain on reconnect. Review round 1 (I3): the brief pins 3 drain
+  // triggers beyond "after each save" — online, pageshow, visibilitychange
+  // — but only "online" had committed coverage. Extended (same check, no
+  // new X-number) to independently exercise pageshow and visibilitychange
+  // too, each draining its OWN queued entry; plus a structural assertion
+  // on the 20s timer's lifecycle (scIsDrainTimerActive() — a real,
+  // introspectable function, since scDrainTimer itself is a `let` and
+  // never becomes a window property).
+
+  // (a) online — the original scenario.
+  const online17 = makeGatedEndpointFetch();
+  const domOnline17 = makeDom("#score?team=" + encodeURIComponent("Duck"), online17.fetch);
+  const docOnline17 = await openScorer(domOnline17);
+  docOnline17.querySelector('.sc-cell[data-hole="4"]').click();        // hole 4, par 5
+  await until(() => !docOnline17.querySelector("#scPad")?.hidden);
+  docOnline17.querySelector('#scPad .sc-num[data-score="5"]').click();
+  await until(() => docOnline17.querySelector('.sc-cell[data-hole="4"]')?.classList.contains("sc-queued"));
+  online17.online = true;
+  domOnline17.window.dispatchEvent(new domOnline17.window.Event("online"));
+  await cellSettledOk(docOnline17, 4);
+  const onlineOk17 = online17.bodies.length === 1 && online17.bodies[0].hole === 4 && online17.bodies[0].score === 5;
+
+  // (b) 20s timer wiring, using this same (still-open) dom: active while
+  // #score is showing, stopped the moment it hides.
+  const timerActiveWhileVisible17 = domOnline17.window.scIsDrainTimerActive();
+  domOnline17.window.location.hash = "#home";
+  domOnline17.window.dispatchEvent(new domOnline17.window.Event("hashchange"));
+  const timerStoppedAfterHide17 = !domOnline17.window.scIsDrainTimerActive();
+  domOnline17.window.close();
+
+  // (c) pageshow.
+  const pageshow17 = makeGatedEndpointFetch();
+  const domPageshow17 = makeDom("#score?team=" + encodeURIComponent("Duck"), pageshow17.fetch);
+  const docPageshow17 = await openScorer(domPageshow17);
+  docPageshow17.querySelector('.sc-cell[data-hole="10"]').click();      // hole 10, par 4
+  await until(() => !docPageshow17.querySelector("#scPad")?.hidden);
+  docPageshow17.querySelector('#scPad .sc-num[data-score="4"]').click();
+  await until(() => docPageshow17.querySelector('.sc-cell[data-hole="10"]')?.classList.contains("sc-queued"));
+  pageshow17.online = true;
+  domPageshow17.window.dispatchEvent(new domPageshow17.window.Event("pageshow"));
+  await cellSettledOk(docPageshow17, 10);
+  const pageshowOk17 = pageshow17.bodies.length === 1 && pageshow17.bodies[0].hole === 10 && pageshow17.bodies[0].score === 4;
+  domPageshow17.window.close();
+
+  // (d) visibilitychange (becoming visible).
+  const vis17 = makeGatedEndpointFetch();
+  const domVis17 = makeDom("#score?team=" + encodeURIComponent("Duck"), vis17.fetch);
+  const docVis17 = await openScorer(domVis17);
+  docVis17.querySelector('.sc-cell[data-hole="11"]').click();          // hole 11, par 5
+  await until(() => !docVis17.querySelector("#scPad")?.hidden);
+  docVis17.querySelector('#scPad .sc-num[data-score="5"]').click();
+  await until(() => docVis17.querySelector('.sc-cell[data-hole="11"]')?.classList.contains("sc-queued"));
+  vis17.online = true;
+  domVis17.window.document.dispatchEvent(new domVis17.window.Event("visibilitychange"));
+  await cellSettledOk(docVis17, 11);
+  const visOk17 = vis17.bodies.length === 1 && vis17.bodies[0].hole === 11 && vis17.bodies[0].score === 5;
+  domVis17.window.close();
+
+  check("X17: drain on reconnect — the 3 named triggers (online, pageshow, visibilitychange) each independently drain a queued entry, exactly ONE POST body seen each time; the 20s timer is active while the #score view is visible and stops the moment it hides",
+    onlineOk17 && timerActiveWhileVisible17 && timerStoppedAfterHide17 && pageshowOk17 && visOk17,
+    "onlineOk=" + onlineOk17 + " online.bodies=" + JSON.stringify(online17.bodies) +
+      " timerActiveWhileVisible=" + timerActiveWhileVisible17 + " timerStoppedAfterHide=" + timerStoppedAfterHide17 +
+      " pageshowOk=" + pageshowOk17 + " pageshow.bodies=" + JSON.stringify(pageshow17.bodies) +
+      " visOk=" + visOk17 + " vis.bodies=" + JSON.stringify(vis17.bodies));
 }
 
 {
@@ -2709,15 +2773,26 @@ const epUrl = "https://script.example/exec";
   // the stub with the real derivation and this check keeps passing).
   // Round pinned to "2" via a first_tee dynamically set 2 days before "now"
   // (never wall-clock-date-dependent) so scActiveRound()'s native DATE
-  // default lands on round 2 for the WHOLE sequence — the momentary toggle
-  // reverts after one submission and would not hold round 2 long enough.
+  // default lands on round 2 for the WHOLE sequence.
+  //
+  // Review round 1 (I2/C3/I4) restructuring: the ORIGINAL version of this
+  // test created the conflicting entry by editing a KNOWN sheet value via
+  // the ordinary Replace-confirm — but I2's fix makes exactly that flow
+  // carry override:true through automatically (the confirm already named
+  // both numbers, so a SECOND confirm for the same decision would be
+  // redundant friction). That's now the RIGHT behavior, but it means this
+  // test's conflict must instead come from "drain-time discovery": the
+  // phone queues 6 while the sheet value is still unknown (a genuinely
+  // fresh tap, no edit flow at all), and ONLY AFTER that save does the
+  // sheet value (4) become known — exactly the scenario the separate
+  // scPadForceSend override still exists for.
   const pastTeeX20 = new Date(Date.now() - 2 * 86400000).toISOString();
   const infoX20 = FIXTURES.info.replace(/^first_tee,.*$/m, "first_tee," + pastTeeX20) +
     "score_endpoint," + epUrl + "\n";
-  const sentHolesX20 = [];
+  const bodiesX20 = [];
   const fetchX20 = (url, opts) => {
     if (String(url).indexOf(epUrl) === 0) {
-      sentHolesX20.push(JSON.parse(opts.body).hole);
+      bodiesX20.push(JSON.parse(opts.body));
       return Promise.resolve({ ok: true, status: 200,
         text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 2, holes: {} }) });
     }
@@ -2727,30 +2802,62 @@ const epUrl = "https://script.example/exec";
   const docX20 = await openScorer(domX20);
   await until(() => /Round 2/.test(docX20.querySelector("#scRound")?.textContent || ""));
   const roundOkX20 = /Round 2/.test(docX20.querySelector("#scRound")?.textContent || "");
-  domX20.window.scSheetHoles = () => ({ 14: 4 }); // Task-6 seam stub, THIS test's own fixture-driven value
-  // h14's sheet value (4) is already known before any tap — cellState
-  // starts as kind:"sheet", which scPadHTML treats as edit mode (existing
-  // score 4). Picking 6 arms the ordinary Replace-confirm; confirming it
-  // saves a queued entry that IMMEDIATELY differs from the still-current
-  // sheet value, which is exactly rule 2's conflict.
+
+  // Fresh tap — scSheetHoles is still the default `()=>null` at this point,
+  // so hole 14 opens the plain numeric pad (no edit mode) and picking 6
+  // sends-on-tap immediately: a plain queued entry, override:false.
   docX20.querySelector('.sc-cell[data-hole="14"]').click();
-  await until(() => /currently 4/.test(docX20.querySelector("#scPad")?.textContent || ""));
+  await until(() => !docX20.querySelector("#scPad")?.hidden);
   docX20.querySelector('#scPad .sc-num[data-score="6"]').click();
-  await until(() => /Replace 4 with 6/.test(docX20.querySelector("#scPad")?.textContent || ""));
-  docX20.querySelector("#scPadReplace").click();
+  // Stub the sheet value IMMEDIATELY after (still synchronous, before the
+  // save's deferred setTimeout(scDrain,0) has had a single tick to run) so
+  // the very FIRST drain attempt already sees the conflict — never a race
+  // where an unheld send could slip out before the stub lands.
+  domX20.window.scSheetHoles = () => ({ 14: 4 });
   await until(() => docX20.querySelector('.sc-cell[data-hole="14"]')?.classList.contains("sc-conflict"));
-  await settle(300); // give the auto-drain (deferred from the save) a real chance to (wrongly) fire
+  await settle(300); // give the auto-drain every chance to (wrongly) fire before asserting it didn't
   const cellX20 = docX20.querySelector('.sc-cell[data-hole="14"]');
   const cellTextX20 = cellX20?.textContent || "";
-  docX20.querySelector('.sc-cell[data-hole="14"]').click(); // reopen -> conflict pad
+  const noPostYetX20 = !bodiesX20.some(b => b.hole === 14);
+
+  // Read the held entry's seq directly from the journal (scKey/nkey are
+  // `const`-bound and never become window properties — scJournalRead,
+  // scEntryKeyOf, scorerSeason, scActiveRound are all plain top-level
+  // `function` declarations, which DO, so this is the legitimate route).
+  const seasonX20 = docX20 && domX20.window.scorerSeason();
+  const roundActiveX20 = domX20.window.scActiveRound();
+  const journalKeyX20 = "gfy-scorer:" + seasonX20 + ":duck"; // nkey("Duck") === "duck", established elsewhere
+  const entryKeyX20 = domX20.window.scEntryKeyOf(roundActiveX20, 14);
+  const heldEntryX20 = domX20.window.scJournalRead(journalKeyX20).entries[entryKeyX20];
+  const heldSeqX20 = heldEntryX20 && heldEntryX20.seq;
+
+  docX20.querySelector('.sc-cell[data-hole="14"]').click(); // reopen -> conflict pad (C3 layout)
   await until(() => !!docX20.querySelector("#scPad #scPadForceSend"));
   const padTextX20 = docX20.querySelector("#scPad")?.textContent || "";
-  check("X20: SC-NOCLOBBER — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict (contains both numbers); pad(14) opens in replace-confirm naming both",
-    roundOkX20 && !sentHolesX20.includes(14) && /6/.test(cellTextX20) && /4/.test(cellTextX20) &&
-      /6/.test(padTextX20) && /4/.test(padTextX20) && /anyway/i.test(padTextX20),
-    "roundOk=" + roundOkX20 + " sentHoles=" + JSON.stringify(sentHolesX20) + " cellText=" + cellTextX20 +
-      " padText=" + padTextX20.slice(0, 160));
+  const padHasNumsX20 = !!docX20.querySelector("#scPad .sc-num[data-score]");
+  const padHasKeepSheetX20 = !!docX20.querySelector("#scPad #scPadKeepSheet");
+
+  // I4: force-send liveness — click it, and the captured send must be
+  // EXACTLY [14], carrying the SAME seq the held entry already had (proof
+  // this is a resend of the existing entry, not a freshly-minted one).
+  docX20.querySelector("#scPadForceSend").click();
+  await until(() => bodiesX20.some(b => b.hole === 14));
+  await settle(200); // let scDrain's own async continuation (post-await renderScCard + loop) fully finish before tearing the window down
+  const sentHolesX20 = bodiesX20.map(b => b.hole);
+  const forceSendBodyX20 = bodiesX20.find(b => b.hole === 14);
   domX20.window.close();
+
+  check("X20: SC-NOCLOBBER — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict (contains both numbers); pad(14) opens in replace-confirm naming both (C3 layout: numbers + Keep-the-sheet + Force-send); force-send (I4) carries the SAME seq the held entry already had",
+    roundOkX20 && noPostYetX20 && /6/.test(cellTextX20) && /4/.test(cellTextX20) &&
+      /6/.test(padTextX20) && /4/.test(padTextX20) && /anyway/i.test(padTextX20) &&
+      padHasNumsX20 && padHasKeepSheetX20 &&
+      JSON.stringify(sentHolesX20) === JSON.stringify([14]) &&
+      !!forceSendBodyX20 && forceSendBodyX20.score === 6 && forceSendBodyX20.seq === heldSeqX20 &&
+      typeof heldSeqX20 === "number",
+    "roundOk=" + roundOkX20 + " noPostYet=" + noPostYetX20 + " cellText=" + cellTextX20 +
+      " padHasNums=" + padHasNumsX20 + " padHasKeepSheet=" + padHasKeepSheetX20 +
+      " sentHoles=" + JSON.stringify(sentHolesX20) + " heldSeq=" + heldSeqX20 +
+      " forceSendBody=" + JSON.stringify(forceSendBodyX20) + " padText=" + padTextX20.slice(0, 200));
 }
 
 {
@@ -2809,10 +2916,43 @@ const epUrl = "https://script.example/exec";
   const linkOkX21b = bannerLinkX21b?.getAttribute("href") === "https://forms.gle/exampleFormXYZ";
   domX21b.window.close();
 
-  check("X21: rejected verdict — cell loud state + pad carry the verbatim verdict; 'text Riley' escalates after 2 manual retries; the carried SC-LOUD-CONFIG banner (drain hit kind:'config') shows in the captain view too, with the form link when configured",
-    cellVerdictOkX21 && padVerdictOkX21 && noEscalateYetX21 && escalateOkX21 && bannerOkX21b && linkOkX21b,
+  // I5 (review round 1): a REJECTED entry from a round OTHER than the
+  // active one must be NAMED in the old-round summary line (not muted into
+  // a bare count) and remain reachable via a read-only expandable verdict
+  // list. Uses the SC-ROUND spring (X11's mechanism): toggle to the OTHER
+  // round for exactly one submission, tap+pick — the spring reverts the
+  // active round immediately after, leaving a rejected entry filed under a
+  // round that is no longer active.
+  const fetchX21c = (url) => {
+    if (String(url).indexOf(epUrl) === 0) {
+      return Promise.resolve({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: false, verdict: "round total already entered — clear r1/r2 first", team: "Duck", round: 2, holes: null }) });
+    }
+    return withScEndpoint()(url);
+  };
+  const domX21c = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX21c);
+  const docX21c = await openScorer(domX21c);
+  docX21c.querySelector("#scRound").click();                      // spring to the OTHER round for one submission
+  docX21c.querySelector('.sc-cell[data-hole="6"]').click();        // hole 6, par 4
+  await until(() => !docX21c.querySelector("#scPad")?.hidden);
+  docX21c.querySelector('#scPad .sc-num[data-score="4"]').click();
+  await until(() => /rejected — text Riley/i.test(docX21c.querySelector("#scCard")?.textContent || ""));
+  const oldRoundLineOkX21c = /rejected — text Riley/i.test(
+    [...docX21c.querySelectorAll(".sc-old-round")].map(e => e.textContent).join(" "));
+  const oldRoundBtnX21c = docX21c.querySelector("button.sc-old-round[data-old-round]");
+  const oldRoundIsButtonX21c = !!oldRoundBtnX21c; // rule 4 still holds: only rejections make it clickable
+  oldRoundBtnX21c?.click();
+  await until(() => !!docX21c.querySelector(".sc-old-round-verdict"));
+  const verdictShownX21c = /round total already entered/i.test(docX21c.querySelector("#scCard")?.textContent || "");
+  domX21c.window.close();
+
+  check("X21: rejected verdict — cell loud state + pad carry the verbatim verdict; 'text Riley' escalates after 2 manual retries; the carried SC-LOUD-CONFIG banner (drain hit kind:'config') shows in the captain view too, with the form link when configured; a rejected entry in a NON-active round is named in the old-round summary (not muted) and its verdict is reachable via a read-only expandable list",
+    cellVerdictOkX21 && padVerdictOkX21 && noEscalateYetX21 && escalateOkX21 && bannerOkX21b && linkOkX21b &&
+      oldRoundLineOkX21c && oldRoundIsButtonX21c && verdictShownX21c,
     "cellVerdict=" + cellVerdictOkX21 + " padVerdict=" + padVerdictOkX21 + " noEscalateYet=" + noEscalateYetX21 +
-      " escalate=" + escalateOkX21 + " banner=" + bannerOkX21b + " link=" + linkOkX21b);
+      " escalate=" + escalateOkX21 + " banner=" + bannerOkX21b + " link=" + linkOkX21b +
+      " oldRoundLine=" + oldRoundLineOkX21c + " oldRoundIsButton=" + oldRoundIsButtonX21c +
+      " verdictShown=" + verdictShownX21c);
 }
 
 {
@@ -2849,10 +2989,50 @@ const epUrl = "https://script.example/exec";
     const c = docX22.querySelector('.sc-cell[data-hole="11"]');
     return !!c && !c.classList.contains("sc-queued") && !c.classList.contains("sc-sending");
   });
-  check("X22: idempotent seq — the same entry retried (stub: first network-reject, then success) sends the SAME seq both times",
-    attemptsX22 === 2 && seqsX22.length === 2 && seqsX22[0] === seqsX22[1] && typeof seqsX22[0] === "number",
-    "attempts=" + attemptsX22 + " seqs=" + JSON.stringify(seqsX22));
   domX22.window.close();
+
+  // C1 (review round 1), mutation evidence folded in here (same idempotent-
+  // seq theme): a "sending" entry stranded by a phone that died mid-POST
+  // in a PREVIOUS session must normalize to "queued" on the FIRST journal
+  // read of a fresh load, and then drain — carrying the SAME pre-existing
+  // seq (the server's idempotency ring is exactly what makes a resend of
+  // an already-applied write safe). Pre-seed localStorage BEFORE the
+  // confirm tap (the confirm click's own scStore call becomes the natural
+  // first read for this key, so the app's OWN normal code path — not test
+  // scaffolding — performs the normalization).
+  const bodiesC1 = [];
+  const fetchC1 = (url, opts) => {
+    if (String(url).indexOf(epUrl) === 0) {
+      bodiesC1.push(JSON.parse(opts.body));
+      return Promise.resolve({ ok: true, status: 200,
+        text: async () => JSON.stringify({ ok: true, verdict: "applied", team: "Duck", round: 1, holes: {} }) });
+    }
+    return withScEndpoint()(url);
+  };
+  const domC1 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchC1);
+  const docC1 = domC1.window.document;
+  await until(() => !!docC1.querySelector("#scConfirmBtn")); // confirm screen shown, BEFORE clicking -- no journal read has happened yet
+  const seasonC1 = domC1.window.scorerSeason();
+  const roundC1 = domC1.window.scActiveRound(); // whatever the native default resolves to in this config
+  const journalKeyC1 = "gfy-scorer:" + seasonC1 + ":duck"; // nkey("Duck") === "duck"
+  const entryKeyC1 = domC1.window.scEntryKeyOf(roundC1, 8);
+  const strandedRoot = { client_id: "c-prior-session-01", seq: 5, confirmed: true,
+    entries: { [entryKeyC1]: { round: roundC1, hole: 8, score: 4, seq: 5, state: "sending", verdict: null, ts: Date.now(), retries: 0 } } };
+  domC1.window.localStorage.setItem(journalKeyC1, JSON.stringify(strandedRoot));
+  docC1.querySelector("#scConfirmBtn").click(); // first-ever read of this key: scJournalRead must normalize sending->queued right here
+  await until(() => docC1.querySelectorAll("#scCard .sc-cell").length > 0);
+  const normalizedToQueuedC1 = docC1.querySelector('.sc-cell[data-hole="8"]')?.classList.contains("sc-queued");
+  domC1.window.dispatchEvent(new domC1.window.Event("online")); // external trigger -- normalization alone doesn't auto-drain
+  await until(() => bodiesC1.length > 0);
+  await settle(200);
+  const drainedC1 = bodiesC1.length === 1 && bodiesC1[0].hole === 8 && bodiesC1[0].score === 4 && bodiesC1[0].seq === 5;
+  domC1.window.close();
+
+  check("X22: idempotent seq — the same entry retried (stub: first network-reject, then success) sends the SAME seq both times; a stranded 'sending' entry from a killed-mid-POST prior session normalizes to queued on the FIRST read of a fresh load and drains with its ORIGINAL seq (C1)",
+    attemptsX22 === 2 && seqsX22.length === 2 && seqsX22[0] === seqsX22[1] && typeof seqsX22[0] === "number" &&
+      normalizedToQueuedC1 && drainedC1,
+    "attempts=" + attemptsX22 + " seqs=" + JSON.stringify(seqsX22) +
+      " normalizedToQueued=" + normalizedToQueuedC1 + " drained=" + drainedC1 + " bodiesC1=" + JSON.stringify(bodiesC1));
 }
 
 {
