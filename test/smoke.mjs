@@ -4388,6 +4388,125 @@ async function cellSettledOk(doc, hole) {
 }
 
 /* ---------------------------------------------------------------------
+   X37-X38 (§20 amendment 2, Task-2 S11 escalation): suppression must be
+   honest at EVERY surface, not just the tally tile. SC-PAR-LABEL: no gross
+   total may render under a "To par" label. SC-PAR-GLANCE: rank claims
+   ("You're leading", "3rd of N reporting") are suppressed when courseMap()
+   is null — the raw-gross fallback ordering compares unequal hole counts
+   and can't back a rank claim; neutral facts (thru N, pending-on-phone)
+   survive. renderLeaderboard/scGlanceHTML (+ their markup/CSS) are
+   UNFROZEN for exactly these changes; courseMap/courseYards/rankedPlayers/
+   buildPlayers/scTallyHTML stay frozen and untouched.
+   --------------------------------------------------------------------- */
+{
+  // X37: SC-PAR-LABEL — board label honesty, both directions + both widths
+  // (structural). jsdom does no layout/media-query evaluation, so the only
+  // honest way to assert "hidden at width W" is to confirm the CSS rule
+  // that would do it is actually present in the page's own <style> source
+  // — same technique K5/X29 already established for this file's sticky/
+  // scroll CSS checks (named structural, per the brief's instruction).
+  const domOKX37 = makeDom("");
+  await until(() => domOKX37.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docOKX37 = domOKX37.window.document;
+  const headOKX37 = docOKX37.querySelector("#lbToParHead")?.textContent.trim();
+  const boardOKX37 = docOKX37.querySelector("#leaderboard");
+  const notSuppressedX37 = boardOKX37 && !boardOKX37.classList.contains("lb-suppressed");
+  const rowOKX37 = docOKX37.querySelector("#lbBody .lb-row");
+  const toParCellOKX37 = rowOKX37 && rowOKX37.querySelectorAll(".lb-tot")[1];
+  const toParFormOKX37 = toParCellOKX37 && /^[+−\-]?\d+$|^E$/.test(toParCellOKX37.textContent.trim()) && /^[+−\-E]/.test(toParCellOKX37.textContent.trim());
+  domOKX37.window.close();
+
+  const courseBlank7X37 = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+  const domBX37 = makeDom("", withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7X37 }),
+  }));
+  await until(() => domBX37.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docBX37 = domBX37.window.document;
+  const headBX37 = docBX37.querySelector("#lbToParHead")?.textContent.trim();
+  const boardBX37 = docBX37.querySelector("#leaderboard");
+  const suppressedX37 = boardBX37 && boardBX37.classList.contains("lb-suppressed");
+  const rowBX37 = docBX37.querySelector("#lbBody .lb-row");
+  const totalCellBX37 = rowBX37 && rowBX37.querySelectorAll(".lb-tot")[0];
+  const toParCellBX37 = rowBX37 && rowBX37.querySelectorAll(".lb-tot")[1];
+  // Never two differently-valued columns under one name: whatever the two
+  // spans hold, they must be IDENTICAL when suppressed (both honestly the
+  // same gross total) — and both plain digits (never a stray to-par sign).
+  const sameValueX37 = totalCellBX37 && toParCellBX37 &&
+    totalCellBX37.textContent.trim() === toParCellBX37.textContent.trim() &&
+    /^\d+$/.test(toParCellBX37.textContent.trim());
+  // STRUCTURAL: the new wide-width collapse rule is present in source.
+  const cssTextX37 = [...docBX37.querySelectorAll("style")].map(s => s.textContent).join("");
+  const wideRuleStructuralX37 = /#leaderboard\.lb-suppressed\s*\.lb-total\s*\{\s*display:\s*none/.test(cssTextX37);
+  // STRUCTURAL: the pre-existing ≤560px rule that already hides the SAME
+  // redundant column unconditionally is still present, untouched — the
+  // narrow-width half of "both widths".
+  const narrowRuleStructuralX37 = /@media \(max-width:560px\)/.test(cssTextX37) &&
+    /\.lb-r1,\.lb-r2,\.lb-total\{display:none\}/.test(cssTextX37);
+  domBX37.window.close();
+
+  check("X37: SC-PAR-LABEL — board label honesty (§20 amendment 2): complete course => #lbToParHead reads 'To par', #leaderboard NOT .lb-suppressed, real to-par form rendered; blank-par-7 course => header flips to 'Total', #leaderboard IS .lb-suppressed, the To-par-column span holds the IDENTICAL plain-digit gross the Total column holds (never a differently-valued or mislabeled figure); STRUCTURAL: both the new wide-width collapse rule and the pre-existing ≤560px rule that hides the redundant Total column are present in the page's own CSS source (both widths covered)",
+    headOKX37 === "To par" && !!notSuppressedX37 && !!toParFormOKX37 &&
+      headBX37 === "Total" && !!suppressedX37 && !!sameValueX37 && wideRuleStructuralX37 && narrowRuleStructuralX37,
+    `headOK=${headOKX37} notSuppressed=${!!notSuppressedX37} toParFormOK=${!!toParFormOKX37} headB=${headBX37} suppressed=${!!suppressedX37} sameValue=${!!sameValueX37} totalCell=${totalCellBX37 && totalCellBX37.textContent} toParCell=${toParCellBX37 && toParCellBX37.textContent} wideRule=${wideRuleStructuralX37} narrowRule=${narrowRuleStructuralX37}`);
+}
+
+{
+  // X38: SC-PAR-GLANCE — rank-claim suppression. Complete fixture: a rank
+  // claim (leading / Nth-of-N-reporting) is present. Blank-par-7 fixture:
+  // courseMap() null => no leading/place claim survives, but the neutral
+  // facts (thru N, pending-on-phone) do. Same confirmed-team setup X29's
+  // block establishes (test/smoke.mjs:3822 onward); noSheet:true per X33/
+  // X36's own idiom — scGlanceRoundThru/rankedPlayers read straight from
+  // buildPlayers' real fixture derivation regardless of the sheet stub
+  // (unaffected either way), while scGlancePendingCount's sheet-absence
+  // check IS affected by it, which is exactly what lets the planted
+  // journal entry below register as genuinely "pending".
+  const courseBlank7X38 = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+
+  const domOKX38 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docOKX38 = await openScorer(domOKX38, { noSheet: true });
+  const glanceOKX38 = docOKX38.querySelector("#scGlance");
+  const rankClaimOKX38 = glanceOKX38 && (!!glanceOKX38.querySelector(".sc-glance-leader") || /of \d+ reporting/.test(glanceOKX38.textContent));
+  domOKX38.window.close();
+
+  const overrideX38 = withScEndpoint({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7X38 }),
+  });
+  const domBX38 = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX38);
+  const docBX38 = await openScorer(domBX38, { noSheet: true });
+  // Plant one queued journal entry for a hole with no sheet value (the
+  // noSheet stub means EVERY hole qualifies) — same low-level scStore
+  // seeding technique C1/X29 already establish — so scGlancePendingCount
+  // has something real to count, proving suppression doesn't ALSO wipe the
+  // neutral pending line.
+  const seasonX38 = domBX38.window.scorerSeason();
+  const roundX38 = domBX38.window.scActiveRound();
+  const keyX38 = "gfy-scorer:" + seasonX38 + ":duck";
+  const entryKeyX38 = domBX38.window.scEntryKeyOf(roundX38, 1);
+  domBX38.window.scStore(keyX38, root => {
+    root.seq = (root.seq || 0) + 1;
+    root.entries[entryKeyX38] = { round: roundX38, hole: 1, score: 4, seq: root.seq,
+      state: "queued", verdict: null, ts: Date.now(), retries: 0, override: false };
+  });
+  domBX38.window.renderScCard();
+  await until(() => !!domBX38.window.document.querySelector("#scGlance .sc-glance-pending"));
+  const glanceBX38 = docBX38.querySelector("#scGlance");
+  const noRankClaimX38 = glanceBX38 && !glanceBX38.querySelector(".sc-glance-leader") &&
+    !glanceBX38.querySelector(".sc-glance-neighbor") && !/of \d+ reporting/.test(glanceBX38.textContent);
+  const thruStillPresentX38 = glanceBX38 && !!glanceBX38.querySelector(".sc-glance-thru") && /\d/.test(glanceBX38.querySelector(".sc-glance-thru").textContent);
+  const pendingStillPresentX38 = glanceBX38 && !!glanceBX38.querySelector(".sc-glance-pending") && /pending on your phone/i.test(glanceBX38.textContent);
+  domBX38.window.close();
+
+  check("X38: SC-PAR-GLANCE — rank-claim suppression (§20 amendment 2): complete course => #scGlance carries a rank claim (.sc-glance-leader present, or 'of N reporting'); blank-par-7 course => courseMap() null suppresses EVERY rank claim (no .sc-glance-leader, no .sc-glance-neighbor, no 'of N reporting' text) while BOTH neutral facts survive — thru-N AND a planted pending-on-phone entry",
+    !!rankClaimOKX38 && !!noRankClaimX38 && !!thruStillPresentX38 && !!pendingStillPresentX38,
+    `rankClaimOK=${!!rankClaimOKX38} glanceOK=${glanceOKX38 && glanceOKX38.textContent.slice(0, 160)} noRankClaim=${!!noRankClaimX38} thruStillPresent=${!!thruStillPresentX38} pendingStillPresent=${!!pendingStillPresentX38} glanceB=${glanceBX38 && glanceBX38.textContent.slice(0, 200)}`);
+}
+
+/* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
 const groupTally = {};

@@ -118,6 +118,15 @@
   .lb-num{text-align:right;font-variant-numeric:tabular-nums;font-size:.95rem;color:var(--sage)}
   .lb-tot{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
   .lb-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
+  /* SC-PAR-LABEL (§20 amendment 2): courseMap() null means the second
+     .lb-tot column is honestly relabeled "Total" (renderLeaderboard) — at
+     widths where the SEPARATE .lb-total column also shows, that would put
+     two identically-labeled "Total" columns on screen at once (same value,
+     redundant, not dishonest, but noisy); hide the separate one so exactly
+     ONE correctly-labeled Total column shows, at every width. The pre-existing
+     ≤560px rule already hides .lb-total unconditionally — this rule covers
+     the WIDE-width case that one doesn't reach. */
+  #leaderboard.lb-suppressed .lb-total{display:none}
 
   /* per-player card */
   .card-drop{background:rgba(0,0,0,.22);border-bottom:1px solid rgba(200,162,74,.13);
@@ -886,7 +895,7 @@
     <div class="lb-head">
       <div>Pos</div><div>Team</div><div>Thru</div>
       <div class="lb-num lb-r1">R1</div><div class="lb-num lb-r2">R2</div>
-      <div class="lb-tot lb-total">Total</div><div class="lb-tot">To par</div>
+      <div class="lb-tot lb-total">Total</div><div class="lb-tot" id="lbToParHead">To par</div>
     </div>
     <div id="lbBody">
       <div class="lb-empty">No cards posted yet. Scores appear here as the sheet fills in.</div>
@@ -1688,6 +1697,19 @@ function rankedPlayers(basis,seasonY=STATE.year){
 
 function renderLeaderboard(){
   const players=rankedPlayers("gross");
+  // SC-PAR-LABEL (§20 amendment 2): courseMap()===null is the SAME
+  // suppression signal SC-PAR-VALID's consumers already key off (X33-X36) —
+  // reused directly, courseMap() itself untouched. When suppressed, the
+  // second .lb-tot column (which falls back to a plain gross total —
+  // buildPlayers' own p.rel===null branch, below) must present as "Total",
+  // never sit under a "To par" header it can't honestly back; the CSS rule
+  // above (#leaderboard.lb-suppressed .lb-total) collapses the now-redundant
+  // separate Total column at every width so the number never shows twice.
+  const parsSuppressed=!courseMap();
+  const board=$("#leaderboard");
+  if(board) board.classList.toggle("lb-suppressed",parsSuppressed);
+  const toParHead=$("#lbToParHead");
+  if(toParHead) toParHead.textContent=parsSuppressed?"Total":"To par";
   if(!players.length){
     // S-STALE (live bug, fixed here): this used to just `return`, leaving
     // whatever rows were already in #lbBody on screen under a fresh
@@ -4414,6 +4436,13 @@ function scGlanceHTML(){
   const idx=players.findIndex(p=>p.key===nkey(STATE.scTeam));
   if(idx<0) return "";
   const me=players[idx];
+  // SC-PAR-GLANCE (§20 amendment 2): courseMap()===null means rankedPlayers'
+  // own fallback order (buildPlayers: key = p.rel!==null ? p.rel : p.total)
+  // compares raw gross totals across players who may have played very
+  // different hole counts — not a standing this strip may present as fact.
+  // Same suppression signal SC-PAR-LABEL uses; courseMap()/rankedPlayers
+  // both untouched.
+  const suppressed=!courseMap();
   // "Reporting" (this round): an actual hole-by-hole card exists for the
   // active round — a totals-only round (e.g. Bear's single lump score, no
   // per-hole breakdown) has no "thru" progress to show, so it's excluded
@@ -4421,10 +4450,13 @@ function scGlanceHTML(){
   const reporters=players.filter(p=>scGlanceRoundThru(p,round)!=null);
   const myThru=scGlanceRoundThru(me,round);
   const posHTML=(me.pos!=null&&myThru!=null)
-    ? `<p class="sc-glance-pos">${me.pos}${ordSuffix(me.pos)} of ${reporters.length} reporting `+
-      `<span class="sc-glance-thru">· thru ${myThru}</span></p>`
+    ? (suppressed
+        // Neutral fact only — no "Nth of M reporting" rank claim.
+        ? `<p class="sc-glance-pos"><span class="sc-glance-thru">Thru ${myThru}</span></p>`
+        : `<p class="sc-glance-pos">${me.pos}${ordSuffix(me.pos)} of ${reporters.length} reporting `+
+          `<span class="sc-glance-thru">· thru ${myThru}</span></p>`)
     : `<p class="sc-glance-pos">Not yet reporting Round ${esc(round)}</p>`;
-  const leader=players.find(p=>p.pos===1);
+  const leader=suppressed?null:players.find(p=>p.pos===1);
   let leaderHTML="";
   if(leader){
     const lThru=scGlanceRoundThru(leader,round);
@@ -4432,7 +4464,10 @@ function scGlanceHTML(){
       ? `<p class="sc-glance-leader">You're leading${lThru!=null?" · thru "+lThru:""}</p>`
       : `<p class="sc-glance-leader">Leader: ${captainLabel(leader.key,leader.name,scorerSeason()).html}${lThru!=null?" · thru "+lThru:""}</p>`;
   }
-  const neighborHTML=["above","below"].map(dir=>{
+  // Neighbor lines are also a positional/rank claim (who's directly above
+  // and below ME in the untrustworthy fallback order) — suppressed for the
+  // same reason the leader claim is.
+  const neighborHTML=suppressed?"":["above","below"].map(dir=>{
     const n = dir==="above" ? players[idx-1] : players[idx+1];
     if(!n) return "";
     const nThru=scGlanceRoundThru(n,round);
