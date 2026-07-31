@@ -602,17 +602,55 @@
   .sc-numrow{display:none;grid-template-columns:repeat(6,1fr);gap:6px;margin:0 0 9px}
   .sc-numrow.on{display:grid}
   .sc-numrow .sc-key{min-height:44px} .sc-numrow .sc-key b{font-size:15px}
-  .sc-pad-replace{display:block;width:100%;font-size:15px;padding:12px;margin:0 0 10px;
+  /* Task 4 (SC-CONFLICT-UI/rejected re-dress): renamed from .sc-pad-replace
+     — now used ONLY by the rejected sheet's Retry button. The conflict
+     pad's old Keep-the-sheet/Force-send exits (which used to share this
+     same class) moved to their own #scConSheet dialog + .sc-con-btn
+     styling below, so it's no longer shared with them. */
+  .sc-sheet-cta{display:block;width:100%;font-size:15px;padding:12px;margin:0 0 10px;
     background:var(--brass);color:var(--pine);border:0;cursor:pointer;font-family:var(--ui)}
-  /* Review round 2 — conflict-pad exits disabled while a send is in flight. */
-  .sc-pad-replace[disabled]{background:var(--pine-2);color:var(--sage);cursor:default;
+  /* Review round 2 — a send-in-flight exit disables (Retry here; the
+     conflict exits' OWN in-flight guard now lives in .sc-con-btn below). */
+  .sc-sheet-cta[disabled]{background:var(--pine-2);color:var(--sage);cursor:default;
     border:1px solid rgba(200,162,74,.22)}
-  /* Task 5 — conflict (SC-NOCLOBBER) + rejected-verdict pad content, carried
-     forward unchanged (Task 4 re-dresses this into its own sheet later —
-     for now it renders inside the new #scSheet chrome as-is, per the brief). */
-  .sc-pad-conflict{font-size:14px;color:var(--rust);margin:0 0 10px}
-  .sc-pad-rejected{font-size:14px;color:var(--rust);margin:0 0 6px}
-  .sc-pad-escalate{font-size:14px;color:var(--rust);font-weight:600;margin:0 0 10px}
+  /* Rejected-verdict content (rule 3's loud branch — carried from rev 2,
+     UNCHANGED semantics, UI re-dress only): naming paired with
+     .sc-replace-line above (both are the sheet's "what's true right now"
+     line, one for edit-mode, one for a rejected verdict). */
+  .sc-rejected-line{font-size:14px;color:var(--rust);margin:0 0 6px}
+  .sc-rejected-escalate{font-size:14px;color:var(--rust);font-weight:600;margin:0 0 10px}
+  /* Task 4 (SC-CONFLICT-UI) — the conflict ruling sheet: #scConSheet, a
+     SEPARATE dialog from #scSheet (structurally distinguishable — a
+     conflict cell tap renders #scConSheet, never #scSheet — X20 asserts
+     this directly), transcribed from the prototype's .con-copy/.con-opts/
+     .con-btn shapes. Semantics UNCHANGED: "Keep the sheet" is rev 2's
+     scPadKeepSheet (discard the phone's held entry — SAME function, SAME
+     id); "Replace with mine" is the existing force-send (scPadForceSend,
+     same seq — SAME function, SAME id) — both ids carried verbatim so the
+     existing click wiring (scWireCard) and in-flight `disabled` guard need
+     no new logic, only new markup around them. The prototype's own
+     conflict sheet omits a number-picking grid entirely (a clean
+     two-button ruling, not Task 2's interim 3-way layout) — this task
+     follows that shape. Entering a genuinely THIRD number (neither the
+     sheet's nor the phone's already-queued value) now takes "Keep the
+     sheet" first, then reopening the cell through the ordinary replace
+     flow — documented in README (no room for it in the pinned verbatim
+     copy line, scPadHTML's conCopyHTML). */
+  .sc-con-copy{font-size:14px;line-height:1.55;color:var(--bone);padding:2px 4px 12px;margin:0}
+  .sc-con-copy b{color:var(--rust)}
+  .sc-con-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .sc-con-btn{min-height:70px;border-radius:14px;border:1px solid rgba(200,162,74,.22);
+    background:var(--pine-2);color:var(--bone);font-family:var(--ui);cursor:pointer;padding:10px}
+  .sc-con-btn b{font-family:var(--display);font-size:22px;display:block}
+  .sc-con-btn small{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--sage)}
+  /* Keep = the safe default — reuses Task 1/2's --brass "under-par"
+     convention (this site has no --under, the prototype's own token for
+     this button). Replace-with-mine = the more assertive override, --rust,
+     matching the conflict cell's own rust tint. */
+  .sc-con-btn.sc-con-keep{border-color:var(--brass)} .sc-con-btn.sc-con-keep b{color:var(--brass)}
+  .sc-con-btn.sc-con-mine{border-color:var(--rust)} .sc-con-btn.sc-con-mine b{color:var(--rust)}
+  .sc-con-btn:focus-visible{outline:2px solid var(--brass)}
+  .sc-con-btn[disabled]{cursor:default;opacity:.6}
   /* Task 6 — SC-GLANCE compact board-context strip (#scGlance), below the
      card. Same >=13px discipline as the rest of the scorer. */
   #scGlance{margin-top:20px}
@@ -620,6 +658,18 @@
   #scGlance .sc-glance-pos{color:var(--bone)}
   #scGlance .sc-glance-thru{color:var(--sage)}
   #scGlance .sc-glance-pending{color:var(--rust)}
+  /* Task 4 (SC-BOARD-BTN) — quiet way back into the scorer from the
+     Leaderboard, for a phone that has already opened its captain link
+     once. "Quiet brass": outlined/text treatment, not the loud filled
+     .sc-round-chip pill — this is a secondary action next to the year
+     picker, not the primary one. */
+  .sc-board-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;margin:0 0 26px}
+  .sc-board-row .years{margin:0}
+  .sc-board-btn{font-family:var(--ui);font-size:13px;letter-spacing:.04em;color:var(--brass);
+    background:none;border:1px solid var(--brass-dim);border-radius:999px;padding:8px 14px;
+    text-decoration:none;cursor:pointer;display:inline-block}
+  .sc-board-btn:hover{border-color:var(--brass);color:var(--bone)}
+  .sc-board-btn:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -778,7 +828,10 @@
     <p class="eyebrow">Live from the course</p>
     <h2>Leaderboard</h2>
     <p class="lede">Gross decides The Bird. Tap a team for the full card.</p>
-    <div class="years" id="years" role="group" aria-label="Tournament year"></div>
+    <div class="sc-board-row">
+      <div class="years" id="years" role="group" aria-label="Tournament year"></div>
+      <div id="scBoardBtnWrap"></div>
+    </div>
     <div class="lb-head">
       <div>Pos</div><div>Team</div><div>Thru</div>
       <div class="lb-num lb-r1">R1</div><div class="lb-num lb-r2">R2</div>
@@ -1489,6 +1542,25 @@ function renderYears(){
   box.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
     STATE.year=b.dataset.year; STATE.open=null; renderAll();
   }));
+}
+
+// §18 SC-BOARD-BTN (Task 4): a quiet way back into the scorer from the
+// Leaderboard, for a phone that has already opened its captain link once.
+// Gated STRICTLY on the persisted scorer identity — scConfirmedTeam() is
+// the EXACT SAME localStorage read scShowConfirm's {confirmed:true} write
+// already backs (defined further down; read-only here, no new storage
+// path). Season-pinned via scorerSeason() (the scorer's OWN season
+// resolution, SC-YEAR) rather than STATE.year (the leaderboard's
+// separately-selectable archive year) — a captain scoring the CURRENT
+// season should see this even while browsing a past year's board. Absent
+// identity -> nothing rendered, ever (never a disabled/greyed placeholder).
+function renderBoardScoreBtn(){
+  const box=$("#scBoardBtnWrap");
+  if(!box) return;
+  const team=scConfirmedTeam(scorerSeason());
+  box.innerHTML=team
+    ? `<a href="#score" id="boardScoreBtn" class="sc-board-btn">Enter scores — Team ${esc(team)}</a>`
+    : "";
 }
 
 function scoreClass(score,par){
@@ -2715,7 +2787,7 @@ function renderChampions(){
 }
 
 function renderAll(){
-  renderYears(); renderLeaderboard(); renderField(); renderDraft(); renderPairings();
+  renderYears(); renderLeaderboard(); renderBoardScoreBtn(); renderField(); renderDraft(); renderPairings();
   renderCalcutta(); renderNextYear(); renderRooms(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
 }
 
@@ -4034,50 +4106,51 @@ function scPadHTML(){
     `</div><button type="button" class="sc-sheet-close" id="scSheetClose">Close</button></div>`;
 
   // CONFLICT mode (SC-NOCLOBBER rule 2): sheet and phone disagree — never
-  // auto-sendable without an explicit decision. Review round 1 (C3): the
-  // pad used to be a dead end whose only forward action clobbered the
-  // sheet (force-send) — it now offers THREE honest ways out, all naming
-  // both numbers via the head line above:
-  //   1. Pick a corrected number (or Other) — files as a new coalesced
-  //      entry (scPadPick's conflict branch, no auto-override).
-  //   2. "Keep the sheet's N" — discards the phone's entry (scPadKeepSheet).
-  //   3. "Send N anyway" — the one explicit override past the hold
-  //      (scPadForceSend), for a conflict discovered with no replace flow
-  //      at all (drain-time discovery — X20/I4).
-  // Review round 2 (NEW CRITICAL): force-send can be in flight for up to
-  // C2's 12s deadline. Nothing previously disabled "Keep the sheet's N"
-  // during that window — reopening the pad mid-flight and tapping it would
-  // unconditionally delete the journal entry while the SAME entry's POST
-  // was still travelling, so an "ok" response could land on the server
-  // AFTER the captain explicitly discarded it: the sheet-of-record ends up
-  // holding the value the captain just said to throw away, silently. Both
-  // exits that could race an in-flight send (Keep-the-sheet, Force-send —
-  // a second force-send tap while one is already in flight is equally
-  // redundant/hazardous) render disabled with "sending — wait" while
-  // cellState.entry.state==="sending". The number grid/Other stay ACTIVE:
-  // a fresh pick coalesces to a brand-new seq (scJournalSave always
-  // replaces), and the drain's existing stale-seq guard silently drops the
-  // in-flight response for the superseded seq when it eventually lands —
-  // no race there, that mechanism already existed (X18).
-  // Task 2 note: this branch's copy/ids/in-flight guards are carried
-  // forward UNTOUCHED (Task 4 re-dresses conflict content into its own
-  // sheet) — it just renders inside the new #scSheet chrome now, sharing
-  // the new head above and the renamed key grid (scPadKeysHTML) below.
+  // auto-sendable without an explicit decision. Task 4 (SC-CONFLICT-UI)
+  // re-dresses this into its OWN dialog, #scConSheet — a separate id from
+  // #scSheet (never both visible at once; #scSheet renders hidden+empty
+  // below, same "closed" contract every other state already relies on) —
+  // transcribing the prototype's #conSheet/.con-copy/.con-opts/.con-btn
+  // shapes verbatim rather than Task 2's interim 3-way layout (which also
+  // offered a full number-picking grid inside the conflict pad). That grid
+  // is RETIRED here: the prototype's own conflict sheet is a clean
+  // two-button ruling with no third way out, and this task follows that
+  // shape. A genuinely THIRD number (neither the sheet's nor the phone's
+  // already-queued value) now takes "Keep the sheet" first, then reopening
+  // the cell through the ordinary replace flow below — documented in
+  // README (SC-CONFLICT-UI has no room for it in the pinned verbatim copy
+  // line). SEMANTICS UNCHANGED — both buttons still call the SAME rev-2
+  // functions, by the SAME ids, with the SAME in-flight guard:
+  //   "Keep the sheet" -> scPadKeepSheet(hole) (discards the phone's held
+  //     entry, defers to the sheet).
+  //   "Replace with mine" -> scPadForceSend(hole) (the one explicit
+  //     override past the NOCLOBBER hold, same seq — I4/X20).
+  // Review round 2 (NEW CRITICAL, carried): force-send can be in flight for
+  // up to C2's 12s deadline. Reopening the pad mid-flight and tapping
+  // Keep-the-sheet would unconditionally delete the journal entry while the
+  // SAME entry's POST was still travelling, so an "ok" response could land
+  // on the server AFTER the captain explicitly discarded it. Both exits
+  // render disabled with "sending — wait" while cellState.entry.state===
+  // "sending" — the function-level guards in scPadKeepSheet/scPadForceSend
+  // are the real defense (untouched); this disables the SAME race at the
+  // UI layer too, in depth.
   if(cellState.kind==="conflict"){
     const sendingC=cellState.entry&&cellState.entry.state==="sending";
+    const conCopyHTML=`<p class="sc-con-copy">The sheet says <b>${cellState.sheetVal}</b> · `+
+      `this phone sent <b>${cellState.phoneVal}</b>. Someone else may have corrected it. `+
+      `Nothing resends on its own — pick which number is true.</p>`;
     const keepSheetHTML=sendingC
-      ? `<button type="button" id="scPadKeepSheet" class="sc-pad-replace" disabled>sending — wait</button>`
-      : `<button type="button" id="scPadKeepSheet" class="sc-pad-replace">Keep the sheet's ${cellState.sheetVal}</button>`;
+      ? `<button type="button" id="scPadKeepSheet" class="sc-con-btn sc-con-keep" disabled>sending — wait</button>`
+      : `<button type="button" id="scPadKeepSheet" class="sc-con-btn sc-con-keep"><b>${cellState.sheetVal}</b><small>Keep the sheet</small></button>`;
     const forceSendHTML=sendingC
-      ? `<button type="button" id="scPadForceSend" class="sc-pad-replace" disabled>sending — wait</button>`
-      : `<button type="button" id="scPadForceSend" class="sc-pad-replace">Send ${cellState.phoneVal} anyway</button>`;
+      ? `<button type="button" id="scPadForceSend" class="sc-con-btn sc-con-mine" disabled>sending — wait</button>`
+      : `<button type="button" id="scPadForceSend" class="sc-con-btn sc-con-mine"><b>${cellState.phoneVal}</b><small>Replace with mine</small></button>`;
     return `<div id="scVeil" class="sc-veil on"></div>`+
-      `<div id="scSheet" class="sc-sheet on" role="dialog" aria-modal="true" aria-label="Resolve conflict">`+
+      `<div id="scSheet" class="sc-sheet" hidden></div>`+
+      `<div id="scConSheet" class="sc-sheet on" role="dialog" aria-modal="true" aria-label="Resolve conflict">`+
       headHTML+
-      `<p class="sc-pad-conflict">Sheet has ${cellState.sheetVal} · your phone has ${cellState.phoneVal}</p>`+
-      scPadKeysHTML(hole)+
-      keepSheetHTML+
-      forceSendHTML+
+      conCopyHTML+
+      `<div class="sc-con-opts">${keepSheetHTML}${forceSendHTML}</div>`+
       `</div>`;
   }
 
@@ -4103,9 +4176,9 @@ function scPadHTML(){
   // REJECTED (rule 3's loud branch): verbatim verdict, manual Retry (same
   // seq — see scRetryEntry), "text Riley" escalation after 2 manual retries.
   const rejectedHTML=rejectedEntry
-    ? `<p class="sc-pad-rejected">Rejected: ${esc(rejectedEntry.verdict||"")}</p>`+
-      ((rejectedEntry.retries||0)>=2?`<p class="sc-pad-escalate">Still failing — text Riley.</p>`:"")+
-      `<button type="button" id="scPadRetry" class="sc-pad-replace">Retry send</button>`
+    ? `<p class="sc-rejected-line">Rejected: ${esc(rejectedEntry.verdict||"")}</p>`+
+      ((rejectedEntry.retries||0)>=2?`<p class="sc-rejected-escalate">Still failing — text Riley.</p>`:"")+
+      `<button type="button" id="scPadRetry" class="sc-sheet-cta">Retry send</button>`
     : "";
   return `<div id="scVeil" class="sc-veil on"></div>`+
     `<div id="scSheet" class="sc-sheet on" role="dialog" aria-modal="true" aria-label="Enter score">`+
@@ -4138,15 +4211,14 @@ function scSubmitScore(hole,score){
 }
 function scPadPick(hole,score){
   if(!(score>=1&&score<=19)) return;
-  // Task 2 (SC-PAD-SHEET): every branch — conflict, edit-mode replace, and
-  // a plain fresh tap — now converges on the SAME immediate submit. Before
-  // this task, edit mode alone diverted into an arm-then-confirm detour
-  // (STATE.scPadPending + a separate "Replace N with M" button); the
-  // conflict branch already went straight to scSubmitScore (see the old
-  // in-code comment this replaces), so this is that same behavior applied
-  // uniformly, not a new invention — the sheet already told the captain
-  // both numbers via the head + replace-line (or the conflict copy) BEFORE
-  // this tap, so the tap itself is the one deliberate act (I2/C3).
+  // Task 2 (SC-PAD-SHEET): edit-mode replace and a plain fresh tap both
+  // converge on the SAME immediate submit (edit mode used to divert into an
+  // arm-then-confirm detour — STATE.scPadPending + a separate "Replace N
+  // with M" button — retired). Task 4: this is no longer reachable from
+  // conflict mode at all — #scConSheet's two-button ruling has no number
+  // grid (see scPadHTML's conflict branch) — so every remaining caller has
+  // already named the current value via the head + replace-line BEFORE this
+  // tap, and the tap itself is the one deliberate act (I2).
   scSubmitScore(hole,score);
 }
 // C3 (review round 1): the conflict pad's second way out — discard the
@@ -4201,7 +4273,12 @@ function scWireCard(){
   const closeSheet=()=>{ STATE.scPadHole=null; STATE.scPadOtherOpen=false; renderScCard(); };
   const veil=$("#scVeil");
   if(veil) veil.addEventListener("click",closeSheet);
-  const pad=$("#scSheet");
+  // Task 4 (SC-CONFLICT-UI): scPadHTML() renders exactly ONE of two dialogs
+  // when a hole is open — #scConSheet (conflict) or #scSheet (everything
+  // else) — never both. #scPadKeepSheet/#scPadForceSend/#scPadRetry/.sc-key
+  // ids are unique regardless of which one contains them, so querying
+  // whichever is actually present covers both without a second wiring pass.
+  const pad=$("#scConSheet")||$("#scSheet");
   if(!pad||pad.hidden) return;
   const hole=STATE.scPadHole;
   const forceSendBtn=pad.querySelector("#scPadForceSend");

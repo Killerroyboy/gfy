@@ -3184,26 +3184,40 @@ async function cellSettledOk(doc, hole) {
   const heldEntryX20 = domX20.window.scJournalRead(journalKeyX20).entries[entryKeyX20];
   const heldSeqX20 = heldEntryX20 && heldEntryX20.seq;
 
-  docX20.querySelector('.sc-cell[data-hole="14"]').click(); // reopen -> conflict pad (C3 layout)
-  await until(() => !!docX20.querySelector("#scSheet #scPadForceSend"));
-  const padTextX20 = docX20.querySelector("#scSheet")?.textContent || "";
-  const padHasNumsX20 = !!docX20.querySelector("#scSheet .sc-key[data-score]");
-  const padHasKeepSheetX20 = !!docX20.querySelector("#scSheet #scPadKeepSheet");
-  const keepSheetEnabledBeforeX20 = docX20.querySelector("#scSheet #scPadKeepSheet")?.disabled !== true;
+  // Task 4 (SC-CONFLICT-UI): reopening a conflict cell now renders a
+  // SEPARATE dialog, #scConSheet — never #scSheet (which stays hidden+empty
+  // the whole time a conflict is open, the SAME "closed" contract every
+  // other state relies on) — with the prototype's verbatim two-button
+  // ruling copy, no number-picking grid at all (Task 2's interim 3-way
+  // layout is retired).
+  docX20.querySelector('.sc-cell[data-hole="14"]').click(); // reopen -> conflict SHEET (#scConSheet)
+  await until(() => !!docX20.querySelector("#scConSheet #scPadForceSend"));
+  const conSheetVisibleX20 = !!docX20.querySelector("#scConSheet") &&
+    docX20.querySelector("#scSheet")?.hidden === true;
+  const conCopyTextX20 = docX20.querySelector("#scConSheet .sc-con-copy")?.textContent || "";
+  const copyMatchesX20 = /sheet says 4/i.test(conCopyTextX20) && /this phone sent 6/i.test(conCopyTextX20);
+  const noKeyGridInConSheetX20 = !docX20.querySelector("#scConSheet .sc-key");
+  const conBtnsX20 = [...docX20.querySelectorAll("#scConSheet .sc-con-btn")];
+  const twoBtnsX20 = conBtnsX20.length === 2;
+  const padHasKeepSheetX20 = !!docX20.querySelector("#scConSheet #scPadKeepSheet");
+  const padHasForceSendX20 = !!docX20.querySelector("#scConSheet #scPadForceSend");
+  const keepSheetEnabledBeforeX20 = docX20.querySelector("#scConSheet #scPadKeepSheet")?.disabled !== true;
 
-  // I4 + NEW CRITICAL fix (round 2): click force-send — the request goes
-  // out (captured) but stays UNRESOLVED (forceSendGateX20). Reopen the pad
-  // MID-FLIGHT: "Keep the sheet's N" must render disabled. Attempt the
-  // race anyway (click it) — it must be a no-op: the held entry must still
-  // exist in the journal, untouched, while the send is still in flight.
+  // I4 + NEW CRITICAL fix (round 2, carried): click force-send — the
+  // request goes out (captured) but stays UNRESOLVED (forceSendGateX20).
+  // Reopen the pad MID-FLIGHT: BOTH ruling buttons must render disabled
+  // with "sending — wait" (the v2.6 in-flight assert, carried). Attempt the
+  // race anyway (click Keep-the-sheet) — it must be a no-op: the held entry
+  // must still exist in the journal, untouched, while the send is in flight.
   docX20.querySelector("#scPadForceSend").click();
   await until(() => bodiesX20.some(b => b.hole === 14)); // request captured...
   await until(() => docX20.querySelector('.sc-cell[data-hole="14"]')?.classList.contains("sc-sending")); // ...state flips synchronously, before the await
   docX20.querySelector('.sc-cell[data-hole="14"]').click(); // reopen mid-flight
-  await until(() => !!docX20.querySelector("#scSheet #scPadKeepSheet"));
-  const keepSheetDisabledMidFlightX20 = docX20.querySelector("#scSheet #scPadKeepSheet")?.disabled === true;
-  const forceSendDisabledMidFlightX20 = docX20.querySelector("#scSheet #scPadForceSend")?.disabled === true;
-  docX20.querySelector("#scSheet #scPadKeepSheet")?.click(); // the race — must no-op (disabled attr AND function-level guard)
+  await until(() => !!docX20.querySelector("#scConSheet #scPadKeepSheet"));
+  const keepSheetDisabledMidFlightX20 = docX20.querySelector("#scConSheet #scPadKeepSheet")?.disabled === true;
+  const forceSendDisabledMidFlightX20 = docX20.querySelector("#scConSheet #scPadForceSend")?.disabled === true;
+  const midFlightCopyOkX20 = /sending — wait/i.test(docX20.querySelector("#scConSheet")?.textContent || "");
+  docX20.querySelector("#scConSheet #scPadKeepSheet")?.click(); // the race — must no-op (disabled attr AND function-level guard)
   await settle(150);
   const entrySurvivedRaceX20 = !!domX20.window.scJournalRead(journalKeyX20).entries[entryKeyX20];
 
@@ -3216,25 +3230,58 @@ async function cellSettledOk(doc, hole) {
   await settle(200); // let scDrain's own async continuation (post-await renderScCard + loop) fully finish before tearing the window down
   const sentHolesX20 = bodiesX20.map(b => b.hole);
   const forceSendBodyX20 = bodiesX20.find(b => b.hole === 14);
+
+  // NEW (Task 4 Step 1): a CLEAN (not mid-flight) "Keep the sheet" click —
+  // journal entry gone + cell reverts — on a SEPARATE hole (5) so it can't
+  // interact with hole 14's already-resolved force-send above. Same
+  // drain-time-discovery technique: a fresh tap+pick queues the phone's own
+  // value BEFORE the sheet value (9) becomes known, so the very first drain
+  // attempt discovers the mismatch and holds — never a race where an unheld
+  // send could slip out first.
+  docX20.querySelector('.sc-cell[data-hole="5"]').click();
+  await until(() => !docX20.querySelector("#scSheet")?.hidden);
+  docX20.querySelector('#scSheet .sc-key[data-score="3"]').click();
+  domX20.window.scSheetHoles = () => ({ 14: 4, 5: 9 });
+  await until(() => docX20.querySelector('.sc-cell[data-hole="5"]')?.classList.contains("sc-conflict"));
+  await settle(200); // give the auto-drain every chance to (wrongly) fire before the keep-sheet click below
+  const noPostForHole5X20 = !bodiesX20.some(b => b.hole === 5);
+  const entryKey5X20 = domX20.window.scEntryKeyOf(roundActiveX20, 5);
+  const heldBeforeKeepX20 = !!domX20.window.scJournalRead(journalKeyX20).entries[entryKey5X20];
+  docX20.querySelector('.sc-cell[data-hole="5"]').click(); // reopen -> conflict sheet for hole 5
+  await until(() => !!docX20.querySelector("#scConSheet #scPadKeepSheet"));
+  const keepCopyOkX20 = /sheet says 9/i.test(docX20.querySelector("#scConSheet .sc-con-copy")?.textContent || "") &&
+    /this phone sent 3/i.test(docX20.querySelector("#scConSheet .sc-con-copy")?.textContent || "");
+  docX20.querySelector("#scConSheet #scPadKeepSheet").click(); // clean keep — no in-flight race this time
+  await until(() => !docX20.querySelector('.sc-cell[data-hole="5"]')?.classList.contains("sc-conflict"));
+  const entryGoneAfterKeepX20 = !domX20.window.scJournalRead(journalKeyX20).entries[entryKey5X20];
+  const cellRevertedX20 = !docX20.querySelector('.sc-cell[data-hole="5"]')?.classList.contains("sc-conflict");
+  const sheetClosedAfterKeepX20 = docX20.querySelector("#scSheet")?.hidden === true && !docX20.querySelector("#scConSheet");
   domX20.window.close();
 
-  check("X20: SC-NOCLOBBER — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict IMMEDIATELY with no intervening tap (score span '4·6' SHEET·MINE, .sc-conflict class, ▲ mark — rev 3: was '6·4' MINE·SHEET / ? pre-rev-3); pad(14) opens in replace-confirm naming both (C3 layout: numbers + Keep-the-sheet + Force-send); Keep-the-sheet/Force-send disable mid-flight and a race-click while sending never deletes the entry; force-send (I4) carries the SAME seq the held entry already had",
+  check("X20: SC-NOCLOBBER/SC-CONFLICT-UI — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict IMMEDIATELY with no intervening tap (score span '4·6' SHEET·MINE, .sc-conflict class, ▲ mark); reopening renders #scConSheet (never #scSheet, which stays hidden) with the prototype's verbatim ruling copy ('sheet says 4' / 'this phone sent 6'), exactly 2 .sc-con-btns, no number grid; Keep-the-sheet/Replace-with-mine disable mid-flight with 'sending — wait' text and a race-click while sending never deletes the entry; force-send (I4) carries the SAME seq the held entry already had; on a separate hole, a CLEAN (non-racing) Keep-the-sheet click deletes the journal entry and reverts the cell out of conflict",
     roundOkX20 && noPostYetX20 && cellConflictClassX20 && cellGlyphX20 && scoreSpanOkX20 &&
-      /6/.test(padTextX20) && /4/.test(padTextX20) && /anyway/i.test(padTextX20) &&
-      padHasNumsX20 && padHasKeepSheetX20 && keepSheetEnabledBeforeX20 &&
-      keepSheetDisabledMidFlightX20 && forceSendDisabledMidFlightX20 && entrySurvivedRaceX20 &&
+      conSheetVisibleX20 && copyMatchesX20 && noKeyGridInConSheetX20 && twoBtnsX20 &&
+      padHasKeepSheetX20 && padHasForceSendX20 && keepSheetEnabledBeforeX20 &&
+      keepSheetDisabledMidFlightX20 && forceSendDisabledMidFlightX20 && midFlightCopyOkX20 && entrySurvivedRaceX20 &&
       JSON.stringify(sentHolesX20) === JSON.stringify([14]) &&
       !!forceSendBodyX20 && forceSendBodyX20.score === 6 && forceSendBodyX20.seq === heldSeqX20 &&
-      typeof heldSeqX20 === "number",
+      typeof heldSeqX20 === "number" &&
+      noPostForHole5X20 && heldBeforeKeepX20 && keepCopyOkX20 &&
+      entryGoneAfterKeepX20 && cellRevertedX20 && sheetClosedAfterKeepX20,
     "roundOk=" + roundOkX20 + " noPostYet=" + noPostYetX20 + " cellConflictClass=" + cellConflictClassX20 +
       " cellGlyph=" + cellGlyphX20 + " scoreSpan=" + scoreSpanX20 +
-      " padHasNums=" + padHasNumsX20 + " padHasKeepSheet=" + padHasKeepSheetX20 +
+      " conSheetVisible=" + conSheetVisibleX20 + " copyMatches=" + copyMatchesX20 + " conCopyText=" + conCopyTextX20 +
+      " noKeyGrid=" + noKeyGridInConSheetX20 + " twoBtns=" + twoBtnsX20 +
+      " padHasKeepSheet=" + padHasKeepSheetX20 + " padHasForceSend=" + padHasForceSendX20 +
       " keepSheetEnabledBefore=" + keepSheetEnabledBeforeX20 +
       " keepSheetDisabledMidFlight=" + keepSheetDisabledMidFlightX20 +
-      " forceSendDisabledMidFlight=" + forceSendDisabledMidFlightX20 +
+      " forceSendDisabledMidFlight=" + forceSendDisabledMidFlightX20 + " midFlightCopyOk=" + midFlightCopyOkX20 +
       " entrySurvivedRace=" + entrySurvivedRaceX20 +
       " sentHoles=" + JSON.stringify(sentHolesX20) + " heldSeq=" + heldSeqX20 +
-      " forceSendBody=" + JSON.stringify(forceSendBodyX20) + " padText=" + padTextX20.slice(0, 200));
+      " forceSendBody=" + JSON.stringify(forceSendBodyX20) +
+      " noPostForHole5=" + noPostForHole5X20 + " heldBeforeKeep=" + heldBeforeKeepX20 + " keepCopyOk=" + keepCopyOkX20 +
+      " entryGoneAfterKeep=" + entryGoneAfterKeepX20 + " cellReverted=" + cellRevertedX20 +
+      " sheetClosedAfterKeep=" + sheetClosedAfterKeepX20);
 }
 
 {
@@ -3999,6 +4046,45 @@ async function cellSettledOk(doc, hole) {
       " confirmVisibleAfterPick=" + confirmVisibleAfterPickX31 + " cardVisibleAfterConfirm=" + cardVisibleAfterConfirmX31 +
       " pickerHiddenAfterConfirm=" + pickerHiddenAfterConfirmX31 +
       " stillOnCardAfterFinalRepaint=" + stillOnCardAfterFinalRepaintX31);
+}
+
+{
+  // X32 (rev 3, SC-BOARD-BTN): #boardScoreBtn on the Leaderboard is gated
+  // STRICTLY on the persisted scorer identity — scConfirmedTeam()'s own
+  // localStorage read (the SAME scKey/{confirmed:true} shape scShowConfirm's
+  // real confirm-tap click handler already writes; read-only here, no new
+  // storage path). A fresh dom with no such key must render nothing at all.
+  const domX32 = makeDom("#board", withScEndpoint());
+  const docX32 = domX32.window.document;
+  await until(() => docX32.querySelectorAll("#lbBody .lb-row").length > 0);
+  const noBtnBeforeX32 = !docX32.querySelector("#boardScoreBtn");
+  const yearsPresentBeforeX32 = !!docX32.querySelector("#years"); // sanity: the row it's meant to sit beside is actually there
+
+  // Plant the SAME {confirmed:true} shape scShowConfirm's real write
+  // produces, hand-constructed exactly like journalKeyX20/entryKeyX20 above
+  // (scKey/nkey are `const`-bound, never window properties — scorerSeason()
+  // IS a plain top-level `function`, so it's used for the season half; team
+  // key literal "duck" is nkey("Duck"), established elsewhere in this file).
+  const seasonX32 = domX32.window.scorerSeason();
+  domX32.window.localStorage.setItem("gfy-scorer:" + seasonX32 + ":duck", JSON.stringify({ confirmed: true }));
+  domX32.window.renderAll(); // the SAME function periodic reload already calls — no new render path
+  await until(() => !!docX32.querySelector("#boardScoreBtn"));
+  const btnX32 = docX32.querySelector("#boardScoreBtn");
+  const btnTextOkX32 = /Enter scores/.test(btnX32?.textContent || "") && /Duck/.test(btnX32?.textContent || "");
+  const btnHrefOkX32 = btnX32?.getAttribute("href") === "#score";
+  const btnBesideYearsX32 = btnX32?.closest(".sc-board-row")?.contains(docX32.querySelector("#years")) === true;
+
+  btnX32.click();
+  await until(() => docX32.querySelector('.view[data-view="score"]')?.hidden === false);
+  const scoreViewShownX32 = docX32.querySelector('.view[data-view="score"]')?.hidden === false &&
+    docX32.querySelector('.view[data-view="board"]')?.hidden === true;
+  domX32.window.close();
+
+  check("X32: SC-BOARD-BTN — #boardScoreBtn is absent on a fresh #board load with no persisted scorer identity; planting the SAME {confirmed:true} localStorage key scShowConfirm's real confirm-tap writes makes it appear beside the year picker (#years) reading 'Enter scores — Team Duck', href=\"#score\"; clicking it shows the score view (and hides the board)",
+    noBtnBeforeX32 && yearsPresentBeforeX32 && btnTextOkX32 && btnHrefOkX32 && btnBesideYearsX32 && scoreViewShownX32,
+    "noBtnBefore=" + noBtnBeforeX32 + " yearsPresentBefore=" + yearsPresentBeforeX32 +
+      " btnText=" + (btnX32?.textContent || "") + " btnHref=" + btnX32?.getAttribute("href") +
+      " btnBesideYears=" + btnBesideYearsX32 + " scoreViewShown=" + scoreViewShownX32);
 }
 
 /* ---------------------------------------------------------------------

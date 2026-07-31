@@ -272,9 +272,15 @@ Each team gets one link — `.../gfy/#score?team=<Team>` — generated for you (
 "Scoring for **\<Team\>** — \<roster\>" confirmation; after that, that link (or
 a bare `#score`) resumes straight to that team's card. To switch teams (a
 captain covering two teams, or Riley filling in), tap **"Not your team?"** on
-that one-time confirmation screen before confirming, or open the other team's
-own link — there's no standing "Who's scoring?" picker in the card view itself
-yet (future work).
+that one-time confirmation screen before confirming, or — once on the card —
+tap **"not you? switch"** in the sticky header at any time; both open the same
+standing "Who's scoring?" picker.
+
+Once a captain has opened their own link at least once, the Leaderboard page
+also carries a quiet **"Enter scores — Team \<Team\>"** button beside the year
+picker — a fast way back into the card without re-typing the link. It only
+appears on phones that have opened their captain link; a browser that never
+confirmed a team sees nothing there.
 
 The card is 18 cells, Out and In. Tap a hole, tap the score — **it sends
 immediately**, no confirm screen, no undo timer, so a tap that ends up in a
@@ -290,7 +296,11 @@ signal — a tap always lands instantly, bars or no bars. Copy states the truth
 plainly: queued scores live on this phone and send next time this page is
 open with signal. If two phones ever send different numbers for the same
 hole, the site never auto-picks a winner — it shows both numbers and waits
-for a person to resolve it.
+for a person to resolve it: two plain-word buttons, **"Keep the sheet"** or
+**"Replace with mine."** Neither one resends anything on its own. If the real
+answer is a third number — not the sheet's, not the phone's — tap "Keep the
+sheet" first, then tap the cell again; that reopens the ordinary entry sheet,
+where the new number goes in like any other tap.
 
 **The paper scorecard is the tournament's system of record.** Keep it, and
 turn it in, exactly like every year before this — the phone scorer and the
