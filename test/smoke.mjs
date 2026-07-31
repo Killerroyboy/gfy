@@ -4524,6 +4524,86 @@ async function cellSettledOk(doc, hole) {
 }
 
 /* ---------------------------------------------------------------------
+   X39-X40 (§21, suppression-rank wave): amendment 2's rationale — the raw-
+   gross fallback ordering compares unequal hole counts and must not be
+   presented as standing — extended to the two remaining standing surfaces:
+   the board's Pos column + .lead crown, and the calcutta's payout places +
+   per-lot win claims (gross basis only; money is never suppressed).
+   --------------------------------------------------------------------- */
+{
+  // X39: SC-RANK-POS — the board makes no place claims when pars are
+  // suppressed. Complete course: Pos numbers + .lead crown exactly as today
+  // (both-direction honesty, X37 idiom). Blank par: every Pos cell is
+  // em-dash, no .lead row, while the rows themselves still render (order is
+  // a sort, not a claim).
+  const domOKX39 = makeDom("");
+  await until(() => domOKX39.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docOKX39 = domOKX39.window.document;
+  const okPosFirstX39 = docOKX39.querySelector("#lbBody .lb-row .lb-pos");
+  const okPos1X39 = okPosFirstX39 && okPosFirstX39.textContent.trim() === "1";
+  const okLeadX39 = !!docOKX39.querySelector("#lbBody .lb-row.lead");
+  domOKX39.window.close();
+
+  const courseBlank7X39 = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+  const domBX39 = makeDom("", withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7X39 }),
+  }));
+  await until(() => domBX39.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docBX39 = domBX39.window.document;
+  const posCellsBX39 = [...docBX39.querySelectorAll("#lbBody .lb-pos")].map(e => e.textContent.trim());
+  const rowsExistBX39 = posCellsBX39.length >= 5;
+  const allDashBX39 = rowsExistBX39 && posCellsBX39.every(t => t === "—");
+  const noLeadBX39 = !docBX39.querySelector("#lbBody .lb-row.lead");
+  domBX39.window.close();
+
+  check("X39: SC-RANK-POS — complete course: first Pos '1' + a .lead row present; blank-par: all Pos cells '—', zero .lead rows, all teams still listed (no standing claims off the raw-gross fallback)",
+    okPos1X39 && okLeadX39 && rowsExistBX39 && allDashBX39 && noLeadBX39,
+    `okPos1=${okPos1X39} okLead=${okLeadX39} rows=${posCellsBX39.length} allDash=${allDashBX39} noLead=${noLeadBX39}`);
+}
+
+{
+  // X40: SC-RANK-CAL — gross-basis calcutta suppresses PLACES and WIN
+  // CLAIMS, never MONEY. Complete course: today's exact behavior (a paying
+  // place and a "Wins if it ended now: $N" claim exist). Blank par: no
+  // .pay-row, pinned empty-state + paused basis line, owned+ranked lots
+  // read "awaiting pars", and every money tile is byte-identical across the
+  // two renders.
+  const domOKX40 = makeDom("");
+  await until(() => domOKX40.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docOKX40 = domOKX40.window.document;
+  const okWouldX40 = /Wins if it ended now: \$\d+/.test(docOKX40.querySelector("#aucBody").textContent);
+  const okPlaceX40 = !!docOKX40.querySelector("#payBody .pay-row");
+  const moneyOKX40 = ["#calPot", "#calRake", "#calPayable", "#calTop"].map(s => docOKX40.querySelector(s).textContent);
+  const outOKX40 = docOKX40.querySelector("#calOut").textContent;
+  domOKX40.window.close();
+
+  const courseBlank7X40 = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+  const domBX40 = makeDom("", withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7X40 }),
+  }));
+  await until(() => domBX40.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docBX40 = domBX40.window.document;
+  const payBodyBX40 = docBX40.querySelector("#payBody");
+  const noPlacesBX40 = payBodyBX40 && !payBodyBX40.querySelector(".pay-row") &&
+    /Payouts wait on the Course tab — standings need all 18 pars\./.test(payBodyBX40.textContent);
+  const basisBX40 = /Paused · Course pars incomplete/.test(docBX40.querySelector("#calBasis").textContent);
+  const aucTextBX40 = docBX40.querySelector("#aucBody").textContent;
+  const awaitingBX40 = /awaiting pars/.test(aucTextBX40) && !/Wins if it ended now|Won: \$/.test(aucTextBX40);
+  const moneyBX40 = ["#calPot", "#calRake", "#calPayable", "#calTop"].map(s => docBX40.querySelector(s).textContent);
+  const outBX40 = docBX40.querySelector("#calOut").textContent;
+  domBX40.window.close();
+  const moneySameX40 = JSON.stringify(moneyOKX40) === JSON.stringify(moneyBX40) && outOKX40 === outBX40;
+
+  check("X40: SC-RANK-CAL — complete course: paying place + 'Wins if it ended now: $N' present; blank-par: zero .pay-row + pinned 'Payouts wait on the Course tab' empty-state + 'Paused · Course pars incomplete' basis + owned lots 'awaiting pars' (no win claims) + pot/rake/payable/top/outstanding byte-identical across both renders",
+    okWouldX40 && okPlaceX40 && noPlacesBX40 && basisBX40 && awaitingBX40 && moneySameX40,
+    `okWould=${okWouldX40} okPlace=${okPlaceX40} noPlaces=${noPlacesBX40} basis=${basisBX40} awaiting=${awaitingBX40} moneySame=${moneySameX40}`);
+}
+
+/* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
 const groupTally = {};
