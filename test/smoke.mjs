@@ -3822,11 +3822,31 @@ async function cellSettledOk(doc, hole) {
   const cellShowsBothX29 = conflictCellScoreX29 === "4·8";
 
   domX29.window.close();
-  check("X29: SC-TALLY-HONEST — Out/In/Total/To-par all computed from ONE scCellState() walk over Duck's real r2 fixture, with hole 9's planted sheet(4)/phone(8) conflict excluded from every tally number (fixture-derived expectations: Out=" + outSum + " In=" + inSum + " Total=" + totalExpected + " toPar=" + toParExpected + " thru=" + thruExpected + "); to-par tile label matches /thru \\d+/ AND the exact count; data-mode stays 'topar' (full course fixture); the conflicted cell itself still shows both numbers (4·8)",
-    roundOkX29 && outOkX29 && inOkX29 && totalOkX29 && toParOkX29 && thruRegexOkX29 && thruExactOkX29 && modeOkX29 && cellShowsBothX29,
+
+  // Structural, source-level check (stated honestly as such — the actual
+  // sticky-range PROOF lives in a real-browser measurement harness outside
+  // this suite, per fix-round-1's report: jsdom does no layout at all, so
+  // it cannot observe whether position:sticky has any real travel room —
+  // only that the declaration is textually present). Fix round 1 (review
+  // CRITICAL): #scHeader had no CSS rule at all, so its box height equalled
+  // its sticky child's own height (zero slack — the child unstuck almost
+  // immediately and scrolled away with the page, measured directly:
+  // getBoundingClientRect().top went from 52 to roughly -200 after a full
+  // scroll). `#scHeader{display:contents}` removes it from the render tree
+  // as a box, making .sc-top's containing block .wrap instead — spanning
+  // the whole scrollable score view — confirmed fixed in the SAME harness
+  // (top stayed exactly 52 across the full scroll range, banner present or
+  // not). See task-3-report.md's fix-round-1 section for the harness
+  // command + full before/after measurements.
+  const scHeaderDisplayContentsX29 = /#scHeader\{[^}]*display:\s*contents/.test(html);
+
+  check("X29: SC-TALLY-HONEST — Out/In/Total/To-par all computed from ONE scCellState() walk over Duck's real r2 fixture, with hole 9's planted sheet(4)/phone(8) conflict excluded from every tally number (fixture-derived expectations: Out=" + outSum + " In=" + inSum + " Total=" + totalExpected + " toPar=" + toParExpected + " thru=" + thruExpected + "); to-par tile label matches /thru \\d+/ AND the exact count; data-mode stays 'topar' (full course fixture); the conflicted cell itself still shows both numbers (4·8); STRUCTURAL (source-check only — real sticky-range proof is a real-browser harness, see task-3-report.md fix round 1): #scHeader{display:contents} is present in the source, so .sc-top's containing block is .wrap (spans the whole scrollable view) rather than a zero-slack #scHeader box",
+    roundOkX29 && outOkX29 && inOkX29 && totalOkX29 && toParOkX29 && thruRegexOkX29 && thruExactOkX29 && modeOkX29 && cellShowsBothX29 &&
+      scHeaderDisplayContentsX29,
     "roundOk=" + roundOkX29 + "(was " + roundX29 + ") out=" + tileV(0) + "(want " + outSum + ") in=" + tileV(1) + "(want " + inSum +
       ") total=" + tileV(2) + "(want " + totalExpected + ") toPar=" + tileV(3) + "(want " + toParExpected + ") parLabel=" +
-      JSON.stringify(parLabelX29) + " mode=" + tallyElX29?.getAttribute("data-mode") + " conflictCellScore=" + conflictCellScoreX29);
+      JSON.stringify(parLabelX29) + " mode=" + tallyElX29?.getAttribute("data-mode") + " conflictCellScore=" + conflictCellScoreX29 +
+      " scHeaderDisplayContents=" + scHeaderDisplayContentsX29);
 }
 
 {
@@ -3907,7 +3927,21 @@ async function cellSettledOk(doc, hole) {
   // #scNotYou link), wired to the SAME scShowPicker() the pre-confirm flow
   // already used. Any confirmed-state dom works, per the brief — Duck's
   // noSheet flow (openScorer's default confirm-then-cells wait) is the
-  // simplest one already established in this suite.
+  // simplest one already established in this suite; Duck is genuinely
+  // {confirmed:true}-persisted by this point (openScorer's own confirm tap),
+  // which is exactly the precondition the fix-round-1 bug needed (a
+  // REMEMBERED/hash-matched team, not a fresh unconfirmed one).
+  // Fix round 1 (review Important #2, extended — same X-number, no new
+  // check()): #scSwitch used to (a) leave the previous team's #scCard/
+  // #scGlance/#scSheetHost fully visible UNDERNEATH the picker, and (b) get
+  // silently closed by the very next renderScorer() repaint (the 60s
+  // paint() cycle, worst case, possibly mid-tap) — location.hash still
+  // names Duck the whole time (#scSwitch never changes it), so the ONLY
+  // guard renderScorer() honored (scConfirmPending) never even applied:
+  // scConfirmedTeam()/hashTeam routing fired first and bounced straight
+  // back to scShowCard(). Both are asserted directly below, then the normal
+  // pick-a-team flow is proven to still resume correctly afterward, and the
+  // guard is proven not to strand the app once a team IS picked.
   const domX31 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX31 = await openScorer(domX31, { noSheet: true });
   const pickerHiddenBeforeX31 = docX31.querySelector("#scPicker")?.hidden !== false;
@@ -3918,11 +3952,53 @@ async function cellSettledOk(doc, hole) {
   const teamBtnsX31 = [...docX31.querySelectorAll("#scPicker .sc-pick")];
   const hasTeamBtnsX31 = teamBtnsX31.length > 0;
   const hasDuckBtnX31 = teamBtnsX31.some(b => /Duck/.test(b.textContent || ""));
+
+  // (a) the previous team's card/rank-panel must not be visible underneath.
+  const cardHiddenAfterSwitchX31 = docX31.querySelector("#scCard")?.hidden === true;
+  const cardEmptyAfterSwitchX31 = (docX31.querySelector("#scCard")?.innerHTML || "").trim() === "";
+  const glanceEmptyAfterSwitchX31 = (docX31.querySelector("#scGlance")?.innerHTML || "").trim() === "";
+
+  // (b) repaint survival — the EXACT failure mode: force the same
+  // renderScorer() call the 60s paint() cycle (and every hashchange) makes,
+  // with location.hash STILL naming the already-confirmed Duck the whole
+  // time. Pre-fix this silently closed the picker and re-showed Duck's card.
+  domX31.window.renderScorer();
+  const pickerSurvivesRepaintX31 = docX31.querySelector("#scPicker")?.hidden === false;
+  const teamBtnsSurviveRepaintX31 = docX31.querySelectorAll("#scPicker .sc-pick").length > 0;
+  const cardStillHiddenAfterRepaintX31 = docX31.querySelector("#scCard")?.hidden === true;
+
+  // Complete a team pick — the normal flow must still fully resume:
+  // picker -> confirm -> card, exactly like the pre-confirm path.
+  [...docX31.querySelectorAll("#scPicker .sc-pick")].find(b => /Duck/.test(b.textContent || "")).click();
+  const confirmVisibleAfterPickX31 = docX31.querySelector("#scConfirm")?.hidden === false;
+  docX31.querySelector("#scConfirmBtn")?.click();
+  const cardVisibleAfterConfirmX31 = docX31.querySelector("#scCard")?.hidden !== true &&
+    docX31.querySelectorAll("#scCard .sc-cell").length > 0;
+  const pickerHiddenAfterConfirmX31 = docX31.querySelector("#scPicker")?.hidden === true;
+
+  // Guard must not strand the app: one more forced repaint, now that a team
+  // IS confirmed and the picker is closed again, must NOT re-show the
+  // picker (STATE.scPickerOpen was cleared in scShowConfirm/scShowCard).
+  domX31.window.renderScorer();
+  const stillOnCardAfterFinalRepaintX31 = docX31.querySelector("#scCard")?.hidden !== true &&
+    docX31.querySelector("#scPicker")?.hidden === true;
+
   domX31.window.close();
-  check("X31: #scSwitch — a <button> (never an <a>), click opens #scPicker (visible, hidden=false) with real team buttons (.sc-pick, including Duck), wired to the existing scShowPicker() — no new picker logic",
-    pickerHiddenBeforeX31 && switchIsButtonX31 && pickerVisibleX31 && hasTeamBtnsX31 && hasDuckBtnX31,
+  check("X31: #scSwitch — a <button> (never an <a>), click opens #scPicker (visible, hidden=false) with real team buttons (.sc-pick, including Duck), wired to the existing scShowPicker() — no new picker logic; the previous team's #scCard/#scGlance are hidden+cleared underneath (not layered under the picker); a forced renderScorer() (the exact 60s-paint()/hashchange repaint failure mode, with location.hash STILL naming the already-confirmed team) does NOT silently close the picker or re-show the old card; completing a team pick still resumes the normal picker->confirm->card flow, and a further forced repaint afterward stays on the card (guard doesn't strand the app once a team is confirmed)",
+    pickerHiddenBeforeX31 && switchIsButtonX31 && pickerVisibleX31 && hasTeamBtnsX31 && hasDuckBtnX31 &&
+      cardHiddenAfterSwitchX31 && cardEmptyAfterSwitchX31 && glanceEmptyAfterSwitchX31 &&
+      pickerSurvivesRepaintX31 && teamBtnsSurviveRepaintX31 && cardStillHiddenAfterRepaintX31 &&
+      confirmVisibleAfterPickX31 && cardVisibleAfterConfirmX31 && pickerHiddenAfterConfirmX31 &&
+      stillOnCardAfterFinalRepaintX31,
     "hiddenBefore=" + pickerHiddenBeforeX31 + " isButton=" + switchIsButtonX31 + " visibleAfter=" + pickerVisibleX31 +
-      " teamBtnCount=" + teamBtnsX31.length + " hasDuck=" + hasDuckBtnX31);
+      " teamBtnCount=" + teamBtnsX31.length + " hasDuck=" + hasDuckBtnX31 +
+      " cardHiddenAfterSwitch=" + cardHiddenAfterSwitchX31 + " cardEmptyAfterSwitch=" + cardEmptyAfterSwitchX31 +
+      " glanceEmptyAfterSwitch=" + glanceEmptyAfterSwitchX31 +
+      " pickerSurvivesRepaint=" + pickerSurvivesRepaintX31 + " teamBtnsSurviveRepaint=" + teamBtnsSurviveRepaintX31 +
+      " cardStillHiddenAfterRepaint=" + cardStillHiddenAfterRepaintX31 +
+      " confirmVisibleAfterPick=" + confirmVisibleAfterPickX31 + " cardVisibleAfterConfirm=" + cardVisibleAfterConfirmX31 +
+      " pickerHiddenAfterConfirm=" + pickerHiddenAfterConfirmX31 +
+      " stillOnCardAfterFinalRepaint=" + stillOnCardAfterFinalRepaintX31);
 }
 
 /* ---------------------------------------------------------------------

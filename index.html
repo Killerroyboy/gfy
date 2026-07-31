@@ -423,7 +423,23 @@
      share the viewport with) — 52px accounts for its real box (11px
      top+bottom padding + a ~28px content line at the nav-name's 1.05rem/
      the page's own 1.65 line-height + 1px border), so .sc-top docks
-     directly under it instead of sliding beneath/behind it. */
+     directly under it instead of sliding beneath/behind it.
+     Fix round 1 (review CRITICAL): #scHeader itself had no CSS rule, so its
+     box height equalled .sc-top's own height (normally its only child) —
+     position:sticky can never travel further than its containing block's
+     remaining box, so with zero slack .sc-top unstuck almost immediately
+     and scrolled off with the rest of the page (measured in a real browser
+     harness: getBoundingClientRect().top went from 52 to roughly -200 after
+     a full-page scroll, pre-fix). display:contents removes #scHeader from
+     the render tree as a box entirely — its children (the optional banner
+     <p>s above, then .sc-top) become effectively direct children of .wrap,
+     whose height spans the WHOLE scrollable score view, giving .sc-top real
+     travel room. Banners stay unaffected: display:contents doesn't change
+     DOM order or reflow position, so they still render in normal flow,
+     still non-sticky, still directly above .sc-top — confirmed in the same
+     harness with window.scStorageDead forced on (see task-3-report.md's
+     fix-round-1 section for the exact measured before/after values). */
+  #scHeader{display:contents}
   .sc-top{position:sticky;top:52px;z-index:5;
     background:linear-gradient(var(--pine) 82%, rgba(14,32,25,0));
     padding:10px 0 2px;margin:0 0 4px}
@@ -1129,7 +1145,7 @@ const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,
   17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
 let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null,
   scTeam:null, scSeason:null, scPadHole:null, scRoundOverride:null,
-  scPadOtherOpen:false, scConfirmPending:null };
+  scPadOtherOpen:false, scConfirmPending:null, scPickerOpen:null };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -3267,6 +3283,7 @@ function scDayAbbrev(round){
 
 function scShowCard(seasonY,team){
   STATE.scConfirmPending=null;
+  STATE.scPickerOpen=null; // fix round 1 (Important #2): defense-in-depth clear — see scShowPicker/renderScorer
   $("#scConfirm").hidden=true;
   $("#scPicker").hidden=true;
   if(STATE.scTeam!==team||STATE.scSeason!==seasonY){
@@ -3296,7 +3313,34 @@ function scShowInert(){
 }
 function scShowPicker(seasonY){
   STATE.scConfirmPending=null;
+  // SC-SWITCH-GUARD (task 3, fix round 1, Important #2): #scSwitch makes
+  // this reachable from an ALREADY-confirmed card view now (rev 2's
+  // #scNotYou only ever fired pre-confirm) — "the picker is the
+  // intentionally-displayed screen right now" needs its OWN season-scoped
+  // guard, symmetric with scConfirmPending's, checked FIRST (before
+  // hashTeam/remembered routing) in renderScorer() below: a captain who
+  // tapped #scSwitch never un-confirmed anything, so scConfirmedTeam()
+  // stays truthy the WHOLE time the picker is open, meaning the existing
+  // scConfirmPending-only guard (checked only after the remembered-team
+  // branch already returns) would never even be reached — the picker would
+  // get silently closed by the very next repaint (worst case, the 60s
+  // paint() cycle, possibly mid-tap). Cleared in scShowConfirm/scShowCard,
+  // the only two places that ever hide #scPicker again — never on the
+  // #score-view-inactive early return above, matching scConfirmPending's
+  // own (pre-existing) non-clearing-on-nav-away behavior exactly, so this
+  // introduces no new edge case beyond what already existed there.
+  STATE.scPickerOpen={season:seasonY};
   $("#scHeader").innerHTML="";
+  // The previous team's card + rank panel + any open pad must not stay
+  // visible underneath the picker (review CRITICAL/Important #2 finding:
+  // #scShowPicker only ever cleared #scHeader before this fix). Same shape
+  // as renderScCard()'s own `!STATE.scTeam` branch — the picker screen
+  // means "no team is the current display," even though STATE.scTeam
+  // itself still holds the old value until a NEW team is confirmed.
+  const card=$("#scCard"); if(card){ card.hidden=true; card.innerHTML=""; }
+  const glance=$("#scGlance"); if(glance) glance.innerHTML="";
+  const sheetHost=$("#scSheetHost"); if(sheetHost) sheetHost.innerHTML="";
+  STATE.scPadHole=null; STATE.scPadOtherOpen=false;
   const teams=scorerTeams(seasonY);
   const pickerEl=$("#scPicker");
   pickerEl.innerHTML=`<h2>Who's scoring?</h2>`+teams.map(t=>
@@ -3316,6 +3360,7 @@ function scShowConfirm(seasonY,team){
   // decided yet, still routing fresh" apart from "captain is mid-decision
   // right here" and skip re-deciding out from under them.
   STATE.scConfirmPending={season:seasonY, team};
+  STATE.scPickerOpen=null; // moving off the picker screen — see scShowPicker's SC-SWITCH-GUARD note
   $("#scHeader").innerHTML="";
   const confirmEl=$("#scConfirm");
   confirmEl.innerHTML=`<p>Scoring for <strong>${esc(team)}</strong> — ${esc(scRoster(team,seasonY).join(", "))}.</p>`+
@@ -4306,6 +4351,16 @@ function renderScorer(){
   }
   scStartDrainTimer();
   const seasonY=scorerSeason();
+  // SC-SWITCH-GUARD (task 3, fix round 1, Important #2): checked FIRST,
+  // before hashTeam/remembered routing below — #scSwitch reaches the picker
+  // from an ALREADY-confirmed (remembered) session, where the hashTeam
+  // and/or remembered branches immediately below would otherwise route
+  // straight back to scShowCard() on the very next repaint (a captain who
+  // taps #scSwitch never un-confirms anything, so scConfirmedTeam() stays
+  // truthy the whole time the picker is open — the scConfirmPending guard
+  // further down never even gets reached in this scenario). Set/cleared in
+  // scShowPicker/scShowConfirm/scShowCard — see scShowPicker's comment.
+  if(STATE.scPickerOpen && STATE.scPickerOpen.season===seasonY) return;
   const hashTeam=scorerTeamFromHash();
   if(hashTeam){
     let confirmed=false;
