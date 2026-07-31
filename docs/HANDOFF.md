@@ -190,3 +190,8 @@ Trail: `.superpowers/sdd/2026-07-31-gfy-d3-par-validation/progress.md` + task re
   post-push. Suppressed-glance copy ("Thru 7" vs "· thru 7") open for Riley re-styling.
 
 **D3 PUSHED + LIVE 2026-07-31:** main = `5ddc36b`, live md5 == tip, D3 markers served. Next-push rollback ref = `5ddc36b`. §21 suppression-rank wave building in `.worktrees/rank-supp`.
+
+## 2026-07-31 — §21 suppression-rank wave COMPLETE + MERGED (local)
+
+**v2.1-invites at `a2b96c0`**, union 209/209, NOT pushed. With courseMap() null: board Pos "—" + no crown (order stays), gross-basis calcutta pauses places/win-claims with pinned copy while money stays live; net-basis never suppressed; README documents the states. Trail: `.superpowers/sdd/2026-07-31-gfy-suppression-rank/` (ledger, reports, 69+ PNGs). Whole-branch review: 19 frozen fns byte-proven, site-wide standing sweep clean both directions, "Yes".
+- **RILEY:** (1) push word; (2) D3 UNSOLD-LOT RULING (§22 candidate — payout table books a cut to an unsold lot while the auction board says UNSOLD; the only money-contradiction left; blocked on the parked stays-in-pot vs redistributes rule); (3) optional follow-up bundle: suppression copy (flag-line extension, combined no-cards+no-pars string, README basis-concept gap) + coverage (net-basis fixture, arm-priority assert, X39 parity).
