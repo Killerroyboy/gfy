@@ -4444,12 +4444,29 @@ async function cellSettledOk(doc, hole) {
   // narrow-width half of "both widths".
   const narrowRuleStructuralX37 = /@media \(max-width:560px\)/.test(cssTextX37) &&
     /\.lb-r1,\.lb-r2,\.lb-total\{display:none\}/.test(cssTextX37);
+  // STRUCTURAL (whole-branch review Imp-1 fix): hiding the Total column out
+  // of the explicit 7-track grid without redefining the template leaves a
+  // dead 7th track — the surviving 6 columns must get their own template,
+  // and it MUST be scoped to widths ABOVE the ≤560px breakpoint (an
+  // unscoped id-selector rule would out-specify — id beats class — the
+  // ≤560px 4-track rule above and regress phones, since .lb-suppressed is a
+  // viewport-independent state class). Sliced from the media query's own
+  // start (same index-based technique K5 already established for this
+  // file's CSS-source checks) so the assert is scoped to THIS rule, not
+  // just "these tokens appear somewhere in the file"; the closing
+  // `\s*[};]` after the 6th value guards against a regression that leaves
+  // a stray 7th track back in (must be EXACTLY 6 tracks, not 6-then-more).
+  const mqStartX37 = cssTextX37.indexOf("@media (min-width:561px)");
+  const mqSliceX37 = mqStartX37 >= 0 ? cssTextX37.slice(mqStartX37, mqStartX37 + 300) : "";
+  const gridTemplateRuleStructuralX37 =
+    /#leaderboard\.lb-suppressed\s*\.lb-head\s*,\s*#leaderboard\.lb-suppressed\s*\.lb-row/.test(mqSliceX37) &&
+    /grid-template-columns:\s*2\.4rem\s+1fr\s+4rem\s+3\.2rem\s+3\.2rem\s+4rem\s*[};]/.test(mqSliceX37);
   domBX37.window.close();
 
-  check("X37: SC-PAR-LABEL — board label honesty (§20 amendment 2): complete course => #lbToParHead reads 'To par', #leaderboard NOT .lb-suppressed, real to-par form rendered; blank-par-7 course => header flips to 'Total', #leaderboard IS .lb-suppressed, the To-par-column span holds the IDENTICAL plain-digit gross the Total column holds (never a differently-valued or mislabeled figure); STRUCTURAL: both the new wide-width collapse rule and the pre-existing ≤560px rule that hides the redundant Total column are present in the page's own CSS source (both widths covered)",
+  check("X37: SC-PAR-LABEL — board label honesty (§20 amendment 2): complete course => #lbToParHead reads 'To par', #leaderboard NOT .lb-suppressed, real to-par form rendered; blank-par-7 course => header flips to 'Total', #leaderboard IS .lb-suppressed, the To-par-column span holds the IDENTICAL plain-digit gross the Total column holds (never a differently-valued or mislabeled figure); STRUCTURAL: the wide-width collapse rule, the pre-existing ≤560px rule that hides the redundant Total column, AND a min-width:561px-scoped 6-track grid-template-columns redefinition for #leaderboard.lb-suppressed .lb-head/.lb-row (no dangling 7th track/dead gutter at wide widths, correctly NOT applying at ≤560px so the narrow 4-track template stays governing there) are all present in the page's own CSS source (whole-branch review Imp-1)",
     headOKX37 === "To par" && !!notSuppressedX37 && !!toParFormOKX37 &&
-      headBX37 === "Total" && !!suppressedX37 && !!sameValueX37 && wideRuleStructuralX37 && narrowRuleStructuralX37,
-    `headOK=${headOKX37} notSuppressed=${!!notSuppressedX37} toParFormOK=${!!toParFormOKX37} headB=${headBX37} suppressed=${!!suppressedX37} sameValue=${!!sameValueX37} totalCell=${totalCellBX37 && totalCellBX37.textContent} toParCell=${toParCellBX37 && toParCellBX37.textContent} wideRule=${wideRuleStructuralX37} narrowRule=${narrowRuleStructuralX37}`);
+      headBX37 === "Total" && !!suppressedX37 && !!sameValueX37 && wideRuleStructuralX37 && narrowRuleStructuralX37 && gridTemplateRuleStructuralX37,
+    `headOK=${headOKX37} notSuppressed=${!!notSuppressedX37} toParFormOK=${!!toParFormOKX37} headB=${headBX37} suppressed=${!!suppressedX37} sameValue=${!!sameValueX37} totalCell=${totalCellBX37 && totalCellBX37.textContent} toParCell=${toParCellBX37 && toParCellBX37.textContent} wideRule=${wideRuleStructuralX37} narrowRule=${narrowRuleStructuralX37} gridTemplateRule=${gridTemplateRuleStructuralX37}`);
 }
 
 {

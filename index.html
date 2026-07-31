@@ -127,6 +127,22 @@
      ≤560px rule already hides .lb-total unconditionally — this rule covers
      the WIDE-width case that one doesn't reach. */
   #leaderboard.lb-suppressed .lb-total{display:none}
+  /* Whole-branch review Imp-1: hiding one item out of the explicit 7-track
+     grid (line ~104) does NOT redefine the template — the remaining To-par
+     column auto-flows into track 6 and the 7th track (4rem + a 10px gutter)
+     hangs dead on the right. Same precedent this file already pairs with
+     .lb-r1,.lb-r2,.lb-total{display:none} at ≤560px (grid-template-columns
+     redefined to the 4 surviving tracks there) — here redefined to the 6
+     surviving tracks (the 7-track list with the Total column's own 4rem
+     entry dropped). MUST stay media-scoped to widths ABOVE the existing
+     ≤560px breakpoint: an unscoped id-selector rule would out-specify (id
+     beats class) the ≤560px 4-track rule and regress phones, since
+     .lb-suppressed is a data-state class independent of viewport width — a
+     narrow suppressed board must keep using the narrow 4-track template. */
+  @media (min-width:561px){
+    #leaderboard.lb-suppressed .lb-head,#leaderboard.lb-suppressed .lb-row{
+      grid-template-columns:2.4rem 1fr 4rem 3.2rem 3.2rem 4rem}
+  }
 
   /* per-player card */
   .card-drop{background:rgba(0,0,0,.22);border-bottom:1px solid rgba(200,162,74,.13);
