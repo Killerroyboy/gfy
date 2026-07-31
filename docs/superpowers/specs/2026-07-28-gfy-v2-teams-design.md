@@ -641,3 +641,17 @@ hole shows "—"/no suffix, and no `0 yds` can ever render. Pinned test: X36 (bl
 grid row keeps 17 real yardages + "—" on the bad hole; card cell yds line absent for that hole
 only). Suite 204 → 205. X34's check name corrects "ranking unskewed" → suppressed mode ranks by
 raw gross (the shipped fallback), and X34 gains a leader-selection assert pinning that fallback.
+
+### §20 amendment 2 (2026-07-31, Task-2 S11 escalation — ratified by the wave owner)
+Suppression must be honest at EVERY surface, not just the tally tile. Two pins:
+- **SC-PAR-LABEL:** no gross total may render under a "To par" label. When `courseMap()` is null,
+  the leaderboard's par-relative column presents as **Total** (label flips; at widths where the
+  separate Total column also shows, resolve the duplication in whichever minimal honest way the
+  markup allows — never two differently-valued columns under one name, never a gross under
+  "To par"). Both widths structurally asserted.
+- **SC-PAR-GLANCE:** rank claims ("You're leading", "3rd of N reporting") are suppressed when
+  `courseMap()` is null — the raw-gross fallback ordering compares unequal hole counts and must
+  not be presented as standing. The glance keeps its neutral facts (thru N, pending-on-phone).
+Pinned tests: X37 (board label honesty, both directions + both widths), X38 (glance rank-claim
+suppression + neutral facts survive). Suite 205 → 207. renderLeaderboard/scGlance (and their
+CSS/markup) are UNFROZEN for exactly these changes; engine + all other frozen functions stand.
