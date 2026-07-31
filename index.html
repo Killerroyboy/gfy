@@ -1483,17 +1483,26 @@ function forYear(rows,y){
 }
 
 /* ---------- course ---------- */
+/* SC-PAR-VALID (§20): keys only for VALID values — a blank/invalid cell must not
+   create a 0-par key that poisons to-par sums while the map still reads non-null.
+   All-18-or-null contract unchanged; consumers untouched. SC-PAR-WARN: flags name
+   the offending hole so a captain can find and fix it on the Course tab — guarded
+   by rows.length so a legitimately empty/not-yet-loaded Course tab (no rows at
+   all) stays silent, exactly like today's pre-existing null-degrade, instead of
+   spraying 18 warnings on every paint; once at least one row exists, every hole
+   missing a valid par gets its own named warning. */
 function courseMap(){
   const rows=STATE.data.course||[];
   const pars={};
-  rows.forEach(r=>{ const h=parseInt(r.hole,10); if(h>=1&&h<=18) pars[h]=parseInt(r.par,10)||0; });
+  rows.forEach(r=>{ const h=parseInt(r.hole,10); const p=parseInt(r.par,10); if(h>=1&&h<=18&&p>0) pars[h]=p; });
+  if(rows.length) for(let h=1;h<=18;h++) if(!pars[h]) flag(`Course tab: hole ${h} par missing or invalid — To-par suppressed (strokes only)`);
   return Object.keys(pars).length===18 ? pars : null;
 }
 
 function courseYards(){
   const rows=STATE.data.course||[];
   const yds={};
-  rows.forEach(r=>{ const h=parseInt(r.hole,10); if(h>=1&&h<=18) yds[h]=parseInt(r.yards,10)||0; });
+  rows.forEach(r=>{ const h=parseInt(r.hole,10); const y=parseInt(r.yards,10); if(h>=1&&h<=18&&y>0) yds[h]=y; });
   return Object.keys(yds).length===18 ? yds : null;
 }
 

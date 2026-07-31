@@ -4131,6 +4131,174 @@ async function cellSettledOk(doc, hole) {
 }
 
 /* ---------------------------------------------------------------------
+   X33-X35: SC-PAR-VALID value-validated course maps + SC-PAR-WARN hole-
+   naming health flag (spec §20 D3 par-integrity — task 1). A Course-tab
+   row with a BLANK par cell (row present, e.g. "7,,160") used to create a
+   par[7]=0 key — courseMap() still read as non-null (18 keys present) and
+   the to-par arithmetic silently counted every stroke against a par of
+   zero. The fix keys pars ONLY for parseInt(...)>0 values, so a blank/
+   invalid cell drops out of the map entirely (courseMap() correctly goes
+   null, same all-18-or-null contract a genuinely missing row already
+   triggered — X9/X10) — and flags a per-hole health warning naming which
+   hole is bad, deduped via flag()'s own HEALTH.includes() check.
+   --------------------------------------------------------------------- */
+{
+  // X33: SC-PAR-VALID scorer degrade — a BLANK par cell (row present)
+  // suppresses to-par exactly like a missing row, warns by hole, and
+  // leaves the other 17 holes' labels alive (scHolePar row-fallback).
+  // Course fixture variant computed from the real fixture: hole 7's row
+  // stays present (yards intact) with its par cell blanked — mirrors the
+  // D3 report's own hole 7 example.
+  const courseBlank7X33 = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+  // Same withScEndpoint+course-override idiom X9 uses (test/smoke.mjs:2435)
+  // to reach the confirmed-team card — X29's own confirm+card setup, one
+  // course-fixture override added.
+  const overrideX33 = withScEndpoint({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7X33 }),
+  });
+  const domX33 = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX33);
+  const docX33 = await openScorer(domX33, { noSheet: true });
+  const tallyX33 = docX33.querySelector("#scTally");
+  const modeStrokesX33 = tallyX33 && tallyX33.getAttribute("data-mode") === "strokes";
+  const cell7X33 = docX33.querySelector('.sc-cell[data-hole="7"] .sc-hole-par');
+  const cell8X33 = docX33.querySelector('.sc-cell[data-hole="8"] .sc-hole-par');
+  const cell7DashX33 = cell7X33 && /Par —/.test(cell7X33.textContent);
+  const cell8RealX33 = cell8X33 && /Par \d/.test(cell8X33.textContent);
+  const stripX33 = docX33.querySelector("#healthStrip");
+  const warnedX33 = stripX33 && !stripX33.hidden &&
+    /Course tab: hole 7 par missing or invalid — To-par suppressed \(strokes only\)/.test(stripX33.textContent);
+  domX33.window.close();
+  check("X33: SC-PAR-VALID — blank par cell (hole 7 row present, par empty) => tally data-mode=strokes (not topar w/ silent 0), hole-7 cell 'Par —', hole-8 still labeled, healthStrip names hole 7 with the pinned copy",
+    modeStrokesX33 && cell7DashX33 && cell8RealX33 && warnedX33,
+    `mode=${tallyX33 && tallyX33.getAttribute("data-mode")} cell7=${cell7X33 && cell7X33.textContent} cell8=${cell8X33 && cell8X33.textContent} warned=${warnedX33}`);
+}
+
+{
+  // X34: SC-PAR-VALID board suppression, BOTH directions — complete
+  // fixture shows to-par; blank-par fixture shows gross totals (rel=null),
+  // never a skewed to-par.
+  //
+  // Grounding note (delegated by the brief): #lbBody's leaderboard row
+  // renders TWO ".lb-tot" spans — <span class="lb-tot lb-total"> (raw
+  // strokes, always digits) THEN <span class="lb-tot"> (to-par, or the
+  // gross-total fallback when rel is null) — index.html renderLeaderboard.
+  // A bare ".lb-tot" selector matches BOTH (classList still contains
+  // "lb-tot" on the first span) and document order returns the FIRST one,
+  // i.e. the wrong (always-digits) span — confirmed empirically and via
+  // this file's own established idiom for the same two spans (line ~152:
+  // `total: r.querySelectorAll(".lb-tot")[0]`, `toPar: [...][1]`). Using
+  // index [1] (the established idiom) targets the real to-par/fallback
+  // column this check actually cares about.
+  const domOKX34 = makeDom("");
+  await until(() => domOKX34.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const rowOKX34 = domOKX34.window.document.querySelector("#lbBody .lb-row");
+  const totOK = rowOKX34 && rowOKX34.querySelectorAll(".lb-tot")[1];
+  const toParForm = totOK && /^[+−\-]?\d+$|^E$/.test(totOK.textContent.trim()) && /^[+−\-E]/.test(totOK.textContent.trim());
+  domOKX34.window.close();
+
+  const courseBlank7X34 = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+  const overrideX34 = withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7X34 }),
+  });
+  const domB = makeDom("", overrideX34);
+  await until(() => domB.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docB = domB.window.document;
+  const rowB = docB.querySelector("#lbBody .lb-row");
+  // expected: plain gross total (digits only), equal to the leader's computed gross from the scores fixture
+  const totB = rowB && rowB.querySelectorAll(".lb-tot")[1];
+  const grossOnly = totB && /^\d+$/.test(totB.textContent.trim());
+
+  // compute the leader's expected gross IN-TEST from FIXTURES.scores (sum that
+  // team's round strokes) — never hardcode. Suppressing rel flips the sort key
+  // from to-par to raw total (rankedPlayers: key = p.rel!==null ? p.rel : p.total),
+  // so a DIFFERENT team can end up on top than in the complete-course fixture —
+  // read whichever team is actually first via #lbBody's own data-player, then
+  // mirror buildPlayers' round merge (index.html:1504-1560) by hand from the raw
+  // fixture text: hole-by-hole rows sum posInt-valid holes per round (later row's
+  // value wins on a repeated hole, same as ex.holes[h]=holes[h]); totals-only rows
+  // (no hole values at all) use r1/r2 as that round's total; a scores row with a
+  // blank year cell defaults to the active season, mirroring normalizeYears'
+  // "row with blank year defaulted to <activeSeason()> (scores)" fill (Moose's
+  // second round row exercises exactly this in the standard fixture).
+  const seasonX34 = domB.window.activeSeason(); // plain top-level function — same window-call idiom X29/X32 already use
+  const leaderKeyX34 = rowB && rowB.dataset.player;
+  const HOLES18X34 = Array.from({ length: 18 }, (_, i) => i + 1);
+  const posIntX34 = v => { const n = parseInt(v, 10); return (isNaN(n) || n <= 0) ? null : n; };
+  const roundNormX34 = v => {
+    const d = String(v || "").replace(/[^0-9]/g, "");
+    if (d) return d;
+    const w = String(v || "").trim().toLowerCase().split(/\s+/).pop();
+    return ({ one: "1", two: "2", three: "3" })[w] || "1";
+  };
+  function teamGrossFromFixturesX34(teamKey, year) {
+    const lines = FIXTURES.scores.trim().split("\n");
+    const header = lines[0].split(",");
+    const rows = lines.slice(1).map(l => {
+      const cells = l.split(",");
+      const o = {}; header.forEach((h, i) => o[h] = (cells[i] || "").trim());
+      return o;
+    });
+    const rounds = {};
+    rows
+      .filter(r => r.team)
+      .filter(r => r.team.trim().replace(/\s+/g, " ").toLowerCase() === teamKey)
+      .filter(r => (r.year && r.year.trim() ? r.year.trim() : year) === year)
+      .forEach(r => {
+        const rd = roundNormX34(r.round);
+        const holes = {}; let any = false;
+        HOLES18X34.forEach(h => { const v = posIntX34(r["h" + h]); if (v !== null) { holes[h] = v; any = true; } });
+        if (any) {
+          if (!rounds[rd] || !rounds[rd].holes) rounds[rd] = { holes: {} };
+          Object.assign(rounds[rd].holes, holes);
+        } else {
+          const r1 = posIntX34(r.r1), r2 = posIntX34(r.r2);
+          if (r1 !== null && !(rounds["1"] && rounds["1"].holes)) rounds["1"] = { total: r1 };
+          if (r2 !== null && !(rounds["2"] && rounds["2"].holes)) rounds["2"] = { total: r2 };
+        }
+      });
+    return Object.values(rounds).reduce((s, r) => s + (r.holes ? Object.values(r.holes).reduce((a, b) => a + b, 0) : r.total), 0);
+  }
+  const expectedGross = leaderKeyX34 ? teamGrossFromFixturesX34(leaderKeyX34, seasonX34) : null;
+  const grossMatches = totB && expectedGross != null && parseInt(totB.textContent.trim(), 10) === expectedGross;
+  domB.window.close();
+
+  check("X34: SC-PAR-VALID — leaderboard To-par column: complete course => to-par form (+N/−N/E); blank-par-7 course => plain gross total equal to the leader's fixture-computed strokes (rel suppressed, ranking unskewed)",
+    toParForm && grossOnly && grossMatches,
+    `ok=${totOK && totOK.textContent} blank=${totB && totB.textContent} leader=${leaderKeyX34} expected=${expectedGross}`);
+}
+
+{
+  // X35: SC-PAR-VALID grid degrade — blank par hides the hole-by-hole grid
+  // behind the existing honest note (no 'Par 0' artifact can render).
+  //
+  // Grounding note (delegated by the brief): renderScoreGrid's note element
+  // (index.html:1722/1735-1738) is `note=$("#sgNote")`, set via
+  // `note.textContent="Hole-by-hole view needs all 18 holes on the Course
+  // tab."; note.hidden=false; scroll.hidden=true;` when courseMap() is
+  // null — the same degrade K6 (test/smoke.mjs, "G-HIDE") already exercises
+  // for a short/partial course fixture; this block is that established
+  // setup, applied to the blank-par-7 (row present) variant instead.
+  const courseBlank7X35 = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+  const domX35 = makeDom("", withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7X35 }),
+  }));
+  await until(() => domX35.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docX35 = domX35.window.document;
+  const note = docX35.querySelector("#sgNote");
+  const noteShown = note && !note.hidden && /needs all 18 holes/i.test(note.textContent);
+  const scrollHiddenX35 = docX35.querySelector("#sgScroll")?.hidden === true;
+  domX35.window.close();
+  check("X35: SC-PAR-VALID — blank par cell hides the score grid behind the 'needs all 18 holes' note (same degrade as a missing row; no Par-0 header row can render)",
+    !!noteShown && scrollHiddenX35, `note=${note && note.textContent} hidden=${note && note.hidden} scrollHidden=${scrollHiddenX35}`);
+}
+
+/* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
 const groupTally = {};
