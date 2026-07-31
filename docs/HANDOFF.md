@@ -164,3 +164,5 @@ fix-wave report, 78+ S11 PNGs — retained deliberately as evidence).
   the third-number keep-then-reopen flow added to the 25-min drill.
 - Housekeeping: scorer-rev3 branch + worktree retained; one superseded stash on the worktree (safe
   to drop); the 07-30 dual-controller incident is documented and closed in the ledger (stand-down).
+
+**PUSHED + LIVE 2026-07-31:** main = `6c6cf9e`, Pages built for that exact commit, live `index.html` md5 == tip, rev-3 markers verified served. Next-push rollback ref = `6c6cf9e`. Remaining: pre-links runway + D3 follow-up wave.
