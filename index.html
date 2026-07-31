@@ -1740,7 +1740,7 @@ function renderScoreGrid(players){
   }
   if(!players.length){ wrap.hidden=true; return; }
   wrap.hidden=false;
-  const pars=courseMap(), yds=courseYards();
+  const pars=courseMap();
   if(!pars){
     note.textContent="Hole-by-hole view needs all 18 holes on the Course tab.";
     note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return;
@@ -1762,7 +1762,12 @@ function renderScoreGrid(players){
     `<thead><tr><th class="sg-team" scope="col">Team</th>${HOLES.map(h=>`<th class="sg-h" data-hole="${h}" scope="col" role="button" tabindex="0">${h}</th>`).join("")}</tr></thead>`;
   const meta=
     `<tr class="sg-par"><th scope="row" class="sg-team">Par</th>${HOLES.map(h=>`<td data-hole="${h}">${pars[h]}</td>`).join("")}</tr>`+
-    `<tr class="sg-yds"><th scope="row" class="sg-team">Yds</th>${HOLES.map(h=>`<td data-hole="${h}">${yds&&yds[h]?yds[h]:"—"}</td>`).join("")}</tr>`;
+    // §20 amendment (I1): per-hole scHoleYards(h) fallback, NOT the whole-map
+    // courseYards() read — one blank/invalid yards cell must only blank ITS
+    // OWN hole here, not all 18 (courseYards() correctly goes null on any
+    // single bad cell, all-18-or-null, unchanged; that null-degrade is right
+    // for anything that SUMS yardage, wrong for this per-cell label row).
+    `<tr class="sg-yds"><th scope="row" class="sg-team">Yds</th>${HOLES.map(h=>`<td data-hole="${h}">${scHoleYards(h)||"—"}</td>`).join("")}</tr>`;
   const body=players.map(p=>{
     const r=p.rounds[rd];
     const name=`<th scope="row" class="sg-team">${captainLabel(p.key,p.name).html}</th>`;
@@ -1809,14 +1814,19 @@ function renderHolePanel(h){
   const panel=$("#sgPanel");
   if(STATE.gridHole===h){ STATE.gridHole=null; panel.hidden=true; panel.innerHTML=""; return; }
   STATE.gridHole=h;
-  const pars=courseMap(), yds=courseYards(), players=rankedPlayers("gross");
+  const pars=courseMap(), players=rankedPlayers("gross");
   const rd=$("#sgTable").dataset.round;
   const scores=players.map(p=>{const r=p.rounds[rd];return {name:teamLabel(p.key,p.name).html,v:r&&r.holes?r.holes[h]:undefined};});
   const played=scores.filter(s=>s.v!==undefined).map(s=>s.v);
   const best=played.length?Math.min(...played):null;
   const pin=PINS[h];
+  // §20 amendment (I1): per-hole scHoleYards(h) fallback, NOT the whole-map
+  // courseYards() read — this hole's own suffix must not vanish just
+  // because SOME other hole's yards cell is blank/invalid elsewhere on the
+  // Course tab.
+  const hyds=scHoleYards(h);
   panel.innerHTML=
-    `<div class="sg-p-head">Hole ${h} · Par ${pars[h]}${yds?` · ${yds[h]} yds`:""}</div>`+
+    `<div class="sg-p-head">Hole ${h} · Par ${pars[h]}${hyds?` · ${hyds} yds`:""}</div>`+
     `<div class="sg-p-crop"><div class="sg-p-crop-inner">`+
       `<img class="sg-p-crop-img" src="assets/course-map.png" data-pin-x="${Math.round(pin.x)}" data-pin-y="${Math.round(pin.y)}" alt="Hole ${h} on the course map">`+
       `<span class="sg-pin" style="left:${pin.x}%;top:${pin.y}%"></span>`+

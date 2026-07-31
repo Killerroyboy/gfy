@@ -4236,7 +4236,15 @@ async function cellSettledOk(doc, hole) {
   };
   function teamGrossFromFixturesX34(teamKey, year) {
     const lines = FIXTURES.scores.trim().split("\n");
-    const header = lines[0].split(",");
+    // fixtures/scores.csv uses CRLF line endings — split("\n") leaves a
+    // trailing \r on each line's LAST field. Row cell VALUES are already
+    // .trim()'d below, but the header array itself wasn't, so the final
+    // header column parsed as the literal key "r2\r" instead of "r2" —
+    // silently orphaning every totals-only row's r2 value under a key
+    // nothing ever reads (found via X34's new leader-selection assert,
+    // which is the first check in this suite to depend on a totals-only
+    // team's r2 field — Bear — through this mirror). .trim() strips \r.
+    const header = lines[0].split(",").map(h => h.trim());
     const rows = lines.slice(1).map(l => {
       const cells = l.split(",");
       const o = {}; header.forEach((h, i) => o[h] = (cells[i] || "").trim());
@@ -4264,11 +4272,29 @@ async function cellSettledOk(doc, hole) {
   }
   const expectedGross = leaderKeyX34 ? teamGrossFromFixturesX34(leaderKeyX34, seasonX34) : null;
   const grossMatches = totB && expectedGross != null && parseInt(totB.textContent.trim(), 10) === expectedGross;
+
+  // §20 amendment (Task-1 review escalation) — leader-selection assert: the
+  // FIRST rendered row must be the field's true MINIMUM raw gross under
+  // suppression, not merely "whichever team happens to render first"
+  // coincidentally showing a correct-looking own total (grossMatches above
+  // alone can't catch a broken sort that always puts the WRONG team first —
+  // it would still display that team's own accurate total). Independently
+  // compute EVERY rendered team's gross via the SAME in-test fixture mirror
+  // (never trust the app's own displayed numbers as the ground truth for
+  // this comparison) and assert row 0 is the argmin. Candidate teams are
+  // read from #lbBody's own rendered rows (not every row in FIXTURES.scores
+  // directly) so an unrostered team buildPlayers already excludes (e.g.
+  // "Hamer" — flagged "unknown team ... not counted", never gets a row) is
+  // correctly out of contention here too, exactly as it is on the real board.
+  const allRowsX34 = [...docB.querySelectorAll("#lbBody .lb-row")];
+  const grossesX34 = allRowsX34.map(r => ({ key: r.dataset.player, gross: teamGrossFromFixturesX34(r.dataset.player, seasonX34) }));
+  const trueMinX34 = grossesX34.length ? Math.min(...grossesX34.map(g => g.gross)) : null;
+  const leaderIsMinX34 = grossesX34.length > 0 && trueMinX34 != null && grossesX34[0].gross === trueMinX34;
   domB.window.close();
 
-  check("X34: SC-PAR-VALID — leaderboard To-par column: complete course => to-par form (+N/−N/E); blank-par-7 course => plain gross total equal to the leader's fixture-computed strokes (rel suppressed, ranking unskewed)",
-    toParForm && grossOnly && grossMatches,
-    `ok=${totOK && totOK.textContent} blank=${totB && totB.textContent} leader=${leaderKeyX34} expected=${expectedGross}`);
+  check("X34: SC-PAR-VALID — leaderboard To-par column: complete course => to-par form (+N/−N/E); blank-par-7 course => plain gross total equal to the leader's fixture-computed strokes (rel suppressed; ranking falls back to raw gross), and the FIRST row is verified to be the field's true minimum-gross team (leader-selection assert, §20 amendment)",
+    toParForm && grossOnly && grossMatches && leaderIsMinX34,
+    `ok=${totOK && totOK.textContent} blank=${totB && totB.textContent} leader=${leaderKeyX34} expected=${expectedGross} allGross=${JSON.stringify(grossesX34)} trueMin=${trueMinX34}`);
 }
 
 {
@@ -4296,6 +4322,69 @@ async function cellSettledOk(doc, hole) {
   domX35.window.close();
   check("X35: SC-PAR-VALID — blank par cell hides the score grid behind the 'needs all 18 holes' note (same degrade as a missing row; no Par-0 header row can render)",
     !!noteShown && scrollHiddenX35, `note=${note && note.textContent} hidden=${note && note.hidden} scrollHidden=${scrollHiddenX35}`);
+}
+
+/* ---------------------------------------------------------------------
+   X36 (§20 amendment, Task-1 review escalation I1): per-hole yards
+   fallback in the grid/panel. Value-validating courseYards() means ONE
+   blank/invalid yards cell nulls the WHOLE map (all-18-or-null, correct
+   and unchanged) — but renderScoreGrid's Yds row and renderHolePanel's
+   yardage suffix used to read the map directly (`yds&&yds[h]`, `yds?...`),
+   so that single bad cell blanked all 18 real yardages, not just the bad
+   hole's. The fix reuses the EXISTING per-hole scHoleYards(h) fallback
+   (index.html:3318-3323, byte-frozen, same one the scorer card already
+   uses) at those two call sites: the other 17 true yardages survive, only
+   the bad hole shows "—"/no suffix, and courseMap() (pars) is untouched —
+   a blank YARDS cell alone must not hide the grid at all (par map stays
+   fully valid, so no "needs all 18 holes" note fires here — a different
+   degrade axis than X33/X35's blank-PAR splice).
+   --------------------------------------------------------------------- */
+{
+  // Splice: hole 7's PAR cell stays intact, its YARDS cell is blanked
+  // ("7,<par>,") — computed from the real fixture, never hand-typed.
+  const courseBlankYds7X36 = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7," + l.split(",")[1] + "," : l)
+    .join("\n");
+
+  // Grid + Yds row.
+  const domX36 = makeDom("", withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlankYds7X36 }),
+  }));
+  await until(() => domX36.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docX36 = domX36.window.document;
+  // Par map is fully valid (only yards blanked) — the grid itself must
+  // render, not fall behind the "needs all 18 holes" note.
+  const noteHiddenX36 = docX36.querySelector("#sgNote")?.hidden === true;
+  const scrollShownX36 = docX36.querySelector("#sgScroll")?.hidden === false;
+  const table = docX36.querySelector("#sgTable");
+  const ydsRow = table && table.querySelector("tr.sg-yds");
+  const ydsCells = ydsRow ? [...ydsRow.querySelectorAll("td[data-hole]")] : [];
+  const cellForX36 = h => ydsCells.find(c => c.dataset.hole === String(h));
+  const cell7YdsX36 = cellForX36(7);
+  const hole7DashX36 = cell7YdsX36 && cell7YdsX36.textContent.trim() === "—";
+  // At least a few OTHER real yardages, computed from the untouched fixture
+  // text (never hardcoded) — proves the fallback reads real per-hole data,
+  // not just "blank everywhere except hole 7".
+  const trueYdsX36 = h => parseInt(FIXTURES.course.split("\n").find(l => l.startsWith(h + ",")).split(",")[2], 10);
+  const otherHolesX36 = [1, 2, 8, 18].map(h => ({ h, cell: cellForX36(h), expect: trueYdsX36(h) }));
+  const othersRealX36 = otherHolesX36.every(o => o.cell && parseInt(o.cell.textContent.trim(), 10) === o.expect);
+  domX36.window.close();
+
+  // Scorer card: hole-7 cell has NO .sc-hole-yds span; hole-8 (untouched) keeps one.
+  const overrideX36sc = withScEndpoint({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlankYds7X36 }),
+  });
+  const domX36sc = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX36sc);
+  const docX36sc = await openScorer(domX36sc, { noSheet: true });
+  const cardCell7X36 = docX36sc.querySelector('.sc-cell[data-hole="7"]');
+  const cardCell8X36 = docX36sc.querySelector('.sc-cell[data-hole="8"]');
+  const cell7NoYdsX36 = cardCell7X36 && !cardCell7X36.querySelector(".sc-hole-yds");
+  const cell8HasYdsX36 = cardCell8X36 && !!cardCell8X36.querySelector(".sc-hole-yds");
+  domX36sc.window.close();
+
+  check("X36: §20 amendment — blank-yards cell (hole 7 par intact, yards blank): grid renders (par map fully valid, no note), Yds row keeps the OTHER holes' true fixture yardages with '—' on hole 7 only (per-hole scHoleYards fallback, not a whole-map null-out); scorer card hole-7 cell has no .sc-hole-yds span while hole 8 keeps one",
+    noteHiddenX36 && scrollShownX36 && !!hole7DashX36 && othersRealX36 && !!cell7NoYdsX36 && !!cell8HasYdsX36,
+    `noteHidden=${noteHiddenX36} scrollShown=${scrollShownX36} hole7=${cell7YdsX36 && cell7YdsX36.textContent} others=${JSON.stringify(otherHolesX36.map(o => o.cell && o.cell.textContent))} cell7HasYds=${cardCell7X36 && !!cardCell7X36.querySelector(".sc-hole-yds")} cell8HasYds=${cardCell8X36 && !!cardCell8X36.querySelector(".sc-hole-yds")}`);
 }
 
 /* ---------------------------------------------------------------------
