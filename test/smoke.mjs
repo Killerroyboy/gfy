@@ -2453,12 +2453,16 @@ async function openScorer(dom, { noSheet = false } = {}) {
   // pass 171/171 — now also asserts the happy path (complete course data ->
   // data-mode="topar") on the standard fixture, alongside the h5-blanked
   // variant degrading to strokes-only.
+  // Rev 3 (task 3, header/SC-TALLY-HONEST): #scTally moved from #scCard's own
+  // innerHTML into the sticky #scHeader block — selector updated to match
+  // (by id, so it's found regardless of which container renders it); the
+  // data-mode semantics this check actually cares about are unchanged.
   const domX10std = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX10std = await openScorer(domX10std, { noSheet: true });
-  const tallyX10std = docX10std.querySelector("#scCard .sc-tally");
+  const tallyX10std = docX10std.querySelector("#scTally");
   const domX10 = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX9);
   const docX10 = await openScorer(domX10, { noSheet: true });
-  const tallyX10 = docX10.querySelector("#scCard .sc-tally");
+  const tallyX10 = docX10.querySelector("#scTally");
   check("X10: to-par tally — complete course data renders data-mode='topar' (happy path); the h5-blanked variant degrades to strokes-only (data-mode='strokes') when courseMap() is null (all-18 rule)",
     !!tallyX10std && tallyX10std.getAttribute("data-mode") === "topar" &&
     !!tallyX10 && tallyX10.getAttribute("data-mode") === "strokes",
@@ -3747,6 +3751,178 @@ async function cellSettledOk(doc, hole) {
   check("X28: SC-PUBBTN — config.js's SHEET_EDIT_URL value is \"\" (key preserved), the live sheet's document id (16Co2b...) is nowhere in the file, and no live spreadsheet edit URL appears under any key",
     valueCleared && noLiveId && noLiveEditUrl,
     "valueCleared=" + valueCleared + " noLiveId=" + noLiveId + " noLiveEditUrl=" + noLiveEditUrl);
+}
+
+/* ---------------------------------------------------------------------
+   X29-X31: sticky header — honest tallies, next-hint, always-reachable
+   switch (spec §18 rev 3, SC-TALLY-HONEST/SC-NEXT-HINT/header — task 3).
+   --------------------------------------------------------------------- */
+{
+  // X29: SC-TALLY-HONEST — Out/In/Total/To-par tiles all derive from ONE
+  // per-hole scCellState() walk (scTallyHTML in index.html); a conflicted
+  // hole counts toward NEITHER Out/In/Total nor the par sum behind To-par,
+  // on EITHER its sheet number or its phone number. Real SC-DERIVE merge
+  // active (no noSheet stub) — Duck's r2 sheet fixture (fixtures/scores.csv)
+  // is fully populated, so every OTHER hole renders real "sheet" state.
+  // Hole 9 (par 5, real sheet value 4) gets a planted journal entry scoring
+  // 8 — written directly via scStore (the SAME low-level seeding technique
+  // the C1/C1x journal tests already use), never through scJournalSave/the
+  // UI, so no send is ever attempted and there's no scConfigBroken banner
+  // risk. 8 is deliberately far from both the sheet's 4 AND hole 9's own
+  // par (5) — an implementation that wrongly counts the conflict via EITHER
+  // number would visibly wreck Out/Total/To-par/thru-N all at once, not
+  // just coincidentally match one of them.
+  const domX29 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docX29 = await openScorer(domX29); // real derivation, not noSheet — Duck r1 is ALSO fully populated, so round 2 is the active round (X16b's own established reasoning)
+  const seasonX29 = domX29.window.scorerSeason();
+  const roundX29 = domX29.window.scActiveRound();
+  const roundOkX29 = roundX29 === "2"; // sanity-check the precedent this test's fixture arithmetic depends on
+  const keyX29 = "gfy-scorer:" + seasonX29 + ":duck"; // nkey("Duck") === "duck"
+  const entryKeyX29 = domX29.window.scEntryKeyOf(roundX29, 9);
+  domX29.window.scStore(keyX29, root => {
+    root.seq = (root.seq || 0) + 1;
+    root.entries[entryKeyX29] = { round: roundX29, hole: 9, score: 8, seq: root.seq,
+      state: "queued", verdict: null, ts: Date.now(), retries: 0, override: false };
+  });
+  domX29.window.renderScCard();
+  await until(() => docX29.querySelector('.sc-cell[data-hole="9"]')?.classList.contains("sc-conflict"));
+
+  // Fixture arithmetic, computed HERE from the raw fixture files (never
+  // trusted from the app under test) — fixtures/scores.csv's Duck r2 h1-h18
+  // row and fixtures/course.csv's par column, hole 9 excluded (the planted
+  // conflict):
+  const R2 = [4, 4, 3, 5, 3, 4, 3, 4, 4, 4, 5, 4, 5, 4, 5, 3, 5, 5];   // hole 1..18
+  const PAR = [4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 5, 3, 4, 4, 4, 3, 5, 4];  // hole 1..18
+  let outSum = 0, inSum = 0, outPar = 0, inPar = 0, thruExpected = 0;
+  for (let h = 1; h <= 18; h++) {
+    if (h === 9) continue; // the planted conflict — absent from BOTH sides
+    const score = R2[h - 1], par = PAR[h - 1];
+    thruExpected++;
+    if (h <= 9) { outSum += score; outPar += par; } else { inSum += score; inPar += par; }
+  }
+  const totalExpected = outSum + inSum;
+  const relExpected = totalExpected - (outPar + inPar);
+  const toParExpected = relExpected === 0 ? "E" : (relExpected > 0 ? "+" : "") + relExpected;
+
+  const tallyElX29 = docX29.querySelector("#scTally");
+  const tilesX29 = [...(tallyElX29?.querySelectorAll(".sc-tile") || [])];
+  const tileV = i => tilesX29[i]?.querySelector(".sc-tile-v")?.textContent.trim();
+  const outOkX29 = tileV(0) === String(outSum);
+  const inOkX29 = tileV(1) === String(inSum);
+  const totalOkX29 = tileV(2) === String(totalExpected);
+  const toParOkX29 = tileV(3) === toParExpected;
+  const parLabelX29 = tilesX29[3]?.querySelector(".sc-tile-k")?.textContent || "";
+  const thruRegexOkX29 = /thru \d+/.test(parLabelX29);
+  const thruExactOkX29 = new RegExp("thru " + thruExpected + "\\b").test(parLabelX29);
+  const modeOkX29 = tallyElX29?.getAttribute("data-mode") === "topar";
+  // Hole 9's own conflict cell must show BOTH numbers (SHEET·MINE) — proves
+  // the exclusion is a TALLY-only rule, not the cell silently losing its own
+  // conflict truth.
+  const conflictCellScoreX29 = docX29.querySelector('.sc-cell[data-hole="9"] .sc-score')?.textContent;
+  const cellShowsBothX29 = conflictCellScoreX29 === "4·8";
+
+  domX29.window.close();
+  check("X29: SC-TALLY-HONEST — Out/In/Total/To-par all computed from ONE scCellState() walk over Duck's real r2 fixture, with hole 9's planted sheet(4)/phone(8) conflict excluded from every tally number (fixture-derived expectations: Out=" + outSum + " In=" + inSum + " Total=" + totalExpected + " toPar=" + toParExpected + " thru=" + thruExpected + "); to-par tile label matches /thru \\d+/ AND the exact count; data-mode stays 'topar' (full course fixture); the conflicted cell itself still shows both numbers (4·8)",
+    roundOkX29 && outOkX29 && inOkX29 && totalOkX29 && toParOkX29 && thruRegexOkX29 && thruExactOkX29 && modeOkX29 && cellShowsBothX29,
+    "roundOk=" + roundOkX29 + "(was " + roundX29 + ") out=" + tileV(0) + "(want " + outSum + ") in=" + tileV(1) + "(want " + inSum +
+      ") total=" + tileV(2) + "(want " + totalExpected + ") toPar=" + tileV(3) + "(want " + toParExpected + ") parLabel=" +
+      JSON.stringify(parLabelX29) + " mode=" + tallyElX29?.getAttribute("data-mode") + " conflictCellScore=" + conflictCellScoreX29);
+}
+
+{
+  // X30: SC-NEXT-HINT — .sc-next lands on exactly one cell: the FIRST hole
+  // whose scCellState().kind==="empty" (scFirstEmptyHole(), index.html) —
+  // never a queued/sheet/conflict/rejected cell, and never more than one at
+  // once. Presentational only: no click-behavior assertion here (a
+  // .sc-next cell gets the SAME plain scPadOpen(h) every other empty cell
+  // already gets — nothing new to prove there).
+  const domX30 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docX30 = await openScorer(domX30, { noSheet: true }); // every hole starts "empty" — no real derivation, no journal entries yet
+  const nextCellsFreshX30 = [...docX30.querySelectorAll(".sc-cell.sc-next")];
+  const uniqueFreshX30 = nextCellsFreshX30.length === 1;
+  const firstHoleFreshX30 = nextCellsFreshX30[0]?.dataset.hole === "1";
+
+  // Fill holes 1-3 directly via scStore (same seeding technique as X29 — no
+  // network, no scJournalSave) and force a repaint: .sc-next must move to 4.
+  const seasonX30 = domX30.window.scorerSeason();
+  const roundX30 = domX30.window.scActiveRound();
+  const keyX30 = "gfy-scorer:" + seasonX30 + ":duck";
+  [1, 2, 3].forEach(h => {
+    const entryKey = domX30.window.scEntryKeyOf(roundX30, h);
+    domX30.window.scStore(keyX30, root => {
+      root.seq = (root.seq || 0) + 1;
+      root.entries[entryKey] = { round: roundX30, hole: h, score: 4, seq: root.seq,
+        state: "ok", verdict: "applied", ts: Date.now(), retries: 0, override: false };
+    });
+  });
+  domX30.window.renderScCard();
+  const nextCellsFilledX30 = [...docX30.querySelectorAll(".sc-cell.sc-next")];
+  const uniqueFilledX30 = nextCellsFilledX30.length === 1;
+  const movedToFourX30 = nextCellsFilledX30[0]?.dataset.hole === "4";
+  const filledCellsNotNextX30 = [1, 2, 3].every(h =>
+    !docX30.querySelector('.sc-cell[data-hole="' + h + '"]')?.classList.contains("sc-next"));
+
+  domX30.window.close();
+
+  // Structural, source-level check (stated honestly as such — this proves
+  // the CSS SHAPE, not any runtime media-query evaluation, which jsdom
+  // can't do anyway): the .sc-next BREATHE ANIMATION must live textually
+  // inside a `@media (prefers-reduced-motion: no-preference)` block —
+  // never unconditional, never gated only by a JS check (there is none
+  // anywhere in the file — CSS-only, matching the prototype). Brace-counts
+  // the block (a naive lazy regex would truncate at the nested @keyframes'
+  // own first `}`) and confirms the ONE '.sc-next{...animation:...}' rule
+  // in the WHOLE file is the one found inside it — so moving the animation
+  // outside the media query, or deleting the gate entirely, fails this the
+  // same way a missing gate would.
+  const mqNeedle = "@media (prefers-reduced-motion: no-preference)";
+  const mqIdx = html.indexOf(mqNeedle);
+  let mqBlock = "";
+  if (mqIdx >= 0) {
+    const openIdx = html.indexOf("{", mqIdx);
+    let depth = 0, i = openIdx;
+    for (; i < html.length; i++) {
+      if (html[i] === "{") depth++;
+      else if (html[i] === "}") { depth--; if (depth === 0) break; }
+    }
+    mqBlock = html.slice(openIdx, i + 1);
+  }
+  const animRe = /\.sc-next[^{}]*\{[^{}]*animation\s*:/;
+  const wholeFileAnimCountX30 = (html.match(new RegExp(animRe.source, "g")) || []).length;
+  const blockAnimCountX30 = (mqBlock.match(new RegExp(animRe.source, "g")) || []).length;
+  const hasKeyframesInBlockX30 = /@keyframes/.test(mqBlock);
+  const structuralOkX30 = mqIdx >= 0 && wholeFileAnimCountX30 === 1 && blockAnimCountX30 === 1 && hasKeyframesInBlockX30;
+
+  check("X30: SC-NEXT-HINT — exactly one .sc-next cell, always the FIRST hole whose scCellState().kind==='empty' (hole 1 on a fresh board; moves to hole 4 once holes 1-3 are filled via direct journal writes, and 1-3 themselves never carry .sc-next); reduced-motion is CSS-only (structural check, stated honestly as such): the ONE '.sc-next{...animation:...}' rule in the whole file lives inside `@media (prefers-reduced-motion: no-preference)` alongside its @keyframes, found via brace-matching rather than a lazy-regex guess",
+    uniqueFreshX30 && firstHoleFreshX30 && uniqueFilledX30 && movedToFourX30 && filledCellsNotNextX30 && structuralOkX30,
+    "uniqueFresh=" + uniqueFreshX30 + " firstFresh=" + nextCellsFreshX30[0]?.dataset.hole +
+      " uniqueFilled=" + uniqueFilledX30 + " movedTo=" + nextCellsFilledX30[0]?.dataset.hole +
+      " filledCellsNotNext=" + filledCellsNotNextX30 +
+      " mqFound=" + (mqIdx >= 0) + " wholeFileAnimCount=" + wholeFileAnimCountX30 + " blockAnimCount=" + blockAnimCountX30 +
+      " hasKeyframesInBlock=" + hasKeyframesInBlockX30);
+}
+
+{
+  // X31: #scSwitch — always-reachable now (unlike rev 2's confirm-only
+  // #scNotYou link), wired to the SAME scShowPicker() the pre-confirm flow
+  // already used. Any confirmed-state dom works, per the brief — Duck's
+  // noSheet flow (openScorer's default confirm-then-cells wait) is the
+  // simplest one already established in this suite.
+  const domX31 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docX31 = await openScorer(domX31, { noSheet: true });
+  const pickerHiddenBeforeX31 = docX31.querySelector("#scPicker")?.hidden !== false;
+  const switchBtnX31 = docX31.querySelector("#scSwitch");
+  const switchIsButtonX31 = switchBtnX31?.tagName === "BUTTON"; // never an <a> — see X21b's #scHeader-a note in index.html
+  switchBtnX31?.click();
+  const pickerVisibleX31 = docX31.querySelector("#scPicker")?.hidden === false;
+  const teamBtnsX31 = [...docX31.querySelectorAll("#scPicker .sc-pick")];
+  const hasTeamBtnsX31 = teamBtnsX31.length > 0;
+  const hasDuckBtnX31 = teamBtnsX31.some(b => /Duck/.test(b.textContent || ""));
+  domX31.window.close();
+  check("X31: #scSwitch — a <button> (never an <a>), click opens #scPicker (visible, hidden=false) with real team buttons (.sc-pick, including Duck), wired to the existing scShowPicker() — no new picker logic",
+    pickerHiddenBeforeX31 && switchIsButtonX31 && pickerVisibleX31 && hasTeamBtnsX31 && hasDuckBtnX31,
+    "hiddenBefore=" + pickerHiddenBeforeX31 + " isButton=" + switchIsButtonX31 + " visibleAfter=" + pickerVisibleX31 +
+      " teamBtnCount=" + teamBtnsX31.length + " hasDuck=" + hasDuckBtnX31);
 }
 
 /* ---------------------------------------------------------------------

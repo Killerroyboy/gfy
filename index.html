@@ -409,11 +409,49 @@
      rules below deliberately use px, not rem, so this holds regardless of
      root font-size. .sc-cell/.sc-key get a real 48px tap bar (>=44px HIG
      minimum) even though jsdom can't see layout to verify it. */
-  .sc-round{margin:0 0 14px}
-  .sc-round button{font-family:var(--display);font-size:18px;color:var(--brass);
-    background:none;border:1px solid rgba(200,162,74,.4);padding:8px 16px;cursor:pointer}
-  .sc-tally{font-size:15px;color:var(--sage);margin:0 0 16px;font-variant-numeric:tabular-nums}
-  .sc-tally .sc-tally-lab{font-size:13px;letter-spacing:.06em;text-transform:uppercase;margin-left:6px}
+  /* Rev-3 UI wave, task 3 (header/SC-TALLY-HONEST/SC-NEXT-HINT) —
+     transcribed from tools/scorer-rev3-prototype.html's .top/.toprow/
+     .team-name/.roster/.chip/.tally/.t rules into .sc-`-prefixed site
+     equivalents (same token-reuse discipline as tasks 1-2: no second :root
+     block, no --under/--line). #scHeader wraps a new .sc-top div holding
+     team identity + the reworked tally strip; the round chip (#scRound, id
+     retained) and the tally strip (#scTally, id retained) both MOVE here
+     from #scCard's own markup — SC-GLANCE's own strip (#scGlance) is
+     untouched, still below the card.
+     Sticky offset: the site's persistent top .nav is ALSO position:sticky;
+     top:0 (fixed page chrome the prototype's isolated .app card never had to
+     share the viewport with) — 52px accounts for its real box (11px
+     top+bottom padding + a ~28px content line at the nav-name's 1.05rem/
+     the page's own 1.65 line-height + 1px border), so .sc-top docks
+     directly under it instead of sliding beneath/behind it. */
+  .sc-top{position:sticky;top:52px;z-index:5;
+    background:linear-gradient(var(--pine) 82%, rgba(14,32,25,0));
+    padding:10px 0 2px;margin:0 0 4px}
+  .sc-toprow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .sc-team-name{font-family:var(--display);font-weight:700;font-size:23px;line-height:1.05;
+    letter-spacing:.01em;color:var(--bone)}
+  .sc-roster{font-size:13px;letter-spacing:.02em;color:var(--sage);margin-top:4px}
+  .sc-roster b{color:var(--bone);font-weight:500}
+  .sc-switch{background:none;border:0;padding:0;margin-left:4px;font:inherit;color:var(--sage);
+    text-decoration:underline;cursor:pointer}
+  .sc-switch:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+  .sc-round-chip{flex:none;font-family:var(--display);font-size:16px;color:var(--pine);
+    background:var(--brass);border:0;border-radius:999px;padding:8px 14px;cursor:pointer;text-align:center}
+  .sc-round-chip:focus-visible{outline:2px solid var(--bone);outline-offset:2px}
+  .sc-round-chip small{display:block;font-family:var(--ui);font-size:13px;letter-spacing:.06em;
+    font-weight:500;text-transform:uppercase;opacity:.8;margin-top:2px}
+  /* SC-TALLY-HONEST: Out/In/Total/To-par tiles, all four fed by the SAME
+     single per-hole scCellState() walk (scTallyHTML, below) — a conflicted
+     hole counts toward NEITHER side, never just visually hidden from one. */
+  .sc-tally{display:flex;gap:8px;margin-top:14px}
+  .sc-tile{flex:1;background:var(--pine-2);border:1px solid rgba(200,162,74,.22);border-radius:12px;
+    padding:7px 4px 8px;text-align:center}
+  .sc-tile-k{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--sage)}
+  .sc-tile-v{font-family:var(--display);font-size:21px;line-height:1.1;margin-top:2px;
+    font-variant-numeric:tabular-nums;color:var(--bone)}
+  .sc-tile-v.under{color:var(--brass)}
+  .sc-tile-par{border-color:var(--brass-dim)}
+  .sc-tally-lab{font-size:13px;letter-spacing:.02em;text-transform:none;margin-left:4px;color:var(--sage)}
   /* Rev-3 UI wave, task 1 (SC-UI-V/SC-SKIN) — vertical Out|In card,
      transcribed from tools/scorer-rev3-prototype.html's .card/.colhead/
      .col/.cell/.hole-n/.hole-par/.score/.mark rules into .sc-`-prefixed
@@ -457,6 +495,20 @@
   .sc-cell.sc-conflict{border-color:var(--rust);background:rgba(176,112,94,.1)}
   .sc-cell.sc-conflict .sc-score{color:var(--rust);font-size:17px;letter-spacing:.02em}
   .sc-cell.sc-conflict .sc-mark{color:var(--rust)}
+  /* SC-NEXT-HINT (task 3) — affordance only, never a selection: a soft
+     highlight (always) plus a breathing pulse (motion-gated) on the FIRST
+     hole with no sheet/journal truth at all yet (scFirstEmptyHole(), below —
+     computed once per card render, never per-cell). Transcribed from the
+     prototype's .cell.next/@keyframes breathe shape; the animation itself
+     stays inside prefers-reduced-motion:no-preference exactly like the
+     prototype (CSS-only gate — no JS media-query check anywhere, and the
+     base border highlight stays OUTSIDE the gate so the affordance itself
+     never vanishes under reduced motion, only its pulse does). */
+  .sc-cell.sc-next{border-color:var(--brass)}
+  @media (prefers-reduced-motion: no-preference){
+    .sc-cell.sc-next{animation:scBreathe 2.2s ease-in-out infinite}
+    @keyframes scBreathe{0%,100%{box-shadow:0 0 0 0 rgba(200,162,74,0)}50%{box-shadow:0 0 0 4px rgba(200,162,74,.16)}}
+  }
   .sc-old-round{font-size:13px;color:var(--sage);margin:0 0 10px}
   button.sc-old-round{display:block;width:100%;text-align:left;background:none;border:0;
     font:inherit;cursor:pointer;padding:0}
@@ -3596,7 +3648,12 @@ function scPadForceSend(hole){
   scDrain();
 }
 // Captain-facing header banners (#scHeader, shared region with the inert
-// copy — only one of inert/card is ever visible at a time, so no clash).
+// copy — only one of inert/card is ever visible at a time, so no clash),
+// PLUS (task 3) the sticky team-identity/tally block below them. Banners
+// keep rendering first/plain (never sticky, unchanged from tasks 4-5) —
+// #scSwitch below stays a <button>, deliberately not an <a>, so the
+// config-broken banner's own form-url <a> (X21b) stays the only <a> in
+// #scHeader, findable the same way it always was.
 function scHeaderHTML(){
   const parts=[];
   if(window.scStorageDead) parts.push(`<p class="sc-degrade">This phone can't remember sends — the sheet is your record.</p>`);
@@ -3605,7 +3662,37 @@ function scHeaderHTML(){
     parts.push(`<p class="sc-loud-config">Scoring endpoint not reachable — check the deployment.`+
       (formUrl?` <a href="${esc(formUrl)}" target="_blank" rel="noopener">Score via the form</a>`:"")+`</p>`);
   }
+  parts.push(scTopHTML());
   return parts.join("");
+}
+// Rev 3 (SC-UI-V/SC-SKIN, task 3) — sticky identity+tally block, transcribed
+// from the prototype's .top/.toprow/.team-name/.roster/.chip/.tally shapes.
+// Team name is STATE.scTeam itself (this app has no per-scorer individual
+// identity — team is the only unit the confirm/journal flow ever tracks);
+// the roster line reuses the SAME "Scoring for X — roster" wording and the
+// SAME scRoster() source scShowConfirm already renders, plus #scSwitch
+// (reachable ALWAYS now, unlike rev 2's confirm-only #scNotYou) wired to the
+// EXISTING scShowPicker() in scWireCard() below — no new picker logic. The
+// round chip (#scRound, id retained from rev 2) moves in here from #scCard's
+// own markup, gaining the auto/manual sub-label: STATE.scRoundOverride is
+// the SAME momentary-spring field X11 already exercises, unchanged.
+function scTopHTML(){
+  const team=STATE.scTeam;
+  const roster=scRoster(team,STATE.scSeason).join(", ");
+  const active=scActiveRound();
+  const mode=STATE.scRoundOverride?"manual · one entry":"auto";
+  return `<div class="sc-top"><div class="sc-toprow"><div>`+
+      `<div class="sc-team-name">${esc(team)}</div>`+
+      `<div class="sc-roster">Scoring for <b>${esc(team)}</b>`+
+        (roster?` — ${esc(roster)}`:"")+
+        ` · <button type="button" class="sc-switch" id="scSwitch">not you? switch</button>`+
+      `</div>`+
+    `</div>`+
+    `<button type="button" class="sc-round-chip" id="scRound">Round ${esc(active)}`+
+      `<small>${esc(scDayAbbrev(active))} · ${mode}</small></button>`+
+    `</div>`+
+    scTallyHTML()+
+  `</div>`;
 }
 // Rule 4: entries from a round OTHER than the currently-active one (the
 // momentary round-toggle spring lets a captain log an out-of-sequence
@@ -3719,29 +3806,55 @@ document.addEventListener("visibilitychange",()=>{
    journal and re-wires listeners from scratch, so calling it twice
    back-to-back (or on every periodic refresh) reproduces the identical DOM
    shape — no incremental patching to drift out of sync. */
+// SC-TALLY-HONEST (task 3, rework): Out/In/Total/To-par TILES, all four fed
+// by ONE per-hole scCellState() walk below — no second derivation anywhere
+// else in the file computes a stroke count. A conflicted hole (sheet and
+// phone disagree) counts toward NEITHER Out/In/Total NOR the par sum behind
+// To-par — pre-rev-3 this used the phone's own number as a stand-in
+// ("ambiguous sync-wise, but real"); that was an honest compromise for a
+// single running total, but a captain glancing at Out|In|Total individually
+// deserves numbers that only ever include holes the app can actually vouch
+// for. journal states "queued"/"sending"/"ok" all count (the phone's own
+// claim, not yet contradicted by the sheet); "rejected" does NOT (the
+// server said no — nothing to count until a retry succeeds).
 function scTallyHTML(){
-  const filled=[]; const vals={};
+  const pars=courseMap();
+  let outSum=0,inSum=0,outPar=0,inPar=0,outN=0,inN=0;
   HOLES.forEach(h=>{
     const st=scCellState(h);
     let v=null;
     if(st.kind==="sheet") v=st.value;
-    else if(st.kind==="journal") v=st.score;
-    else if(st.kind==="conflict") v=st.phoneVal; // ambiguous sync-wise, but the phone's own count of strokes played is real
-    if(v!=null){ filled.push(h); vals[h]=v; }
+    else if(st.kind==="journal" && (st.state==="ok"||st.state==="queued"||st.state==="sending")) v=st.score;
+    // kind==="conflict" (both numbers), kind==="journal" with state
+    // "rejected", and kind==="empty" all fall through as v===null — counted
+    // nowhere, neither side, until resolved.
+    if(v==null) return;
+    const par=pars?(pars[h]||0):0;
+    if(h<=9){ outSum+=v; outPar+=par; outN++; } else { inSum+=v; inPar+=par; inN++; }
   });
-  const strokes=filled.reduce((s,h)=>s+vals[h],0);
-  const pars=courseMap();
+  const n=outN+inN, total=outSum+inSum;
+  const tile=(k,v)=>`<div class="sc-tile"><div class="sc-tile-k">${k}</div><div class="sc-tile-v">${v}</div></div>`;
+  const tileOut=tile("Out",outSum||"–");
+  const tileIn=tile("In",inSum||"–");
+  const tileTotal=tile("Total",total||"–");
+  let tilePar,mode;
   if(pars){
-    const parSum=filled.reduce((s,h)=>s+(pars[h]||0),0);
-    const rel=filled.length?strokes-parSum:null;
-    return `<p class="sc-tally" id="scTally" data-mode="topar">${filled.length?toPar(rel):"—"}`+
-      `<span class="sc-tally-lab"> thru ${filled.length}</span></p>`;
+    // SC-PAR happy path: complete course data -> a real to-par figure,
+    // labeled with its own thru-N basis (the SAME n this tile's number is
+    // computed over, never the raw 18-hole count).
+    mode="topar";
+    const rel=n?total-(outPar+inPar):null;
+    const under=rel!=null&&rel<0;
+    tilePar=`<div class="sc-tile sc-tile-par"><div class="sc-tile-k">To par<span class="sc-tally-lab"> · thru ${n}</span></div>`+
+      `<div class="sc-tile-v${under?" under":""}">${n?toPar(rel):"–"}</div></div>`;
+  } else {
+    // SC-PAR degrade: course pars incomplete (one hole missing) — the tally
+    // can't honestly compute to-par, so the 4th tile drops to a plain
+    // thru-count instead of a par-relative number it can't back up (X10).
+    mode="strokes";
+    tilePar=`<div class="sc-tile sc-tile-par"><div class="sc-tile-k">Thru</div><div class="sc-tile-v">${n||"–"}</div></div>`;
   }
-  // SC-PAR degrade: course pars incomplete (one hole missing) — the tally
-  // can't honestly compute to-par, so it drops to strokes-only and says so
-  // via data-mode, rather than silently under-counting (X10).
-  return `<p class="sc-tally" id="scTally" data-mode="strokes">${filled.length?strokes:"—"}`+
-    `<span class="sc-tally-lab"> strokes thru ${filled.length}</span></p>`;
+  return `<div class="sc-tally" id="scTally" data-mode="${mode}">${tileOut}${tileIn}${tileTotal}${tilePar}</div>`;
 }
 // Rev 3 (SC-UI-V/SC-SKIN, task 1): renders ONE horizontal row-cell inside
 // the vertical Out|In card — hole number, "Par N / NNN yds", score, mark —
@@ -3753,7 +3866,7 @@ function scTallyHTML(){
 // sc-onsheet, the bare state glyph -> .sc-mark, ? -> ▲ (rev 3's own glyph
 // set; conflict's cell label also flips to SHEET·MINE order, matching the
 // spec's literal wording, vs. rev 2's MINE·SHEET).
-function scCellHTML(h){
+function scCellHTML(h,nextHole){
   const st=scCellState(h);
   const par=scHolePar(h);
   const yds=scHoleYards(h);
@@ -3783,6 +3896,14 @@ function scCellHTML(h){
     } else if(st.state==="ok"){
       ariaState=", saved on phone"; // transitional — the sheet hasn't caught up to this "ok" yet
     }
+  } else if(st.kind==="empty" && h===nextHole){
+    // SC-NEXT-HINT (task 3): presentational only — no aria-state change, no
+    // mark, no title; the click handler wired below (scWireCard) is the SAME
+    // plain scPadOpen(h) every other empty cell already gets. nextHole is
+    // scFirstEmptyHole()'s result, computed ONCE per card render and passed
+    // down through scCardGridHTML -> scColumnHTML -> here, never
+    // recomputed per-cell.
+    extraCls="sc-next";
   }
   const scoreCls=(scoreForColor!=null&&par)?scoreClass(scoreForColor,par).trim():"";
   // Over/under is never color-only: a ▾/▴ glyph rides alongside the color
@@ -3805,14 +3926,25 @@ function scCellHTML(h){
 // Rev 3 (SC-UI-V): one Out|In column — a plain unclassed wrapper div (same
 // shape the prototype's own .card uses) holding a .sc-colhead label and a
 // .sc-col of 9 cells; .sc-cardgrid's 2-column grid places the two wrapper
-// divs side by side.
-function scColumnHTML(a,b,lab){
+// divs side by side. `nextHole` (task 3, SC-NEXT-HINT) threads scCardGridHTML's
+// ONE scFirstEmptyHole() call down to every cell — NOT `hs.map(scCellHTML)`,
+// which would leak Array.map's own index argument into scCellHTML's second
+// parameter instead.
+function scColumnHTML(a,b,lab,nextHole){
   const hs=HOLES.filter(h=>h>=a&&h<=b);
   return `<div><div class="sc-colhead">${lab}</div><div class="sc-col">`+
-    hs.map(scCellHTML).join("")+`</div></div>`;
+    hs.map(h=>scCellHTML(h,nextHole)).join("")+`</div></div>`;
+}
+// SC-NEXT-HINT: the first hole whose scCellState().kind==="empty" — computed
+// ONCE per card render (here) and threaded into every cell below, never
+// recomputed per-cell.
+function scFirstEmptyHole(){
+  for(const h of HOLES){ if(scCellState(h).kind==="empty") return h; }
+  return null;
 }
 function scCardGridHTML(){
-  return `<div class="sc-cardgrid">${scColumnHTML(1,9,"Out")}${scColumnHTML(10,18,"In")}</div>`;
+  const nextHole=scFirstEmptyHole();
+  return `<div class="sc-cardgrid">${scColumnHTML(1,9,"Out",nextHole)}${scColumnHTML(10,18,"In",nextHole)}</div>`;
 }
 // Task 2 (rev 3, SC-PAD-SHEET) — the key grid + "Other" overflow row, shared
 // verbatim between conflict mode and normal/edit mode (identical markup
@@ -4013,6 +4145,11 @@ function scWireCard(){
     STATE.scRoundOverride = STATE.scRoundOverride ? null : scOtherRound(scRoundDefault());
     renderScCard();
   });
+  // SC-SWITCH (task 3): always-reachable path back to the team picker —
+  // reuses scShowPicker() verbatim (the SAME function rev 2's pre-confirm
+  // #scNotYou link already called), no new identity logic anywhere.
+  const switchBtn=$("#scSwitch");
+  if(switchBtn) switchBtn.addEventListener("click",()=>scShowPicker(STATE.scSeason));
   // Task 2 (SC-PAD-SHEET): the veil is a permanent sibling of the sheet
   // (present, `hidden`, whenever the sheet is closed) — tapping it closes
   // the sheet exactly like the head's Close button, one shared reset.
@@ -4119,12 +4256,13 @@ function renderScCard(){
     if(sheetHost) sheetHost.innerHTML=""; // fix round 1: no stale sheet/veil lingering once the team resets
     return;
   }
+  // Task 3 (header/SC-TALLY-HONEST): the round chip (#scRound) and tally
+  // strip (#scTally) both MOVED into scHeaderHTML()/scTopHTML() below — no
+  // longer part of #scCard's own innerHTML.
   $("#scHeader").innerHTML=scHeaderHTML();
   const active=scActiveRound();
   card.innerHTML=
-    `<div class="sc-round"><button type="button" id="scRound">Round ${esc(active)} · ${scDayAbbrev(active)}</button></div>`+
     scOldRoundSummaryHTML(active)+
-    scTallyHTML()+
     scCardGridHTML()+
     `<div class="sc-legend">▮ on the sheet · ⇡ saved on phone · sending · ▲ sheet differs — tap to resolve · ! rejected — tap</div>`;
   // Fix round 1 (review Important #1): #scVeil/#scSheet render into
