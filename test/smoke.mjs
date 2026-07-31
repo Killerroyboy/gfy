@@ -2404,6 +2404,13 @@ async function openScorer(dom, { noSheet = false } = {}) {
   const lab7Par = labFor(pad7, "3");    // hole7 par3, delta 0
   const lab7Birdie = labFor(pad7, "2"); // hole7 par3, delta -1
   const parKeyOkX8 = parKeyClassFor(pad7, "3") === true;
+  // Fix wave item 4: X8's own name claims the par key "alone carries" the
+  // primary class — but until now the check only asserted the ONE known
+  // par key HAS .sc-parkey, never that it's the ONLY .sc-key with it. A
+  // regression that slapped .sc-parkey on every key in the grid would still
+  // pass the pre-existing assert. Count .sc-parkey occurrences in the whole
+  // pad grid instead.
+  const parKeyCountX8 = pad7.querySelectorAll(".sc-key.sc-parkey").length;
   docX8.querySelector('.sc-cell[data-hole="8"]').click();
   await until(() => (docX8.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 8"));
   const pad8 = docX8.querySelector("#scSheet");
@@ -2411,11 +2418,13 @@ async function openScorer(dom, { noSheet = false } = {}) {
   const lab8Birdie = labFor(pad8, "3"); // hole8 par4, delta -1
   const lab8Eagle = labFor(pad8, "2");  // hole8 par4, delta -2 — same raw score as hole7's Birdie above
   const parKeyOkX8b = parKeyClassFor(pad8, "4") === true;
-  check("X8: SC-PAR — pad(7)[par3]/pad(8)[par4] both label their own par 'Par' AND their own par-1 'Birdie'; the SAME score (2) reads 'Birdie' on the par-3 but 'Eagle' on the par-4 (delta tracks each hole's real par, not a hardcoded label); the par key alone carries the .sc-parkey primary class on both holes (rev 3)",
+  const parKeyCountX8b = pad8.querySelectorAll(".sc-key.sc-parkey").length;
+  check("X8: SC-PAR — pad(7)[par3]/pad(8)[par4] both label their own par 'Par' AND their own par-1 'Birdie'; the SAME score (2) reads 'Birdie' on the par-3 but 'Eagle' on the par-4 (delta tracks each hole's real par, not a hardcoded label); the par key ALONE carries the .sc-parkey primary class on both holes — exactly ONE .sc-parkey per pad grid, not just present (rev 3)",
     lab7Par === "Par" && lab8Par === "Par" && lab7Birdie === "Birdie" && lab8Birdie === "Birdie" && lab8Eagle === "Eagle" &&
-      parKeyOkX8 && parKeyOkX8b,
+      parKeyOkX8 && parKeyOkX8b && parKeyCountX8 === 1 && parKeyCountX8b === 1,
     "h7Par:" + lab7Par + " h8Par:" + lab8Par + " h7Birdie:" + lab7Birdie + " h8Birdie:" + lab8Birdie + " h8Eagle:" + lab8Eagle +
-      " parKeyOk7:" + parKeyOkX8 + " parKeyOk8:" + parKeyOkX8b);
+      " parKeyOk7:" + parKeyOkX8 + " parKeyOk8:" + parKeyOkX8b +
+      " parKeyCount7:" + parKeyCountX8 + " parKeyCount8:" + parKeyCountX8b);
   domX8.window.close();
 
   // X9/X10 variant: course fixture with hole 5's row entirely removed. courseMap()
@@ -4023,6 +4032,24 @@ async function cellSettledOk(doc, hole) {
   const teamBtnsSurviveRepaintX31 = docX31.querySelectorAll("#scPicker .sc-pick").length > 0;
   const cardStillHiddenAfterRepaintX31 = docX31.querySelector("#scCard")?.hidden === true;
 
+  // Fix wave item 1 (picker guard bypass, cross-task lifecycle gap — same
+  // X-number, no new check() per the instruction): renderScorer()'s own
+  // scPickerOpen check only guards ROUTING — but scDrain (the 20s poll,
+  // still running the whole time the picker is open, since the picker is
+  // part of the SAME #score view) calls renderScCard() DIRECTLY on every
+  // entry state flip, a path renderScorer()'s guard never sees at all.
+  // Simulate that EXACT drain-driven repaint: picker still open, hash still
+  // naming the already-confirmed team, call renderScCard() directly (not
+  // renderScorer()) and assert the picker survives with no header/glance
+  // chrome resurrecting underneath/around it.
+  domX31.window.renderScCard();
+  const pickerSurvivesDrainRepaintX31 = docX31.querySelector("#scPicker")?.hidden === false;
+  const teamBtnsSurviveDrainRepaintX31 = docX31.querySelectorAll("#scPicker .sc-pick").length > 0;
+  const cardStillHiddenAfterDrainRepaintX31 = docX31.querySelector("#scCard")?.hidden === true;
+  const cardStillEmptyAfterDrainRepaintX31 = (docX31.querySelector("#scCard")?.innerHTML || "").trim() === "";
+  const headerStillEmptyAfterDrainRepaintX31 = (docX31.querySelector("#scHeader")?.innerHTML || "").trim() === "";
+  const glanceStillEmptyAfterDrainRepaintX31 = (docX31.querySelector("#scGlance")?.innerHTML || "").trim() === "";
+
   // Complete a team pick — the normal flow must still fully resume:
   // picker -> confirm -> card, exactly like the pre-confirm path.
   [...docX31.querySelectorAll("#scPicker .sc-pick")].find(b => /Duck/.test(b.textContent || "")).click();
@@ -4040,10 +4067,12 @@ async function cellSettledOk(doc, hole) {
     docX31.querySelector("#scPicker")?.hidden === true;
 
   domX31.window.close();
-  check("X31: #scSwitch — a <button> (never an <a>), click opens #scPicker (visible, hidden=false) with real team buttons (.sc-pick, including Duck), wired to the existing scShowPicker() — no new picker logic; the previous team's #scCard/#scGlance are hidden+cleared underneath (not layered under the picker); a forced renderScorer() (the exact 60s-paint()/hashchange repaint failure mode, with location.hash STILL naming the already-confirmed team) does NOT silently close the picker or re-show the old card; completing a team pick still resumes the normal picker->confirm->card flow, and a further forced repaint afterward stays on the card (guard doesn't strand the app once a team is confirmed)",
+  check("X31: #scSwitch — a <button> (never an <a>), click opens #scPicker (visible, hidden=false) with real team buttons (.sc-pick, including Duck), wired to the existing scShowPicker() — no new picker logic; the previous team's #scCard/#scGlance are hidden+cleared underneath (not layered under the picker); a forced renderScorer() (the exact 60s-paint()/hashchange repaint failure mode, with location.hash STILL naming the already-confirmed team) does NOT silently close the picker or re-show the old card; a DIRECT renderScCard() call (the exact scDrain repaint path, which bypasses renderScorer()'s routing guard entirely) ALSO does not close the picker, re-show the old card, or resurrect the old team's #scHeader/#scGlance chrome around it (fix wave item 1); completing a team pick still resumes the normal picker->confirm->card flow, and a further forced repaint afterward stays on the card (guard doesn't strand the app once a team is confirmed)",
     pickerHiddenBeforeX31 && switchIsButtonX31 && pickerVisibleX31 && hasTeamBtnsX31 && hasDuckBtnX31 &&
       cardHiddenAfterSwitchX31 && cardEmptyAfterSwitchX31 && glanceEmptyAfterSwitchX31 &&
       pickerSurvivesRepaintX31 && teamBtnsSurviveRepaintX31 && cardStillHiddenAfterRepaintX31 &&
+      pickerSurvivesDrainRepaintX31 && teamBtnsSurviveDrainRepaintX31 && cardStillHiddenAfterDrainRepaintX31 &&
+      cardStillEmptyAfterDrainRepaintX31 && headerStillEmptyAfterDrainRepaintX31 && glanceStillEmptyAfterDrainRepaintX31 &&
       confirmVisibleAfterPickX31 && cardVisibleAfterConfirmX31 && pickerHiddenAfterConfirmX31 &&
       stillOnCardAfterFinalRepaintX31,
     "hiddenBefore=" + pickerHiddenBeforeX31 + " isButton=" + switchIsButtonX31 + " visibleAfter=" + pickerVisibleX31 +
@@ -4052,6 +4081,11 @@ async function cellSettledOk(doc, hole) {
       " glanceEmptyAfterSwitch=" + glanceEmptyAfterSwitchX31 +
       " pickerSurvivesRepaint=" + pickerSurvivesRepaintX31 + " teamBtnsSurviveRepaint=" + teamBtnsSurviveRepaintX31 +
       " cardStillHiddenAfterRepaint=" + cardStillHiddenAfterRepaintX31 +
+      " pickerSurvivesDrainRepaint=" + pickerSurvivesDrainRepaintX31 + " teamBtnsSurviveDrainRepaint=" + teamBtnsSurviveDrainRepaintX31 +
+      " cardStillHiddenAfterDrainRepaint=" + cardStillHiddenAfterDrainRepaintX31 +
+      " cardStillEmptyAfterDrainRepaint=" + cardStillEmptyAfterDrainRepaintX31 +
+      " headerStillEmptyAfterDrainRepaint=" + headerStillEmptyAfterDrainRepaintX31 +
+      " glanceStillEmptyAfterDrainRepaint=" + glanceStillEmptyAfterDrainRepaintX31 +
       " confirmVisibleAfterPick=" + confirmVisibleAfterPickX31 + " cardVisibleAfterConfirm=" + cardVisibleAfterConfirmX31 +
       " pickerHiddenAfterConfirm=" + pickerHiddenAfterConfirmX31 +
       " stillOnCardAfterFinalRepaint=" + stillOnCardAfterFinalRepaintX31);

@@ -487,7 +487,25 @@
   .sc-cell:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
   .sc-hole-n{font-family:var(--display);font-size:20px;width:24px;text-align:center;color:var(--bone);
     font-variant-numeric:tabular-nums;flex:none}
-  .sc-hole-par{font-size:10px;letter-spacing:.08em;color:var(--sage);flex:1;line-height:1.3}
+  /* Fix wave item 2 (D1, review-found — Out|In row drift at phone widths):
+     flex:1 alone reserved NO width, so a two-digit hole number + an
+     over/under .sc-glyph riding beside the score could squeeze this to
+     ~23px on a full round, wrapping "Par N / N / yds" onto 3-4 lines and
+     desyncing the two columns by up to 65px at 390px (task-5-report.md D1).
+     min-width gives it a real floor; white-space:nowrap stops each of the
+     two <br>-separated lines (Par N / N yds) from wrapping further even
+     under squeeze — the deliberate 2-line layout itself is unaffected, only
+     runaway 3rd/4th-line wraps are. The @media rule below additionally
+     drops the (decorative, sub-13px, already-exempt) yds sub-line under
+     400px, which is what actually keeps a full round's In column from
+     colliding with Out at the 390px width real captains use — see
+     fixwave-report.md for the measured before/after. Cells keep their
+     >=52px min-height (.sc-cell, above) either way. */
+  .sc-hole-par{font-size:10px;letter-spacing:.08em;color:var(--sage);flex:1;line-height:1.3;
+    min-width:46px;white-space:nowrap}
+  @media (max-width:400px){
+    .sc-hole-yds{display:none}
+  }
   .sc-score{font-family:var(--display);font-size:22px;font-variant-numeric:tabular-nums;min-width:36px;
     text-align:right;color:var(--bone)}
   .sc-score .sc-dash{color:var(--sage);font-size:18px}
@@ -502,7 +520,26 @@
      above (conflict/rejected skip scoreClass entirely — score is ambiguous
      or unset). Never color-only: every state's .sc-mark also carries the
      glyph TEXT, not just a border/background tint. */
-  .sc-cell.sc-onsheet{border-color:var(--brass)}
+  /* Fix wave item 3 (D2, review-found): .sc-onsheet used to share the
+     IDENTICAL border-color:var(--brass) declaration with .sc-next below —
+     measured pixel-identical (rgb(200,162,74), 1px, solid) once reduced
+     motion drops .sc-next's only other differentiator (the breathe pulse),
+     making the hint invisible under prefers-reduced-motion:reduce and, even
+     with motion on, giving a full round's worth of on-sheet cells the same
+     "wall of gold" loud brass border the approved prototype reserves for
+     the ONE next-hole hint (task-5-report.md D2). The prototype's own
+     .cell.done{background:var(--pine-3)} keeps done cells quiet via a FILL
+     shift, default border unchanged, and reserves brass border exclusively
+     for .cell.next — transcribed here with the site's own --pine-3 token
+     (already used elsewhere for a "settled/filled" surface, e.g. the pad's
+     .sc-parkey) instead of adding the prototype's own --line/--under
+     tokens the rest of this file deliberately doesn't have. .sc-onsheet
+     drops the brass border entirely (falls back to the base .sc-cell
+     rgba(200,162,74,.22) hairline) so .sc-cell.sc-next (below, unchanged)
+     becomes the ONLY state with a solid brass border — a static signal
+     that holds with zero animation, verified by a reduced-motion
+     re-render (fixwave-report.md). */
+  .sc-cell.sc-onsheet{background:var(--pine-3)}
   .sc-cell.sc-queued{border-color:var(--brass-dim)}
   .sc-cell.sc-sending{border-style:dashed;border-color:var(--brass);opacity:.85}
   .sc-cell.sc-sending .sc-mark{color:var(--brass)}
@@ -590,11 +627,25 @@
     background:var(--pine-2);border:1px solid rgba(200,162,74,.22);color:var(--bone);cursor:pointer;padding:4px;
     font-family:var(--ui)}
   .sc-key:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
-  .sc-key b{font-family:var(--display);font-size:16px;font-weight:400}
+  /* Fix wave item 5 (RULED by Riley — restore the pad's type hierarchy by
+     RAISING digits): the prototype's own design note is explicit — "the
+     par button is the biggest thing on it, most taps are one obvious tap"
+     (digit:label ratio 2.7:1 there vs 1.2:1 pre-fix here, task-5-report.md
+     ledger (a)) — so the digit goes up, not the label down. Labels/
+     sub-labels stay at the 13px functional-text floor throughout (never
+     shrink anything): .sc-key-lab's own base rule was already 13px and is
+     untouched; .sc-parkey used to bundle `.sc-key-lab` into the SAME
+     font-size:19px declaration as its digit, making the par key's OWN
+     label 19px — bigger than every other key's label, not just its digit.
+     Split so the parkey's label rejoins the 13px floor (still brass-tinted,
+     matching every other key's label-color pattern) while only the digit
+     climbs further, to the biggest text on the pad. */
+  .sc-key b{font-family:var(--display);font-size:23px;font-weight:400}
   .sc-key-lab{font-size:13px;color:var(--sage);text-transform:uppercase;letter-spacing:.04em}
   .sc-key.sc-eagle .sc-key-lab,.sc-key.sc-birdie .sc-key-lab{color:var(--brass)}
   .sc-key.sc-parkey{border-color:var(--brass);background:var(--pine-3)}
-  .sc-key.sc-parkey b,.sc-key.sc-parkey .sc-key-lab{color:var(--brass);font-size:19px}
+  .sc-key.sc-parkey b{color:var(--brass);font-size:29px}
+  .sc-key.sc-parkey .sc-key-lab{color:var(--brass);font-size:13px}
   .sc-key.sc-other b{font-size:14px;font-family:var(--ui);font-weight:500;color:var(--sage)}
   /* "Other" toggles this overflow row (STATE.scPadOtherOpen persists it
      across a forced repaint — same mechanism the retired text-input echo
@@ -4031,7 +4082,13 @@ function scCellHTML(h,nextHole){
   const scoreHTML=label!=null
     ? `<span class="sc-score${scoreCls?" "+scoreCls:""}">${label}</span>${glyph?`<i class="sc-glyph" aria-hidden="true">${glyph}</i>`:""}`
     : `<span class="sc-score"><span class="sc-dash">–</span></span>`;
-  const parHTML=`Par ${par||"—"}${yds?"<br>"+yds+" yds":""}`;
+  // Fix wave item 2 (D1 — Out|In row drift at narrow widths): the yds
+  // sub-line is wrapped in its own span so @media (max-width:400px) (CSS,
+  // below) can drop it without touching the "Par N" line — same textContent
+  // either way (X7's /Par \d/ + /yds/ regexes still both match above that
+  // breakpoint; jsdom does no layout/media-query evaluation so this text is
+  // unaffected there regardless).
+  const parHTML=`Par ${par||"—"}${yds?"<br><span class=\"sc-hole-yds\">"+yds+" yds</span>":""}`;
   return `<button type="button" class="sc-cell${cls?" "+cls:""}" data-hole="${h}" `+
     `aria-label="Hole ${h}, par ${par||"—"}${ariaState}"${titleAttr}>`+
     `<span class="sc-hole-n">${h}</span>`+
@@ -4371,6 +4428,24 @@ function scGlanceHTML(){
 function renderScCard(){
   const card=$("#scCard");
   if(!card) return;
+  // Fix wave item 1 (picker guard bypass, cross-task lifecycle gap): scDrain
+  // (above) calls renderScCard() DIRECTLY on every entry state flip — the
+  // 20s drain timer keeps running the whole time the picker is open (the
+  // picker is part of the SAME #score view, hash unchanged), a path that
+  // never goes through renderScorer()'s own STATE.scPickerOpen check
+  // (~line 4440). Without this guard a drain-driven repaint would overwrite
+  // #scHeader with the OLD team's sticky identity/tally block (STATE.scTeam
+  // is untouched by scShowPicker) and refill #scGlance right under the open
+  // picker (X31's drain-repaint variant covers this directly). Safe to
+  // early-return unconditionally: scShowCard/scShowConfirm — the only two
+  // places that ever hide #scPicker again — both clear STATE.scPickerOpen
+  // BEFORE any legitimate card render reaches this function (scShowCard
+  // clears it at its own top, then calls renderScCard() itself; every other
+  // renderScCard() caller — scDrain, scRetryEntry, scPadForceSend, the pad
+  // open/close handlers — is only reachable via a click on #scCard's own
+  // DOM, which scShowPicker leaves hidden+empty, so none of them can fire
+  // while the picker is genuinely open).
+  if(STATE.scPickerOpen) return;
   const glance=$("#scGlance");
   const sheetHost=$("#scSheetHost");
   if(!STATE.scTeam){
