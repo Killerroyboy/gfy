@@ -685,3 +685,38 @@ suppressed; only CLAIMS OF STANDING are.
   directions + money-tile invariance). Suite 207 → 209. Mutation bar: reverting the Pos/crown
   suppression fails X39 alone; reverting the calcutta branch fails X40 alone.
 - Copy above is wave-owner-pinned honesty-mechanics; Riley may re-style wording post-merge.
+
+## §22 — calcutta unsold-lot integrity + suppression polish (Riley ratified stays-in-pot 2026-07-31)
+
+**The ruling (long-parked, now ratified): an unsold lot's share STAYS IN THE POT, disclosed.**
+The defect (pre-existing): a placing team whose lot went unsold gets an owner cut booked in the
+payout table (owner "—") and included in the covered-lots reconciliation, while the auction board
+reads "unsold" and the stays-in-pot disclosure note fires only for lot-LESS rows.
+
+- **C-UNSOLD:** in `renderCalcutta`, an unsold lot (owner `"—"`) is EXCLUDED from the covered
+  payout math (`covered` filter requires a lot with a real owner); its payout row renders with cut
+  `—`; the disclosure note `unsold lots' shares stay in the pot` fires whenever ANY placing row's
+  share stays in the pot (lot-less OR unsold). The would-text `unsold` arm is already correct.
+  Money reconciliation: `payable × coveredShares` math unchanged in form — only the covered set
+  narrows. Test X41: fixture with an unsold lot on a placing team — no cut booked, note fires,
+  auction board still reads unsold, sold lots' cuts unchanged from their no-unsold values.
+- **SC-PAR-FLAG-2 (copy re-pin, supersedes the §20 flag line):** the health flag becomes, verbatim:
+  `Course tab: hole <N> par missing or invalid — To-par and standings suppressed (strokes only)`.
+  X33's copy assert updates to the new pin (meaning preserved: still byte-asserted).
+- **SC-PAR-CORNER:** when `!ranked.length` AND suppression hold together, `#calBasis` reads,
+  verbatim: `Bids locked. Payouts post once cards and Course pars are in.` (the no-cards branch's
+  copy widens only in that combined state; each single state keeps its existing line).
+- **README-BASIS:** one sentence in the calcutta section documenting gross-vs-net basis
+  (`calcutta_basis` Info key; scramble forces gross) — closes the file-wide gap the §21 docs
+  re-review named.
+- **HP-PAR:** `renderHolePanel` (unfrozen for exactly this) swaps its raw `Par ${pars[h]}` read
+  for the per-hole `scHolePar(h)` fallback with `—` — kills the latent null-deref; visual parity
+  for complete courses.
+- **Coverage pins:** X42 — net-basis calcutta stays fully LIVE under blank pars (roster-less +
+  `calcutta_basis=net` fixture override; places + win-claims present); X43 — arm priority under a
+  suppressed fixture carrying wd + unsold + cardless lots (each arm's text wins over
+  `awaiting pars`); X39 strengthens to row-count PARITY with the control dom (edit in place).
+  Suite arc: 209 → 210 (X41) → 212 (X42/X43). Mutation bar: reverting the covered-filter fails
+  X41 alone; reverting the net guard fails X42 alone; hoisting the suppressed arm fails X43 alone.
+- Frozen: everything §21 froze except `renderCalcutta` (C-UNSOLD/SC-PAR-CORNER arms only),
+  `renderHolePanel` (HP-PAR only), and `courseMap` (the flag STRING only — logic untouched).
