@@ -3128,22 +3128,30 @@ function scKeyExtraClass(label){
   if(label==="Par") return " sc-parkey";
   return "";
 }
-// Task 2 pinned resolution (SC-PAD-SHEET): the "Other" overflow row must
-// keep the full 1-19 range reachable now that STATE.scPadOtherVal's free-
-// text input is retired. The main key grid (scPadNumbers, above) already
-// covers par-2..par+4; this fills in the rest as tappable buttons:
-//   - up-range par+5..min(par+10,19), prototype-shaped;
+// Task 2 pinned resolution (SC-PAD-SHEET), CORRECTED pre-review (plan
+// defect fix — the original par+10 cap silently broke rev-2's hard 1-19
+// clamp for every realistic par: par+10 tops out at 13-15 for pars 3-5, so
+// 16-19 had no button anywhere on the pad. rev-2's 1-19 range is a HARD
+// requirement, not an approximation): the "Other" overflow row must keep
+// the full 1-19 range reachable now that STATE.scPadOtherVal's free-text
+// input is retired. The main key grid (scPadNumbers, above) already covers
+// par-2..par+4; this fills in the rest as tappable buttons:
+//   - up-range par+5..19, UNCAPPED (no more min(par+10,19) — that cap is
+//     exactly the defect this fix removes);
 //   - down-range 1..par-3, appended ONLY when par-2>1 (i.e. there's
-//     actually a gap below the main grid's lowest key to fill).
+//     actually a gap below the main grid's lowest key to fill — e.g. a
+//     par-3 hole's main grid already reaches down to 1 via par-2, so the
+//     overflow correctly omits it there; a par-5 hole's main grid bottoms
+//     out at 3, so the overflow adds 1-2 to close the gap).
 // No-par degrade (X9): scPadNumbers' own fallback is a plain 1-8 grid with
 // no golf-term labels at all; this mirrors that degrade by offering 9-19 as
 // the overflow instead of par-relative math that has no par to be relative
-// TO, keeping the full range nominally reachable either way.
+// TO, keeping the full range reachable either way.
 function scPadOverflowNumbers(par){
   if(!par) return Array.from({length:11},(_,i)=>i+9); // 9..19
   const out=[];
   if(par-2>1){ for(let v=1;v<=par-3;v++) out.push(v); }
-  for(let v=par+5;v<=Math.min(par+10,19);v++) out.push(v);
+  for(let v=par+5;v<=19;v++) out.push(v);
   return out;
 }
 

@@ -2560,6 +2560,31 @@ async function openScorer(dom, { noSheet = false } = {}) {
   const numrowSurvivedX12 = numrowAfterX12?.classList.contains("on") === true &&
     numrowAfterX12.querySelectorAll(".sc-key[data-score]").length > 0;
 
+  // Coordinator pre-review fix (plan defect, corrected): the overflow
+  // row's up-range now runs par+5..19 UNCAPPED (the original min(par+10,19)
+  // cap silently made scores 16-19 unreachable for every realistic par —
+  // rev-2's 1-19 clamp is a hard requirement, not an approximation). Prove
+  // BOTH extremes on REAL fixture holes rather than trusting the formula:
+  //   - hole 9 (par 5, already open above, fixtures/course.csv h9=5): its
+  //     main grid bottoms out at 3 (par-2) — the down-range fix must add 1
+  //     to the overflow, AND the uncapped up-range must reach all the way
+  //     to 19.
+  //   - hole 7 (par 3, a SECOND scPadOpen, fixtures/course.csv h7=3): its
+  //     main grid already reaches down to 1 via par-2 itself, so the
+  //     overflow must NOT duplicate it there (1 absent) — while 19 must
+  //     still be present via the same uncapped up-range.
+  const hasKeyX12 = (root, score) => !!root?.querySelector('.sc-key[data-score="' + score + '"]');
+  const par5Has1X12 = hasKeyX12(numrowBeforeX12, "1");
+  const par5Has19X12 = hasKeyX12(numrowBeforeX12, "19");
+
+  docX12.querySelector('.sc-cell[data-hole="7"]').click(); // hole 7, par 3 — second scPadOpen
+  await until(() => (docX12.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 7"));
+  docX12.querySelector("#scPadOtherBtn").click();
+  await until(() => docX12.querySelector(".sc-numrow")?.classList.contains("on"));
+  const numrowPar3X12 = docX12.querySelector(".sc-numrow");
+  const par3No1X12 = !hasKeyX12(numrowPar3X12, "1"); // already on the main grid (par-2=1) — overflow must not duplicate it
+  const par3Has19X12 = hasKeyX12(numrowPar3X12, "19");
+
   domX12.window.close();
 
   // Review round 2 (finding #3, CONFIRMED GAP): I2's auto-override-through-
@@ -2597,16 +2622,18 @@ async function openScorer(dom, { noSheet = false } = {}) {
   const overrideSentX12b = bodiesX12b.length === 1 && bodiesX12b[0].hole === 7 && bodiesX12b[0].score === 5;
   domX12b.window.close();
 
-  check("X12: edit mode — re-tapping a filled cell shows the rev-3 replace-line naming the current value; a SINGLE number tap fires exactly one scJournalSave with the new value and closes the sheet (no second confirm element anywhere, #scPadReplace retired); the full open->close->reopen cycle works via BOTH the veil tap and the sheet-head's Close button (S14); the 'Other' overflow row survives a forced renderScCard() rebuild (periodic-refresh regression, rev-3 mechanism via STATE.scPadOtherOpen); replace-confirming an ALREADY-KNOWN differing sheet value (I2) sends via that SAME single number tap, no second tap anywhere",
+  check("X12: edit mode — re-tapping a filled cell shows the rev-3 replace-line naming the current value; a SINGLE number tap fires exactly one scJournalSave with the new value and closes the sheet (no second confirm element anywhere, #scPadReplace retired); the full open->close->reopen cycle works via BOTH the veil tap and the sheet-head's Close button (S14); the 'Other' overflow row survives a forced renderScCard() rebuild (periodic-refresh regression, rev-3 mechanism via STATE.scPadOtherOpen); the overflow row reaches BOTH extremes of the 1-19 range on real fixture holes (par 5 hole 9: 1 present via down-range, 19 present via the uncapped up-range; par 3 hole 7: 1 correctly ABSENT — already on the main grid — 19 still present); replace-confirming an ALREADY-KNOWN differing sheet value (I2) sends via that SAME single number tap, no second tap anywhere",
     closedAfterFreshX12 && replaceLineOkX12 && noReplaceBtnX12 && oneSaveOnReplaceX12 && closedAfterReplaceX12 &&
       openViaCellX12 && closedViaVeilX12 && reopenedX12 && closedViaCloseBtnX12 &&
       numrowRebuiltX12 && numrowSurvivedX12 &&
+      par5Has1X12 && par5Has19X12 && par3No1X12 && par3Has19X12 &&
       editModeFromSheetX12b && overrideSentX12b,
     "closedAfterFresh=" + closedAfterFreshX12 + " replaceLineOk=" + replaceLineOkX12 + " noReplaceBtn=" + noReplaceBtnX12 +
       " oneSaveOnReplace=" + oneSaveOnReplaceX12 + " (calls=" + saveCallsX12 + ") closedAfterReplace=" + closedAfterReplaceX12 +
       " openViaCell=" + openViaCellX12 + " closedViaVeil=" + closedViaVeilX12 + " reopened=" + reopenedX12 +
       " closedViaCloseBtn=" + closedViaCloseBtnX12 +
       " numrowRebuilt=" + numrowRebuiltX12 + " numrowSurvived=" + numrowSurvivedX12 +
+      " par5Has1=" + par5Has1X12 + " par5Has19=" + par5Has19X12 + " par3No1=" + par3No1X12 + " par3Has19=" + par3Has19X12 +
       " editModeFromSheet=" + editModeFromSheetX12b + " overrideSent=" + overrideSentX12b +
       " bodiesX12b=" + JSON.stringify(bodiesX12b));
 }
