@@ -2497,7 +2497,7 @@ function renderCalcutta(){
 
   /* largest-remainder allocation of owner cuts, reconciled against payable
      so the sum of rendered cuts always equals Math.round(payable*coveredShares/100) */
-  const covered=rowsOut.filter(r=>r.lot);
+  const covered=rowsOut.filter(r=>r.lot && r.lot.owner!=="—");
   const raws=covered.map(r=>payable*r.each/100);
   const floors=raws.map(v=>Math.floor(v));
   const flooredSum=floors.reduce((a,b)=>a+b,0);
@@ -2507,7 +2507,7 @@ function renderCalcutta(){
     .sort((a,b)=>b.frac-a.frac||a.idx-b.idx)
     .forEach(o=>{ if(remainder>0){ floors[o.idx]+=1; remainder--; } });
   covered.forEach((r,idx)=>{ r.ownerCut=floors[idx]; });
-  rowsOut.forEach(r=>{ if(!r.lot) r.ownerCut=0; });
+  rowsOut.forEach(r=>{ if(!r.lot || r.lot.owner==="—") r.ownerCut=0; });
   const rowsOutByKey=new Map(rowsOut.map(r=>[r.key,r]));
 
   // W-ONE: per-lot "wins if it ended now" (or "Won" once Final) — sourced
@@ -2580,7 +2580,7 @@ function renderCalcutta(){
 
   $("#calBasis").textContent=(done?"Final":"Projected")+" · paid on "+basis+
     (rowsOut.some(r=>r.tied)?" · asterisk marks a tie, shares split":"")+
-    (rowsOut.some(r=>!r.lot)?" · unsold lots' shares stay in the pot":"");
+    (rowsOut.some(r=>!r.lot||r.lot.owner==="—")?" · unsold lots' shares stay in the pot":"");
 }
 
 function nameListHTML(items,cls){

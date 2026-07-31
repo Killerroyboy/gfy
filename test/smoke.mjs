@@ -4604,6 +4604,124 @@ async function cellSettledOk(doc, hole) {
 }
 
 /* ---------------------------------------------------------------------
+   X41 (§22 C-UNSOLD, Riley ratified 2026-07-31): an unsold lot (owner
+   "—") that belongs to a PLACING team must not book an owner cut, and
+   must not swell the covered-lots largest-remainder reconciliation — its
+   share stays in the pot, disclosed. The auction board's would-text
+   already reads "unsold" correctly today; the defect is payout-table-side
+   only (a cut IS booked to the unsold lot pre-fix, and the stays-in-pot
+   note fires only for lot-LESS rows, never unsold-but-owned rows).
+
+   Fixture: blank the OWNER cell on the "Duck" lot (one of the two teams
+   tied 1st under the default fixture — G4: Duck & Sully tied 1st, Tex
+   3rd). Duck is also bumped $120 -> $121 — its OWN price only, Sully/
+   Moose/Tex/Bear untouched — deliberately breaking a coincidence in the
+   unmodified numbers: at the stock $400 pot/$360 payable, every placing
+   share (40/40/20) lands on an exact whole dollar with zero remainder to
+   redistribute, so which rows are "covered" is invisible in the rendered
+   cuts no matter which lot is unsold (verified: unselling Tex, the
+   non-tied 3rd lot, is a proven-equivalent mutant for the covered filter
+   at ANY price, since Tex's share is a fixed 1:2 ratio of Duck/Sully's —
+   the largest-remainder outcome for the tied pair is a structural
+   invariant of that ratio, independent of Tex's own fraction). A $1 bump
+   makes payable=$361, giving Duck/Sully each a genuine $0.40 fractional
+   remainder that the largest-remainder pass must award to exactly one of
+   the tied pair — so whether Duck legitimately competes for that penny
+   (control, still sold) or is excluded from the race (test, unsold)
+   changes SULLY's own rendered cut ($144 vs $145): the covered filter's
+   effect becomes observable, not masked by the (separately fixed)
+   zeroing line. Duck stays `collected:TRUE` in both variants, so #calOut
+   (outstanding excludes collected lots) never moves either.
+   --------------------------------------------------------------------- */
+{
+  const toNum = t => { const n = Number((t || "").replace(/[^0-9.-]/g, "")); return isNaN(n) ? 0 : n; };
+  // Mirror the app's own largest-remainder allocation (index.html
+  // ~2498-2509) here, so the expected sold-lot cuts are DERIVED from
+  // payable + shares in-test, not re-typed from a pinned total.
+  function largestRemainderCuts(payableAmt, sharesArr) {
+    const raws = sharesArr.map(s => payableAmt * s / 100);
+    const floors = raws.map(v => Math.floor(v));
+    const flooredSum = floors.reduce((a, b) => a + b, 0);
+    const coveredShares = sharesArr.reduce((a, b) => a + b, 0);
+    let remainder = Math.round(payableAmt * coveredShares / 100) - flooredSum;
+    raws.map((v, idx) => ({ idx, frac: v - floors[idx] }))
+      .sort((a, b) => b.frac - a.frac || a.idx - b.idx)
+      .forEach(o => { if (remainder > 0) { floors[o.idx] += 1; remainder--; } });
+    return floors;
+  }
+
+  // Twin doms, same pattern as X40: `doc` is long since closed by this
+  // point in the suite (Z0, ~line 1512), so the "unmodified fixture"
+  // comparison needs its own fresh control dom, not the stale top-level one.
+  // Control: Duck's price bumped (so pot/payable match the test dom) but
+  // Duck's owner left intact — Duck genuinely competes in the covered set.
+  const calcuttaDuckPriceOnly = FIXTURES.calcutta.replace("2026,Duck,Tex,120,TRUE", "2026,Duck,Tex,121,TRUE");
+  const duckPriceOnlyFetch = withOverride({
+    calcutta: () => Promise.resolve({ ok: true, status: 200, text: async () => calcuttaDuckPriceOnly }),
+  });
+  const domOKX41 = makeDom("", duckPriceOnlyFetch);
+  await until(() => domOKX41.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docOKX41 = domOKX41.window.document;
+
+  const calcuttaDuckUnsold = FIXTURES.calcutta.replace("2026,Duck,Tex,120,TRUE", "2026,Duck,,121,TRUE");
+  const duckUnsoldFetch = withOverride({
+    calcutta: () => Promise.resolve({ ok: true, status: 200, text: async () => calcuttaDuckUnsold }),
+  });
+  const domX41 = makeDom("", duckUnsoldFetch);
+  await until(() => domX41.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docX41 = domX41.window.document;
+
+  const payRows = doc => [...doc.querySelectorAll("#payBody .pay-row")].map(r => ({
+    team: r.children[1]?.textContent || "", cutText: r.children[3]?.textContent || "",
+  }));
+  const payRowsX41 = payRows(docX41);
+  const duckRowX41 = payRowsX41.find(r => /Duck/.test(r.team));
+  const sullyRowX41 = payRowsX41.find(r => /Sully/.test(r.team));
+  const texRowX41 = payRowsX41.find(r => /Tex/.test(r.team));
+
+  // (a) the unsold placing team's own row books no cut.
+  const noCutX41 = duckRowX41?.cutText === "—";
+
+  // (b) the auction board still reads "unsold" for that lot.
+  const duckWouldX41 = wouldTextFor(docX41, "Duck");
+  const stillUnsoldX41 = duckWouldX41 === "unsold";
+
+  // (c) the stays-in-pot disclosure fires for this unsold-but-PLACING row
+  // (pre-fix it only fires for lot-LESS rows, and Duck still has a lot).
+  const noteX41 = /unsold lots' shares stay in the pot/.test(docX41.querySelector("#calBasis")?.textContent || "");
+
+  // (d) the sold placing lots' cuts (Sully, Tex) equal the largest-
+  // remainder allocation re-derived over the NARROWED covered set (Duck
+  // excluded, shares [40,20]) — computed here from payable + shares, not
+  // re-typed. Cross-checked against the control dom (Duck still sold, so
+  // the ORIGINAL covered set is [40,40,20]): control's Sully cut is
+  // EXPECTED to differ from the narrowed-set figure (Duck legitimately
+  // wins the one available remainder penny there, per the code's own
+  // idx tie-break for equal fracs) — the "unless...shifted" branch this
+  // fixture was built to exercise, not the trivial "unchanged" case.
+  const payableX41 = toNum(docX41.querySelector("#calPayable")?.textContent);
+  const [sullyExpectedX41, texExpectedX41] = largestRemainderCuts(payableX41, [40, 20]);
+  const docPayRowsOK = payRows(docOKX41);
+  const sullyCutOrig = toNum(docPayRowsOK.find(r => /Sully/.test(r.team))?.cutText);
+  const sullyCutX41 = toNum(sullyRowX41?.cutText);
+  const texCutX41 = toNum(texRowX41?.cutText);
+  const soldMatchesDerivationX41 = sullyCutX41 === sullyExpectedX41 && texCutX41 === texExpectedX41;
+  const shiftedFromControlX41 = sullyCutX41 !== sullyCutOrig; // proves this fixture exercises real reallocation, not a no-op
+
+  // (e) pot/payable tiles never keyed on ownership — byte-identical to the
+  // control dom (both carry Duck's bumped price, differing ONLY in owner).
+  const potPayableSameX41 = docOKX41.querySelector("#calPot")?.textContent === docX41.querySelector("#calPot")?.textContent &&
+    docOKX41.querySelector("#calPayable")?.textContent === docX41.querySelector("#calPayable")?.textContent;
+
+  domOKX41.window.close();
+  domX41.window.close();
+
+  check("X41: §22 C-UNSOLD — a placing team's UNSOLD lot (owner '—', lot present) books no owner cut ('—' not a dollar figure), the auction board still reads 'unsold', the stays-in-pot disclosure note fires for this unsold-but-owned row, the remaining SOLD placing lots' cuts equal the largest-remainder allocation re-derived over the narrowed covered set (a genuine reallocation vs. the control dom, not a coincidental no-op), and #calPot/#calPayable stay byte-identical",
+    noCutX41 && stillUnsoldX41 && noteX41 && soldMatchesDerivationX41 && shiftedFromControlX41 && potPayableSameX41,
+    `noCut=${noCutX41} duckCut=${duckRowX41?.cutText} stillUnsold=${stillUnsoldX41} note=${noteX41} soldMatchesDerivation=${soldMatchesDerivationX41} shiftedFromControl=${shiftedFromControlX41} sullyX41=${sullyCutX41}(exp${sullyExpectedX41},controlOrig${sullyCutOrig}) texX41=${texCutX41}(exp${texExpectedX41}) potPayableSame=${potPayableSameX41}`);
+}
+
+/* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
 const groupTally = {};
