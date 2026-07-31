@@ -3195,10 +3195,19 @@ async function cellSettledOk(doc, hole) {
   const conSheetVisibleX20 = !!docX20.querySelector("#scConSheet") &&
     docX20.querySelector("#scSheet")?.hidden === true;
   const conCopyTextX20 = docX20.querySelector("#scConSheet .sc-con-copy")?.textContent || "";
-  const copyMatchesX20 = /sheet says 4/i.test(conCopyTextX20) && /this phone sent 6/i.test(conCopyTextX20);
+  // Review fix (Important #1): the ORIGINAL version of this assert only
+  // checked the two fixture NUMBERS — it never guarded the pinned plain-
+  // words sentence itself, nor the two button LABELS, so deleting "Nothing
+  // resends on its own — pick which number is true." (the exact sentence
+  // the global constraint calls out by name) or relabelling either button
+  // left the suite green. Both are now asserted explicitly.
+  const copyMatchesX20 = /sheet says 4/i.test(conCopyTextX20) && /this phone sent 6/i.test(conCopyTextX20) &&
+    /Nothing resends on its own — pick which number is true\./.test(conCopyTextX20);
   const noKeyGridInConSheetX20 = !docX20.querySelector("#scConSheet .sc-key");
   const conBtnsX20 = [...docX20.querySelectorAll("#scConSheet .sc-con-btn")];
   const twoBtnsX20 = conBtnsX20.length === 2;
+  const conBtnLabelsOkX20 = conBtnsX20.some(b => /Keep the sheet/.test(b.textContent || "")) &&
+    conBtnsX20.some(b => /Replace with mine/i.test(b.textContent || ""));
   const padHasKeepSheetX20 = !!docX20.querySelector("#scConSheet #scPadKeepSheet");
   const padHasForceSendX20 = !!docX20.querySelector("#scConSheet #scPadForceSend");
   const keepSheetEnabledBeforeX20 = docX20.querySelector("#scConSheet #scPadKeepSheet")?.disabled !== true;
@@ -3258,9 +3267,9 @@ async function cellSettledOk(doc, hole) {
   const sheetClosedAfterKeepX20 = docX20.querySelector("#scSheet")?.hidden === true && !docX20.querySelector("#scConSheet");
   domX20.window.close();
 
-  check("X20: SC-NOCLOBBER/SC-CONFLICT-UI — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict IMMEDIATELY with no intervening tap (score span '4·6' SHEET·MINE, .sc-conflict class, ▲ mark); reopening renders #scConSheet (never #scSheet, which stays hidden) with the prototype's verbatim ruling copy ('sheet says 4' / 'this phone sent 6'), exactly 2 .sc-con-btns, no number grid; Keep-the-sheet/Replace-with-mine disable mid-flight with 'sending — wait' text and a race-click while sending never deletes the entry; force-send (I4) carries the SAME seq the held entry already had; on a separate hole, a CLEAN (non-racing) Keep-the-sheet click deletes the journal entry and reverts the cell out of conflict",
+  check("X20: SC-NOCLOBBER/SC-CONFLICT-UI — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict IMMEDIATELY with no intervening tap (score span '4·6' SHEET·MINE, .sc-conflict class, ▲ mark); reopening renders #scConSheet (never #scSheet, which stays hidden) with the prototype's verbatim ruling copy ('sheet says 4' / 'this phone sent 6' / 'Nothing resends on its own — pick which number is true.'), exactly 2 .sc-con-btns labeled 'Keep the sheet' / 'Replace with mine', no number grid; Keep-the-sheet/Replace-with-mine disable mid-flight with 'sending — wait' text and a race-click while sending never deletes the entry; force-send (I4) carries the SAME seq the held entry already had; on a separate hole, a CLEAN (non-racing) Keep-the-sheet click deletes the journal entry and reverts the cell out of conflict",
     roundOkX20 && noPostYetX20 && cellConflictClassX20 && cellGlyphX20 && scoreSpanOkX20 &&
-      conSheetVisibleX20 && copyMatchesX20 && noKeyGridInConSheetX20 && twoBtnsX20 &&
+      conSheetVisibleX20 && copyMatchesX20 && noKeyGridInConSheetX20 && twoBtnsX20 && conBtnLabelsOkX20 &&
       padHasKeepSheetX20 && padHasForceSendX20 && keepSheetEnabledBeforeX20 &&
       keepSheetDisabledMidFlightX20 && forceSendDisabledMidFlightX20 && midFlightCopyOkX20 && entrySurvivedRaceX20 &&
       JSON.stringify(sentHolesX20) === JSON.stringify([14]) &&
@@ -3271,7 +3280,7 @@ async function cellSettledOk(doc, hole) {
     "roundOk=" + roundOkX20 + " noPostYet=" + noPostYetX20 + " cellConflictClass=" + cellConflictClassX20 +
       " cellGlyph=" + cellGlyphX20 + " scoreSpan=" + scoreSpanX20 +
       " conSheetVisible=" + conSheetVisibleX20 + " copyMatches=" + copyMatchesX20 + " conCopyText=" + conCopyTextX20 +
-      " noKeyGrid=" + noKeyGridInConSheetX20 + " twoBtns=" + twoBtnsX20 +
+      " noKeyGrid=" + noKeyGridInConSheetX20 + " twoBtns=" + twoBtnsX20 + " conBtnLabelsOk=" + conBtnLabelsOkX20 +
       " padHasKeepSheet=" + padHasKeepSheetX20 + " padHasForceSend=" + padHasForceSendX20 +
       " keepSheetEnabledBefore=" + keepSheetEnabledBeforeX20 +
       " keepSheetDisabledMidFlight=" + keepSheetDisabledMidFlightX20 +

@@ -288,8 +288,9 @@ pocket can never strand a send. The cell itself is the receipt: `■ on the
 sheet` (confirmed) · `⇡ saved on phone` (queued, not confirmed yet) · `?`
 (the sheet disagrees with this phone — see below) · `!` (rejected — shows the
 sheet's exact reason, with a retry button; "text Riley" shows up after two
-retries still fail). Re-tapping an already-scored hole asks first ("Replace 6
-with 4?") — nothing overwrites silently.
+retries still fail). Re-tapping an already-scored hole names the current
+value on the sheet first — tap a number to replace it — nothing overwrites
+silently.
 
 **Offline is expected, not an error.** Saving to the phone never waits on a
 signal — a tap always lands instantly, bars or no bars. Copy states the truth
