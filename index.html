@@ -407,7 +407,7 @@
   /* Task 3 card-first scorecard (SC-UI/SC-PAR/SC-ROUND). All scorer text
      stays >=13px (thumb-friendly outdoors, no squinting on the tee) — the
      rules below deliberately use px, not rem, so this holds regardless of
-     root font-size. .sc-cell/.sc-num get a real 48px tap bar (>=44px HIG
+     root font-size. .sc-cell/.sc-key get a real 48px tap bar (>=44px HIG
      minimum) even though jsdom can't see layout to verify it. */
   .sc-round{margin:0 0 14px}
   .sc-round button{font-family:var(--display);font-size:18px;color:var(--brass);
@@ -462,27 +462,72 @@
     font:inherit;cursor:pointer;padding:0}
   .sc-old-round-verdict{font-size:13px;color:var(--rust);margin:0 0 4px 12px}
   .sc-legend{font-size:13px;color:var(--sage);margin:10px 0 20px;letter-spacing:.01em}
-  #scPad{margin-top:10px;padding:16px;border:1px solid rgba(200,162,74,.3);background:rgba(0,0,0,.2)}
-  #scPad[hidden]{display:none}
-  .sc-pad-head{font-family:var(--display);font-size:18px;color:var(--brass);margin:0 0 8px}
-  .sc-pad-current{font-size:14px;color:var(--sage);margin:0 0 10px}
-  .sc-pad-nums{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 12px}
-  .sc-num{min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  /* Rev-3 UI wave, task 2 (SC-PAD-SHEET) — bottom-sheet pad + veil,
+     transcribed from tools/scorer-rev3-prototype.html's .veil/.sheet/
+     .sheet-head/.replace-line/.pad/.key/.numrow rules into .sc-`-prefixed
+     site equivalents (same token-reuse discipline as task 1: no --under/
+     --line/second :root — eagle/birdie/parkey reuse the site's existing
+     --brass "under-par" signal; bogey reuses --sage, matching the score-
+     cell convention task 1 already established, NOT the prototype's own
+     --rust bogey-key tint). #scSheet/#scVeil keep the native `hidden`
+     attribute when closed (STATE.scPadHole==null) IN ADDITION to the `.on`
+     class used when open: every state change here does a full innerHTML
+     rebuild (renderScCard()), so a brand-new DOM node lands already in its
+     final open/closed state on every repaint — `hidden` preserves the
+     existing open/closed test contract (`#scSheet?.hidden`, unchanged from
+     the old `#scPad?.hidden`) and keeps the sheet inert+unfocusable while
+     closed, while `.on` + the transition rules stay faithful to the
+     prototype's CSS shape (real value limited by the full-rebuild
+     architecture — noted in task-2-report.md, not a fight worth having
+     here since nothing before this task ever kept a pad DOM node alive
+     across a repaint either). */
+  .sc-veil{position:fixed;inset:0;background:rgba(6,12,9,.62);z-index:8;opacity:0;pointer-events:none;transition:opacity .18s}
+  .sc-veil.on{opacity:1;pointer-events:auto}
+  .sc-veil[hidden]{display:none}
+  .sc-sheet{position:fixed;left:50%;transform:translate(-50%,105%);bottom:0;width:100%;max-width:430px;z-index:9;
+    background:var(--pine);border:1px solid rgba(200,162,74,.3);border-bottom:0;border-radius:22px 22px 0 0;
+    padding:14px 16px calc(18px + env(safe-area-inset-bottom));transition:transform .22s ease-out;color:var(--bone)}
+  .sc-sheet.on{transform:translate(-50%,0)}
+  .sc-sheet[hidden]{display:none}
+  @media (prefers-reduced-motion: reduce){.sc-sheet{transition:none}.sc-veil{transition:none}}
+  .sc-sheet-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 4px}
+  .sc-sheet-hole{font-family:var(--display);font-size:26px}
+  .sc-sheet-hole small{display:block;font-family:var(--ui);font-size:12px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--brass);margin-top:2px;font-variant-numeric:tabular-nums}
+  .sc-sheet-close{background:none;border:0;color:var(--sage);font-family:var(--ui);font-size:13px;letter-spacing:.12em;
+    text-transform:uppercase;padding:8px;cursor:pointer}
+  .sc-sheet-close:focus-visible{outline:2px solid var(--brass)}
+  /* The rev-3 replace confirm (SC-NOCLOBBER): naming the current value here
+     IS the first half of the deliberate two-number act; a number tap below
+     is the second half — no separate confirm button (retired #scPadReplace,
+     see task-2-report.md). */
+  .sc-replace-line{font-size:14px;color:var(--sage);padding:0 4px 10px;margin:0}
+  .sc-replace-line b{color:var(--bone)}
+  .sc-pad-nums{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 9px}
+  .sc-key{min-height:48px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
     background:var(--pine-2);border:1px solid rgba(200,162,74,.22);color:var(--bone);cursor:pointer;padding:4px;
     font-family:var(--ui)}
-  .sc-num b{font-family:var(--display);font-size:16px;font-weight:400}
-  .sc-num-lab{font-size:13px;color:var(--sage);text-transform:uppercase;letter-spacing:.04em}
-  .sc-pad-other{display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap}
-  .sc-pad-other input{width:70px;font-size:16px;padding:8px;background:var(--pine-2);
-    border:1px solid rgba(200,162,74,.3);color:var(--bone)}
+  .sc-key:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+  .sc-key b{font-family:var(--display);font-size:16px;font-weight:400}
+  .sc-key-lab{font-size:13px;color:var(--sage);text-transform:uppercase;letter-spacing:.04em}
+  .sc-key.sc-eagle .sc-key-lab,.sc-key.sc-birdie .sc-key-lab{color:var(--brass)}
+  .sc-key.sc-parkey{border-color:var(--brass);background:var(--pine-3)}
+  .sc-key.sc-parkey b,.sc-key.sc-parkey .sc-key-lab{color:var(--brass);font-size:19px}
+  .sc-key.sc-other b{font-size:14px;font-family:var(--ui);font-weight:500;color:var(--sage)}
+  /* "Other" toggles this overflow row (STATE.scPadOtherOpen persists it
+     across a forced repaint — same mechanism the retired text-input echo
+     used to rely on, now driving a class instead of an input value=). */
+  .sc-numrow{display:none;grid-template-columns:repeat(6,1fr);gap:6px;margin:0 0 9px}
+  .sc-numrow.on{display:grid}
+  .sc-numrow .sc-key{min-height:44px} .sc-numrow .sc-key b{font-size:15px}
   .sc-pad-replace{display:block;width:100%;font-size:15px;padding:12px;margin:0 0 10px;
     background:var(--brass);color:var(--pine);border:0;cursor:pointer;font-family:var(--ui)}
   /* Review round 2 — conflict-pad exits disabled while a send is in flight. */
   .sc-pad-replace[disabled]{background:var(--pine-2);color:var(--sage);cursor:default;
     border:1px solid rgba(200,162,74,.22)}
-  .sc-pad-close{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);
-    background:none;border:1px solid rgba(200,162,74,.22);padding:6px 12px;cursor:pointer}
-  /* Task 5 — conflict (SC-NOCLOBBER) + rejected-verdict pad content. */
+  /* Task 5 — conflict (SC-NOCLOBBER) + rejected-verdict pad content, carried
+     forward unchanged (Task 4 re-dresses this into its own sheet later —
+     for now it renders inside the new #scSheet chrome as-is, per the brief). */
   .sc-pad-conflict{font-size:14px;color:var(--rust);margin:0 0 10px}
   .sc-pad-rejected{font-size:14px;color:var(--rust);margin:0 0 6px}
   .sc-pad-escalate{font-size:14px;color:var(--rust);font-weight:600;margin:0 0 10px}
@@ -1008,8 +1053,8 @@ const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,
   13:{x:81.5,y:22.8}, 14:{x:76.7,y:37.6}, 15:{x:67.1,y:64.0}, 16:{x:72.6,y:83.1},
   17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
 let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null,
-  scTeam:null, scSeason:null, scPadHole:null, scPadPending:null, scRoundOverride:null,
-  scPadOtherOpen:false, scPadOtherVal:null, scConfirmPending:null };
+  scTeam:null, scSeason:null, scPadHole:null, scRoundOverride:null,
+  scPadOtherOpen:false, scConfirmPending:null };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -3069,6 +3114,38 @@ function scPadNumbers(hole){
   }
   return Array.from({length:8},(_,i)=>({score:i+1,label:null}));
 }
+// Task 2 (rev 3, SC-PAD-SHEET) — maps a preset key's scParLabel() text back
+// to its visual-emphasis class, purely a render concern (scParLabel/
+// scPadNumbers themselves are untouched). Par is the ONE primary key
+// (.sc-parkey); eagle/birdie tint their label brass (this site's existing
+// "under-par" signal — task 1 established there's no separate --under
+// token); bogey is left at .sc-key-lab's own default --sage, matching task
+// 1's bogey-score-cell color exactly (a deliberate departure from the
+// prototype's own rust-tinted bogey key, for site-wide consistency).
+function scKeyExtraClass(label){
+  if(label==="Eagle") return " sc-eagle";
+  if(label==="Birdie") return " sc-birdie";
+  if(label==="Par") return " sc-parkey";
+  return "";
+}
+// Task 2 pinned resolution (SC-PAD-SHEET): the "Other" overflow row must
+// keep the full 1-19 range reachable now that STATE.scPadOtherVal's free-
+// text input is retired. The main key grid (scPadNumbers, above) already
+// covers par-2..par+4; this fills in the rest as tappable buttons:
+//   - up-range par+5..min(par+10,19), prototype-shaped;
+//   - down-range 1..par-3, appended ONLY when par-2>1 (i.e. there's
+//     actually a gap below the main grid's lowest key to fill).
+// No-par degrade (X9): scPadNumbers' own fallback is a plain 1-8 grid with
+// no golf-term labels at all; this mirrors that degrade by offering 9-19 as
+// the overflow instead of par-relative math that has no par to be relative
+// TO, keeping the full range nominally reachable either way.
+function scPadOverflowNumbers(par){
+  if(!par) return Array.from({length:11},(_,i)=>i+9); // 9..19
+  const out=[];
+  if(par-2>1){ for(let v=1;v<=par-3;v++) out.push(v); }
+  for(let v=par+5;v<=Math.min(par+10,19);v++) out.push(v);
+  return out;
+}
 
 /* ---------- SC-ROUND: momentary round toggle ----------
    I4 (final review) lands the brief's other branch, held back at Task 3
@@ -3111,8 +3188,8 @@ function scShowCard(seasonY,team){
   $("#scPicker").hidden=true;
   if(STATE.scTeam!==team||STATE.scSeason!==seasonY){
     // fresh team/season — don't let a stale open pad or round override leak across.
-    STATE.scPadHole=null; STATE.scPadPending=null; STATE.scRoundOverride=null;
-    STATE.scPadOtherOpen=false; STATE.scPadOtherVal=null; STATE.scOldRoundExpanded=null;
+    STATE.scPadHole=null; STATE.scRoundOverride=null;
+    STATE.scPadOtherOpen=false; STATE.scOldRoundExpanded=null;
   }
   STATE.scTeam=team; STATE.scSeason=seasonY;
   // SC-LOUD-CONFIG rollback (spec: "the scorer is inert until score_endpoint
@@ -3706,14 +3783,47 @@ function scColumnHTML(a,b,lab){
 function scCardGridHTML(){
   return `<div class="sc-cardgrid">${scColumnHTML(1,9,"Out")}${scColumnHTML(10,18,"In")}</div>`;
 }
+// Task 2 (rev 3, SC-PAD-SHEET) — the key grid + "Other" overflow row, shared
+// verbatim between conflict mode and normal/edit mode (identical markup
+// either way; only the surrounding copy/buttons differ per mode, below).
+// Renamed .sc-num -> .sc-key / .sc-num-lab -> .sc-key-lab throughout (X8
+// adapted); the "Other" toggle button is now just the last key in the SAME
+// grid (prototype's own shape: .key.other lives inside #pad, #numrow is a
+// separate sibling) rather than its own wrapper div.
+function scPadKeysHTML(hole){
+  const par=scHolePar(hole);
+  const numsHTML=scPadNumbers(hole).map(n=>
+    `<button type="button" class="sc-key${scKeyExtraClass(n.label)}" data-score="${n.score}"><b>${n.score}</b>`+
+    (n.label?`<span class="sc-key-lab">${esc(n.label)}</span>`:"")+`</button>`
+  ).join("");
+  const otherBtnHTML=`<button type="button" class="sc-key sc-other" id="scPadOtherBtn"><b>Other</b></button>`;
+  // STATE.scPadOtherOpen (unchanged field/mechanism) gates the `.on` class
+  // that shows this row — the SAME boolean that used to gate rendering the
+  // retired text input, so the refresh-survival guarantee X12/X26 already
+  // proved carries over unchanged: a forced renderScCard() rebuild reads
+  // this same STATE field and paints the numrow open again, no reset.
+  const numrowHTML=`<div class="sc-numrow${STATE.scPadOtherOpen?" on":""}">`+
+    scPadOverflowNumbers(par).map(v=>
+      `<button type="button" class="sc-key" data-score="${v}"><b>${v}</b></button>`
+    ).join("")+
+    `</div>`;
+  return `<div class="sc-pad-nums">${numsHTML}${otherBtnHTML}</div>${numrowHTML}`;
+}
 function scPadHTML(){
   const hole=STATE.scPadHole;
-  if(hole==null) return `<div id="scPad" hidden></div>`;
+  if(hole==null) return `<div id="scVeil" class="sc-veil" hidden></div><div id="scSheet" class="sc-sheet" hidden></div>`;
   const cellState=scCellState(hole);
   const par=scHolePar(hole);
-  const ydsMap=courseYards();
-  const yds=ydsMap?ydsMap[hole]:null;
-  const headHTML=`<div class="sc-pad-head">Hole ${hole}${par?` · Par ${par}`:""}${yds?` · ${yds} yds`:""}</div>`;
+  // Task 1's per-hole yardage degrade (scHoleYards) is the SAME fallback
+  // the card cells already use — reused here instead of a raw courseYards()
+  // map lookup so the sheet head degrades identically hole-by-hole rather
+  // than going dark for every hole the instant any ONE hole's yards row is
+  // missing (courseYards(), like courseMap(), is all-or-nothing).
+  const yds=scHoleYards(hole);
+  const parYds=par!=null?`Par ${par}${yds!=null?` · ${yds} yds`:""}`:"";
+  const headHTML=`<div class="sc-sheet-head"><div class="sc-sheet-hole">Hole ${hole}`+
+    (parYds?`<small>${parYds}</small>`:"")+
+    `</div><button type="button" class="sc-sheet-close" id="scSheetClose">Close</button></div>`;
 
   // CONFLICT mode (SC-NOCLOBBER rule 2): sheet and phone disagree — never
   // auto-sendable without an explicit decision. Review round 1 (C3): the
@@ -3741,32 +3851,25 @@ function scPadHTML(){
   // replaces), and the drain's existing stale-seq guard silently drops the
   // in-flight response for the superseded seq when it eventually lands —
   // no race there, that mechanism already existed (X18).
+  // Task 2 note: this branch's copy/ids/in-flight guards are carried
+  // forward UNTOUCHED (Task 4 re-dresses conflict content into its own
+  // sheet) — it just renders inside the new #scSheet chrome now, sharing
+  // the new head above and the renamed key grid (scPadKeysHTML) below.
   if(cellState.kind==="conflict"){
     const sendingC=cellState.entry&&cellState.entry.state==="sending";
-    const numsHTML=scPadNumbers(hole).map(n=>
-      `<button type="button" class="sc-num" data-score="${n.score}"><b>${n.score}</b>`+
-      (n.label?`<span class="sc-num-lab">${esc(n.label)}</span>`:"")+`</button>`
-    ).join("");
-    const otherVal=STATE.scPadOtherVal!=null?esc(String(STATE.scPadOtherVal)):"";
-    const otherHTML=`<div class="sc-pad-other">`+
-      `<button type="button" class="sc-num sc-other" id="scPadOtherBtn">Other</button>`+
-      (STATE.scPadOtherOpen
-        ? `<input type="number" min="1" max="19" id="scPadOtherInput" value="${otherVal}"><button type="button" id="scPadOtherSend">Send</button>`
-        : "")+
-      `</div>`;
     const keepSheetHTML=sendingC
       ? `<button type="button" id="scPadKeepSheet" class="sc-pad-replace" disabled>sending — wait</button>`
       : `<button type="button" id="scPadKeepSheet" class="sc-pad-replace">Keep the sheet's ${cellState.sheetVal}</button>`;
     const forceSendHTML=sendingC
       ? `<button type="button" id="scPadForceSend" class="sc-pad-replace" disabled>sending — wait</button>`
       : `<button type="button" id="scPadForceSend" class="sc-pad-replace">Send ${cellState.phoneVal} anyway</button>`;
-    return `<div id="scPad">`+headHTML+
+    return `<div id="scVeil" class="sc-veil on"></div>`+
+      `<div id="scSheet" class="sc-sheet on" role="dialog" aria-modal="true" aria-label="Resolve conflict">`+
+      headHTML+
       `<p class="sc-pad-conflict">Sheet has ${cellState.sheetVal} · your phone has ${cellState.phoneVal}</p>`+
-      `<div class="sc-pad-nums">${numsHTML}</div>`+
-      otherHTML+
+      scPadKeysHTML(hole)+
       keepSheetHTML+
       forceSendHTML+
-      `<button type="button" class="sc-pad-close">Close</button>`+
       `</div>`;
   }
 
@@ -3779,12 +3882,16 @@ function scPadHTML(){
     : (cellState.kind==="journal" ? cellState.score : null);
   const editMode=existingScore!=null;
   const rejectedEntry=(cellState.kind==="journal"&&cellState.state==="rejected")?cellState.entry:null;
-  const pending=STATE.scPadPending;
-  const numsHTML=scPadNumbers(hole).map(n=>
-    `<button type="button" class="sc-num" data-score="${n.score}"><b>${n.score}</b>`+
-    (n.label?`<span class="sc-num-lab">${esc(n.label)}</span>`:"")+`</button>`
-  ).join("");
-  const currentHTML=editMode?`<p class="sc-pad-current">currently ${existingScore}</p>`:"";
+  // Task 2 (SC-PAD-SHEET) — the rev-3 form of the rev-2 two-tap replace
+  // confirm: naming the CURRENT value here, plus a deliberate number tap
+  // below, IS the explicit two-number act (the separate #scPadReplace
+  // "Replace N with M" arm-and-confirm button is retired — scPadPick now
+  // submits on the SAME tap that used to only arm it; see scPadPick/
+  // scSubmitScore, below). Retired STATE.scPadPending along with it — there
+  // is no more intermediate "armed" state to hold.
+  const replaceLineHTML=editMode
+    ? `<p class="sc-replace-line">Currently <b>${existingScore}</b> on the sheet — tap a number to replace it.</p>`
+    : "";
   // REJECTED (rule 3's loud branch): verbatim verdict, manual Retry (same
   // seq — see scRetryEntry), "text Riley" escalation after 2 manual retries.
   const rejectedHTML=rejectedEntry
@@ -3792,72 +3899,46 @@ function scPadHTML(){
       ((rejectedEntry.retries||0)>=2?`<p class="sc-pad-escalate">Still failing — text Riley.</p>`:"")+
       `<button type="button" id="scPadRetry" class="sc-pad-replace">Retry send</button>`
     : "";
-  // Send-on-tap fires scJournalSave the instant a fresh cell's number is
-  // tapped (no confirm) — EXCEPT edit mode, which arms this replace button
-  // instead (NOCLOBBER: overwriting an already-saved score needs a second,
-  // explicit tap, per the controller's asymmetry ruling).
-  const replaceHTML=(editMode&&pending!=null)
-    ? `<button type="button" id="scPadReplace" class="sc-pad-replace">Replace ${existingScore} with ${pending}</button>`
-    : "";
-  // R1-3: a periodic refresh (renderScorer -> renderScCard, every REFRESH_MS)
-  // rebuilds this whole innerHTML from scratch — STATE.scPadOtherVal is the
-  // persisted echo of whatever's been typed so far, restored into the fresh
-  // input's value= so an in-progress "Other" entry survives the rebuild
-  // instead of silently reverting to blank mid-keystroke.
-  const otherVal=STATE.scPadOtherVal!=null?esc(String(STATE.scPadOtherVal)):"";
-  const otherHTML=`<div class="sc-pad-other">`+
-    `<button type="button" class="sc-num sc-other" id="scPadOtherBtn">Other</button>`+
-    (STATE.scPadOtherOpen
-      ? `<input type="number" min="1" max="19" id="scPadOtherInput" value="${otherVal}"><button type="button" id="scPadOtherSend">Send</button>`
-      : "")+
-    `</div>`;
-  return `<div id="scPad">`+
+  return `<div id="scVeil" class="sc-veil on"></div>`+
+    `<div id="scSheet" class="sc-sheet on" role="dialog" aria-modal="true" aria-label="Enter score">`+
     headHTML+
-    currentHTML+
+    replaceLineHTML+
     rejectedHTML+
-    `<div class="sc-pad-nums">${numsHTML}</div>`+
-    otherHTML+
-    replaceHTML+
-    `<button type="button" class="sc-pad-close">Close</button>`+
+    scPadKeysHTML(hole)+
     `</div>`;
 }
 function scPadOpen(hole){
   STATE.scPadHole=hole;
-  STATE.scPadPending=null;
   STATE.scPadOtherOpen=false;
-  STATE.scPadOtherVal=null;
   renderScCard();
 }
 function scSubmitScore(hole,score){
   if(!(score>=1)) return;
   // I2 (review round 1): the PRIOR state (before this save) tells us
   // whether this is a replace-confirm against an already-known sheet value
-  // — that confirm text ("Replace {sheet} with {score}") already named
-  // both numbers, so the resulting entry carries the override through
-  // rather than landing as ANOTHER conflict requiring a second, separate
-  // force-send confirm for the exact same decision.
+  // — that confirm text (the replace-line's named current value + this
+  // deliberate number tap) already named both numbers, so the resulting
+  // entry carries the override through rather than landing as ANOTHER
+  // conflict requiring a second, separate force-send confirm for the exact
+  // same decision.
   const overrideSheet=scCellState(hole).kind==="sheet";
   const entry={round:scActiveRound(),hole,score,team:STATE.scTeam};
   try{ window.scJournalSave(entry,{override:overrideSheet}); }catch{}
   STATE.scRoundOverride=null; // momentary toggle — consumed on send (SC-ROUND spring)
-  STATE.scPadHole=null; STATE.scPadPending=null; STATE.scPadOtherOpen=false; STATE.scPadOtherVal=null;
+  STATE.scPadHole=null; STATE.scPadOtherOpen=false;
   renderScCard();
 }
 function scPadPick(hole,score){
   if(!(score>=1&&score<=19)) return;
-  const cellState=scCellState(hole);
-  // C3 (review round 1): the conflict pad's own number grid/Other files a
-  // CORRECTED score directly (like a fresh cell's send-on-tap) — the
-  // captain is already inside the dedicated resolution UI (both prior
-  // numbers are on screen), so no additional edit-mode confirm layer is
-  // needed here. This does NOT auto-override: if the correction still
-  // differs from the (still-current) sheet value, the next render simply
-  // shows a fresh conflict again, offering the same three ways out.
-  if(cellState.kind==="conflict"){ scSubmitScore(hole,score); return; }
-  const existingScore = cellState.kind==="sheet" ? cellState.value
-    : (cellState.kind==="journal" ? cellState.score : null);
-  const editMode=existingScore!=null;
-  if(editMode&&existingScore!==score){ STATE.scPadPending=score; renderScCard(); return; }
+  // Task 2 (SC-PAD-SHEET): every branch — conflict, edit-mode replace, and
+  // a plain fresh tap — now converges on the SAME immediate submit. Before
+  // this task, edit mode alone diverted into an arm-then-confirm detour
+  // (STATE.scPadPending + a separate "Replace N with M" button); the
+  // conflict branch already went straight to scSubmitScore (see the old
+  // in-code comment this replaces), so this is that same behavior applied
+  // uniformly, not a new invention — the sheet already told the captain
+  // both numbers via the head + replace-line (or the conflict copy) BEFORE
+  // this tap, so the tap itself is the one deliberate act (I2/C3).
   scSubmitScore(hole,score);
 }
 // C3 (review round 1): the conflict pad's second way out — discard the
@@ -3901,7 +3982,13 @@ function scWireCard(){
     STATE.scRoundOverride = STATE.scRoundOverride ? null : scOtherRound(scRoundDefault());
     renderScCard();
   });
-  const pad=$("#scPad");
+  // Task 2 (SC-PAD-SHEET): the veil is a permanent sibling of the sheet
+  // (present, `hidden`, whenever the sheet is closed) — tapping it closes
+  // the sheet exactly like the head's Close button, one shared reset.
+  const closeSheet=()=>{ STATE.scPadHole=null; STATE.scPadOtherOpen=false; renderScCard(); };
+  const veil=$("#scVeil");
+  if(veil) veil.addEventListener("click",closeSheet);
+  const pad=$("#scSheet");
   if(!pad||pad.hidden) return;
   const hole=STATE.scPadHole;
   const forceSendBtn=pad.querySelector("#scPadForceSend");
@@ -3910,27 +3997,19 @@ function scWireCard(){
   if(keepSheetBtn) keepSheetBtn.addEventListener("click",()=>scPadKeepSheet(hole));
   const retryBtn=pad.querySelector("#scPadRetry");
   if(retryBtn) retryBtn.addEventListener("click",()=>scRetryEntry(hole));
-  pad.querySelectorAll(".sc-num[data-score]").forEach(b=>
+  // .sc-key covers BOTH the main par-relative grid and the "Other" overflow
+  // row (.sc-numrow's buttons carry the same class+data-score) — one
+  // wiring loop reaches every number key regardless of which row it's in.
+  pad.querySelectorAll(".sc-key[data-score]").forEach(b=>
     b.addEventListener("click",()=>scPadPick(hole,parseInt(b.dataset.score,10))));
-  const replaceBtn=pad.querySelector("#scPadReplace");
-  if(replaceBtn) replaceBtn.addEventListener("click",()=>scSubmitScore(hole,STATE.scPadPending));
+  // "Other" TOGGLES the overflow row open/closed (STATE.scPadOtherOpen —
+  // unchanged field, now driving a class instead of gating a text input).
   const otherBtn=pad.querySelector("#scPadOtherBtn");
-  if(otherBtn) otherBtn.addEventListener("click",()=>{ STATE.scPadOtherOpen=true; renderScCard(); });
-  const otherInput=pad.querySelector("#scPadOtherInput");
-  // R1-3: echo every keystroke into STATE so a periodic refresh's unconditional
-  // renderScCard() rebuild can restore the in-progress value instead of
-  // discarding it (the DOM node itself gets thrown away on every rebuild).
-  if(otherInput) otherInput.addEventListener("input",e=>{ STATE.scPadOtherVal=e.target.value; });
-  const otherSend=pad.querySelector("#scPadOtherSend");
-  if(otherSend) otherSend.addEventListener("click",()=>{
-    const v=posInt(pad.querySelector("#scPadOtherInput")?.value);
-    if(v){ STATE.scPadOtherVal=null; scPadPick(hole,v); }
+  if(otherBtn) otherBtn.addEventListener("click",()=>{
+    STATE.scPadOtherOpen=!STATE.scPadOtherOpen; renderScCard();
   });
-  const closeBtn=pad.querySelector(".sc-pad-close");
-  if(closeBtn) closeBtn.addEventListener("click",()=>{
-    STATE.scPadHole=null; STATE.scPadPending=null; STATE.scPadOtherOpen=false; STATE.scPadOtherVal=null;
-    renderScCard();
-  });
+  const closeBtn=pad.querySelector("#scSheetClose");
+  if(closeBtn) closeBtn.addEventListener("click",closeSheet);
 }
 // §18 SC-GLANCE (Task 6): compact board-only context strip below the card
 // (#scGlance — "updates in place" on every renderScCard() call, including
