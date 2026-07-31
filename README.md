@@ -284,13 +284,13 @@ confirmed a team sees nothing there.
 
 The card is 18 cells, Out and In. Tap a hole, tap the score — **it sends
 immediately**, no confirm screen, no undo timer, so a tap that ends up in a
-pocket can never strand a send. The cell itself is the receipt: `■ on the
-sheet` (confirmed) · `⇡ saved on phone` (queued, not confirmed yet) · `?`
-(the sheet disagrees with this phone — see below) · `!` (rejected — shows the
-sheet's exact reason, with a retry button; "text Riley" shows up after two
-retries still fail). Re-tapping an already-scored hole names the current
-value on the sheet first — tap a number to replace it — nothing overwrites
-silently.
+pocket can never strand a send. The cell itself is the receipt: `▮ on the
+sheet` (confirmed) · `⇡ saved on phone` (queued or sending, not confirmed
+yet) · `▲` (the sheet disagrees with this phone — see below) · `!` (rejected
+— shows the sheet's exact reason, with a retry button; "text Riley" shows up
+after two retries still fail). Re-tapping an already-scored hole names the
+current value on the sheet first — tap a number to replace it — nothing
+overwrites silently.
 
 **Offline is expected, not an error.** Saving to the phone never waits on a
 signal — a tap always lands instantly, bars or no bars. Copy states the truth
