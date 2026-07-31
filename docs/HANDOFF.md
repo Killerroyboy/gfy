@@ -166,3 +166,25 @@ fix-wave report, 78+ S11 PNGs — retained deliberately as evidence).
   to drop); the 07-30 dual-controller incident is documented and closed in the ledger (stand-down).
 
 **PUSHED + LIVE 2026-07-31:** main = `6c6cf9e`, Pages built for that exact commit, live `index.html` md5 == tip, rev-3 markers verified served. Next-push rollback ref = `6c6cf9e`. Remaining: pre-links runway + D3 follow-up wave.
+
+## 2026-07-31 — D3 par-integrity wave COMPLETE + MERGED (local) · push = the gate
+
+**v2.1-invites at `b8a31b9`** (fast-forward from `3c76620`), union suite **207/207**, NOT pushed.
+Trail: `.superpowers/sdd/2026-07-31-gfy-d3-par-validation/progress.md` + task reports + 37 S11 PNGs.
+- **What it fixes (pre-existing since c205e32):** a blank par cell no longer silently skews every
+  to-par figure — `courseMap()`/`courseYards()` validate VALUES (spec §20 + 2 amendments), a blank
+  cell degrades like a missing row (strokes tally / gross board / hidden grid), each par-less hole
+  raises the pinned health warning, one blank yards cell costs one label not 18, the suppressed
+  board column presents as Total (no gross under a "To par" label at any width), and the glance
+  drops rank claims it can't back. Suite 201 → 207 (X33–X38), all mutation-evidenced.
+- **Review trail:** Task 1 approved + two review-driven amendments (1b yards fallback, 1c label
+  honesty) each re-reviewed clean; render-verification close (36 PNGs); whole-branch review
+  (strongest model): frozen surface byte-proven, "Ready to merge — Yes"; final fix (media-scoped
+  suppressed-board grid) re-reviewed clean with live computed-style proof.
+- **RILEY DECISION ITEMS:** (1) the push; (2) ACCEPTED-RESIDUAL SCOPE — under par suppression the
+  raw-gross fallback ordering stands behind: board row order, board Pos + lead crown, calcutta
+  payout places, and per-lot "wins if it ended now" claims (all pre-existing-reachable,
+  spec-pinned; glance now fixed); (3) OPTIONAL follow-up wave: rank presentation under
+  suppression (Pos "—", calcutta "awaiting pars") to finish amendment 2's rationale site-wide.
+- Housekeeping: worktrees scorer-rev3 + d3-par and one superseded stash retained; safe to clean
+  post-push. Suppressed-glance copy ("Thru 7" vs "· thru 7") open for Riley re-styling.
