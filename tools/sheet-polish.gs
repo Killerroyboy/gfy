@@ -154,10 +154,12 @@ function buildStartHere_(ss){
     ["Names: FIRST + LAST on Field / Invites / Rooms (and the vault), spelled identically everywhere.", ""],
     ["", ""],
     ["CAPTAIN SCORING LINKS — one per team, share directly:", ""],
-    ...roster.map(team => [team, `=HYPERLINK("${captainUrl_(team)}","${captainUrl_(team)}")`]),
+    ...(roster.length ? roster.map(team => [team, `=HYPERLINK("${captainUrl_(team)}","${captainUrl_(team)}")`])
+                      : [["(no teams yet — the draft fills this in; re-run polish() after)", ""]]),
     ["", ""],
     ["FORM TEAM DROPDOWN — paste exactly this list (select column A rows below, copy, paste into the Form's Team option field):", ""],
-    ...roster.map(team => [team, ""]),
+    ...(roster.length ? roster.map(team => [team, ""])
+                      : [["(no teams yet — the draft fills this in; re-run polish() after)", ""]]),
     ["", ""],
     ["Team names freeze once links go out; a rename must also be applied to Scores.", ""],
     ["", ""],

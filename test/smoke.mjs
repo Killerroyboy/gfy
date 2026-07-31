@@ -2115,10 +2115,26 @@ dom.window.close();
   // slot). J4 is rewritten to assert that migration's replacement reality instead
   // of the retired cell, and to assert the collapse actually happened (one
   // surviving block, no leftover redundant derivation).
-  check("J4: (ADAPTED, v2.6 reconciliation) FORM TEAM DROPDOWN is the ONE surviving team-list block (O-TEAMLIST's FORM TEAM LIST + teamList_ collapsed into it); the retired 'Scoring form URL (paste once)' anchor was superseded by the config-home migration (moved-to-Info label + value-preservation row)",
+  //
+  // COMPANION ASSERT (post-approval fix, same reconciliation): the collapse above
+  // dropped O-TEAMLIST's honest "(no teams yet...)" empty-roster placeholder — a
+  // real regression flagged in the reconciliation report and restored in
+  // buildStartHere_ for BOTH blocks (CAPTAIN SCORING LINKS and FORM TEAM
+  // DROPDOWN). The entire J group (like T5 above it) is a STATIC source-text
+  // harness — sheet-polish.gs/sheet-triggers.gs are read as raw strings via
+  // readFileSync, never executed (SpreadsheetApp doesn't exist in Node), so
+  // there is no polish() fixture to re-run with an empty Field roster. Per the
+  // reviewer's authorized fallback, this asserts the placeholder string's
+  // presence directly in the buildStartHere_ SOURCE, twice (once per block,
+  // each gated on its own `roster.length ?` ternary) — weaker than an
+  // executed empty-roster render, but honest about what this harness can
+  // check.
+  check("J4: (ADAPTED, v2.6 reconciliation + reviewer fix-now) FORM TEAM DROPDOWN is the ONE surviving team-list block (O-TEAMLIST's FORM TEAM LIST + teamList_ collapsed into it); the retired 'Scoring form URL (paste once)' anchor was superseded by the config-home migration (moved-to-Info label + value-preservation row); the honest empty-roster placeholder is restored in BOTH surviving blocks (static source check — no runtime polish() fixture exists in this harness)",
     polishSrc.includes("FORM TEAM DROPDOWN") && polishSrc.includes("Scoring config moved")
     && polishSrc.includes("old value preserved below, copy it to Info")
-    && !polishSrc.includes("FORM TEAM LIST") && !/function teamList_/.test(polishSrc), "");
+    && !polishSrc.includes("FORM TEAM LIST") && !/function teamList_/.test(polishSrc)
+    && (polishSrc.match(/\(no teams yet — the draft fills this in; re-run polish\(\) after\)/g) || []).length === 2
+    && (polishSrc.match(/roster\.length \?/g) || []).length === 2, "");
 }
 {
   const preSrc = readFileSync(path.join(ROOT, "tools", "presend-check.mjs"), "utf8");
