@@ -655,3 +655,33 @@ Suppression must be honest at EVERY surface, not just the tally tile. Two pins:
 Pinned tests: X37 (board label honesty, both directions + both widths), X38 (glance rank-claim
 suppression + neutral facts survive). Suite 205 → 207. renderLeaderboard/scGlance (and their
 CSS/markup) are UNFROZEN for exactly these changes; engine + all other frozen functions stand.
+
+## §21 — suppression-rank wave (Riley: "continue the wave" 2026-07-31; extends §20 amendment 2 site-wide)
+
+Amendment 2's rationale — the raw-gross fallback ordering "compares unequal hole counts and must
+not be presented as standing" — applied to the two remaining standing surfaces. Suppression
+signal everywhere: `!courseMap()` (the §20 idiom). Money that is already collected/owed is never
+suppressed; only CLAIMS OF STANDING are.
+
+- **SC-RANK-POS (board):** when suppressed, every `.lb-pos` cell renders `—` and no row carries
+  `.lead` (the brass crown). Row ORDER stays as-is (a list needs an order; the sort is not a
+  claim — the Pos number and crown are). Complete course ⇒ exactly today's behavior.
+- **SC-RANK-CAL (calcutta, GROSS basis only):** net-basis standings derive from handicaps and
+  totals, not pars — they stay live. When basis is gross AND `courseMap()` is null:
+  - The payout table assigns NO places: `#payBody` renders the honest empty-state, pinned copy
+    verbatim: `Payouts wait on the Course tab — standings need all 18 pars.` `#calBasis` pinned
+    verbatim: `Paused · Course pars incomplete`.
+  - Per-lot would-text: lots that would today read `Wins if it ended now: $N` / `Won: $N` / `—`
+    (owned, ranked, non-wd) read `awaiting pars` instead. The `withdrawn` / `unsold` /
+    `waiting on cards` branches keep priority unchanged.
+  - Money tiles and rollups (`#calPot`/`#calRake`/`#calPayable`/`#calTop`/`#calOut`) are
+    byte-identical to the unsuppressed render — collected/owed money is not a standing claim.
+- **Unfrozen surfaces:** `renderLeaderboard` (Pos/lead emission only) and `renderCalcutta`
+  (payout-table/would-text/calBasis branches only). FROZEN: `rankedPlayers` (ordering untouched),
+  `calcuttaModel`, `buildPlayers`, `courseMap/courseYards`, the v2.6 engine, and everything §20
+  froze. renderScoreGrid/renderHolePanel consume the same ordering but make no place claims —
+  out of scope, noted.
+- Tests pinned: X39 (board Pos/crown, both directions), X40 (calcutta suppression, both
+  directions + money-tile invariance). Suite 207 → 209. Mutation bar: reverting the Pos/crown
+  suppression fails X39 alone; reverting the calcutta branch fails X40 alone.
+- Copy above is wave-owner-pinned honesty-mechanics; Riley may re-style wording post-merge.
