@@ -1,0 +1,352 @@
+<!-- REFERENCE OF RECORD — spec §18 rev 3 (SC-UI-V / SC-PAD-SHEET / SC-NEXT-HINT /
+     SC-SKIN / SC-CONFLICT-UI / SC-TALLY-HONEST).
+     Source: prototype artifact aa4284a9-a404-46b8-b37f-67ec793013d5, approved by
+     Riley 2026-07-30 ("that looks good"); artifact frame-runtime wrapper stripped.
+     CAVEATS (spec-pinned): the fake send timer, hardcoded conflict on hole 14, and
+     demo copy are NOT spec — transport and truth-states come from §18 rev 2. -->
+<title>GFY scorer — refined prototype</title>
+<style>
+  :root{
+    --pine:#0E2019; --pine-2:#132B21; --pine-3:#1A2F24; --pine-deep:#0A1410;
+    --bone:#E9E3D3; --sage:#8A9B8C; --brass:#C8A24A; --brass-dim:#6F5A26; --rust:#B0705E;
+    --under:#7FA98C; --line:#24382C;
+    --display:"Bodoni 72",Didot,"Bodoni Moda",Georgia,serif;
+    --ui:Futura,"Avenir Next",Jost,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0}
+  body{background:var(--pine-deep);color:var(--bone);font-family:var(--ui);font-size:16px;
+       -webkit-font-smoothing:antialiased;min-height:100vh}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(120% 70% at 50% 0%, rgba(200,162,74,.08), transparent 60%)}
+
+  .demo-note{max-width:430px;margin:0 auto;padding:10px 18px 0;font-size:12px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--sage);text-align:center}
+  .demo-note b{color:var(--brass);font-weight:600}
+
+  .app{position:relative;max-width:430px;margin:10px auto 46px;background:var(--pine);
+       border:1px solid var(--line);border-radius:26px;overflow:hidden;
+       box-shadow:0 24px 70px rgba(0,0,0,.5)}
+
+  /* ---- sticky glance header ---- */
+  .top{position:sticky;top:0;z-index:5;background:linear-gradient(var(--pine) 82%, rgba(14,32,25,0));
+       padding:16px 18px 12px}
+  .toprow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .team-name{font-family:var(--display);font-weight:700;font-size:23px;line-height:1.05;letter-spacing:.01em}
+  .roster{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--sage);margin-top:4px}
+  .roster b{color:var(--bone);font-weight:500}
+  .chip{flex:none;font-size:11px;letter-spacing:.14em;font-weight:600;text-transform:uppercase;
+        color:var(--pine);background:var(--brass);border:0;border-radius:999px;padding:7px 12px;font-family:var(--ui)}
+  .chip small{display:block;font-size:9px;letter-spacing:.1em;font-weight:500;opacity:.75;text-transform:none}
+  .tally{display:flex;gap:8px;margin-top:14px}
+  .t{flex:1;background:var(--pine-2);border:1px solid var(--line);border-radius:12px;padding:7px 4px 8px;text-align:center}
+  .t .k{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--sage)}
+  .t .v{font-family:var(--display);font-size:21px;line-height:1.1;margin-top:2px;font-variant-numeric:tabular-nums}
+  .t .v.u{color:var(--under)}
+  .t.par-t{border-color:var(--brass-dim)}
+
+  /* ---- the card: two columns, paper-scorecard orientation ---- */
+  .card{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;padding:4px 14px 12px}
+  .colhead{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--sage);
+           padding:8px 6px 6px;display:flex;justify-content:space-between;align-items:baseline}
+  .colhead .sub{font-size:11px;letter-spacing:.05em;text-transform:none;color:var(--sage);font-variant-numeric:tabular-nums}
+  .col{display:flex;flex-direction:column;gap:6px}
+  .cell{display:flex;align-items:center;gap:9px;width:100%;min-height:52px;padding:6px 10px;
+        background:var(--pine-2);border:1px solid var(--line);border-radius:13px;color:var(--bone);
+        font-family:var(--ui);cursor:pointer;text-align:left;position:relative}
+  .cell:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+  .hole-n{font-family:var(--display);font-size:20px;width:24px;text-align:center;color:var(--bone);
+          font-variant-numeric:tabular-nums;flex:none}
+  .hole-par{font-size:10px;letter-spacing:.08em;color:var(--sage);flex:1;line-height:1.3}
+  .score{font-family:var(--display);font-size:25px;font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
+  .score .dash{color:#51624F;font-size:20px}
+  .mark{flex:none;width:16px;font-size:11px;text-align:center;color:var(--sage)}
+
+  .cell.done{background:var(--pine-3)}
+  .cell.done .score.u{color:var(--under)} .cell.done .score.o{color:var(--rust)}
+  .cell.sending{border-style:dashed;border-color:var(--brass)}
+  .cell.sending .score{color:var(--brass)}
+  .cell.sending .mark{color:var(--brass)}
+  .cell.next{border-color:var(--brass)}
+  @media (prefers-reduced-motion: no-preference){
+    .cell.next{animation:breathe 2.2s ease-in-out infinite}
+    @keyframes breathe{0%,100%{box-shadow:0 0 0 0 rgba(200,162,74,0)}50%{box-shadow:0 0 0 4px rgba(200,162,74,.16)}}
+    .cell.stamp .score{animation:stamp .32s ease-out}
+    @keyframes stamp{0%{transform:scale(1.55)}100%{transform:scale(1)}}
+  }
+  .cell.conflict{background:#2b1b15;border-color:var(--rust)}
+  .cell.conflict .score{color:var(--rust);font-size:17px;letter-spacing:.02em}
+  .cell.conflict .mark{color:var(--rust)}
+
+  .legend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:2px 18px 18px;font-size:11.5px;color:var(--sage)}
+  .legend .b{color:var(--brass)} .legend .r{color:var(--rust)}
+
+  /* ---- bottom sheet pad ---- */
+  .veil{position:fixed;inset:0;background:rgba(6,12,9,.62);z-index:8;opacity:0;pointer-events:none;transition:opacity .18s}
+  .veil.on{opacity:1;pointer-events:auto}
+  .sheet{position:fixed;left:50%;transform:translate(-50%,105%);bottom:0;width:100%;max-width:430px;z-index:9;
+         background:var(--pine);border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0;
+         padding:14px 16px calc(18px + env(safe-area-inset-bottom));transition:transform .22s ease-out}
+  @media (prefers-reduced-motion: reduce){.sheet{transition:none}.veil{transition:none}}
+  .sheet.on{transform:translate(-50%,0)}
+  .sheet-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 4px}
+  .sheet-hole{font-family:var(--display);font-size:30px}
+  .sheet-hole small{font-family:var(--ui);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--brass);margin-left:8px}
+  .sheet-close{background:none;border:0;color:var(--sage);font-family:var(--ui);font-size:13px;letter-spacing:.12em;
+               text-transform:uppercase;padding:8px;cursor:pointer}
+  .sheet-close:focus-visible{outline:2px solid var(--brass)}
+  .replace-line{font-size:13.5px;color:var(--sage);padding:0 4px 10px}
+  .replace-line b{color:var(--bone)}
+  .pad{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+  .key{min-height:62px;border-radius:14px;background:var(--pine-2);border:1px solid var(--line);color:var(--bone);
+       font-family:var(--ui);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer}
+  .key:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+  .key b{font-family:var(--display);font-size:26px;font-weight:700;line-height:1}
+  .key small{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--sage);margin-top:4px}
+  .key.eagle,.key.birdie{border-color:var(--under)} .key.eagle small,.key.birdie small{color:var(--under)}
+  .key.parkey{border-color:var(--brass);background:#20331f00;background:var(--pine-3)}
+  .key.parkey b{color:var(--brass);font-size:30px} .key.parkey small{color:var(--brass)}
+  .key.bogey small{color:var(--rust)}
+  .key.other b{font-size:16px;font-family:var(--ui);font-weight:500;color:var(--sage)}
+  .numrow{display:none;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:9px}
+  .numrow.on{display:grid}
+  .numrow .key{min-height:48px} .numrow .key b{font-size:20px}
+
+  /* conflict sheet */
+  .con-copy{font-size:14.5px;line-height:1.55;color:var(--bone);padding:2px 4px 12px}
+  .con-copy b{color:var(--rust)}
+  .con-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .con-btn{min-height:70px;border-radius:14px;border:1px solid var(--line);background:var(--pine-2);color:var(--bone);
+           font-family:var(--ui);cursor:pointer;padding:10px}
+  .con-btn b{font-family:var(--display);font-size:26px;display:block}
+  .con-btn small{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--sage)}
+  .con-btn.keep{border-color:var(--under)} .con-btn.keep b{color:var(--under)}
+  .con-btn.mine{border-color:var(--rust)} .con-btn.mine b{color:var(--rust)}
+  .con-btn:focus-visible{outline:2px solid var(--brass)}
+
+  /* toast */
+  .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,80px);
+         background:var(--pine-3);border:1px solid var(--under);color:var(--bone);border-radius:999px;
+         padding:10px 20px;font-size:13.5px;z-index:10;transition:transform .25s ease-out;
+         max-width:min(92vw,410px);text-align:center}
+  .toast.on{transform:translate(-50%,0)}
+  .toast .u{color:var(--under);font-weight:600}
+  @media (prefers-reduced-motion: reduce){.toast{transition:none}}
+
+  /* delta notes */
+  .notes{max-width:430px;margin:0 auto 70px;padding:0 18px}
+  .notes h2{font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:var(--brass);font-weight:600;margin:0 0 14px}
+  .note{display:flex;gap:12px;padding:11px 0;border-top:1px solid var(--line);font-size:14px;line-height:1.55;color:#BFB8A3}
+  .note:last-child{border-bottom:1px solid var(--line)}
+  .note b{color:var(--bone);font-weight:600}
+  .note .tag{flex:none;width:64px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--sage);padding-top:3px}
+  .note .tag.dev{color:var(--rust)}
+</style>
+
+<p class="demo-note">Interactive mockup · <b>sample data, nothing sends</b> · tap the card</p>
+
+<div class="app" id="app">
+  <div class="top">
+    <div class="toprow">
+      <div>
+        <div class="team-name">Jake</div>
+        <div class="roster">Scoring for <b>Team Jake</b> · not you? <u style="cursor:pointer" id="switchLink">switch</u></div>
+      </div>
+      <button class="chip" id="chip">Round 2<small>Sat · auto</small></button>
+    </div>
+    <div class="tally">
+      <div class="t"><div class="k">Out</div><div class="v" id="tOut">–</div></div>
+      <div class="t"><div class="k">In</div><div class="v" id="tIn">–</div></div>
+      <div class="t"><div class="k">Total</div><div class="v" id="tTot">–</div></div>
+      <div class="t par-t"><div class="k" id="tParK">To par</div><div class="v u" id="tPar">–</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div>
+      <div class="colhead">Out <span class="sub" id="subOut"></span></div>
+      <div class="col" id="colOut"></div>
+    </div>
+    <div>
+      <div class="colhead">In <span class="sub" id="subIn"></span></div>
+      <div class="col" id="colIn"></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span>▮ on the sheet</span>
+    <span class="b">⇡ saved on phone · sending</span>
+    <span class="r">▲ sheet differs — tap to resolve</span>
+  </div>
+</div>
+
+<div class="veil" id="veil"></div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Enter score">
+  <div class="sheet-head">
+    <div class="sheet-hole"><span id="shHole">Hole 7</span><small id="shPar">Par 4 · 391 yds</small></div>
+    <button class="sheet-close" id="shClose">Close</button>
+  </div>
+  <div class="replace-line" id="shReplace" hidden>Currently <b id="shCur">6</b> on the sheet — tap a number to replace it.</div>
+  <div class="pad" id="pad"></div>
+  <div class="numrow" id="numrow"></div>
+</div>
+
+<div class="sheet" id="conSheet" role="dialog" aria-modal="true" aria-label="Resolve conflict">
+  <div class="sheet-head">
+    <div class="sheet-hole"><span id="conHole">Hole 14</span><small style="color:var(--rust)">Two answers</small></div>
+    <button class="sheet-close" id="conClose">Close</button>
+  </div>
+  <div class="con-copy">The sheet says <b id="conSheetV">5</b> · this phone sent <b id="conMineV">4</b>.
+    Someone else may have corrected it. Nothing resends on its own — pick which number is true.</div>
+  <div class="con-opts">
+    <button class="con-btn keep" id="conKeep"><b>5</b><small>Keep the sheet</small></button>
+    <button class="con-btn mine" id="conMine"><b>4</b><small>Replace with mine</small></button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="notes">
+  <h2>What tightened vs the approved mockup</h2>
+  <div class="note"><span class="tag dev">Change</span><div><b>The card turned vertical.</b> Two columns (Out | In) like a paper scorecard instead of two rows of nine — every hole is now a ~190×52px target. Nine-across on a normal phone maths out to ~37px cells, under the pressure test's own 44px floor.</div></div>
+  <div class="note"><span class="tag">Easier</span><div><b>Par lives in every cell</b> — hole, par, yards at a glance, no header lookup. The pad's par button is the biggest thing on it; most taps are one obvious tap.</div></div>
+  <div class="note"><span class="tag">Easier</span><div><b>The next empty hole breathes.</b> A soft pulse suggests where you likely are — a hint only, never a selection, so shotgun starts stay untouched.</div></div>
+  <div class="note"><span class="tag">Easier</span><div><b>The pad is a bottom sheet</b> in thumb reach, with the running score pinned on top the whole time. Tap hole, tap number, done — the cell stamps in as the receipt.</div></div>
+  <div class="note"><span class="tag">Refined</span><div><b>The site's own face.</b> Bodoni numerals, Jost-family labels, pine and brass — it reads as a page of the GFY site, not a bolt-on app. All states carry a mark plus color, nothing under 13px except decorative sub-labels.</div></div>
+  <div class="note"><span class="tag">Refined</span><div><b>Conflicts read like a ruling, not an error.</b> Two numbers, two buttons, plain words. Everything else about the write path is untouched §18: sheet-answered confirms, offline-first, no-clobber.</div></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  // DEMO data — synthetic mid-round state (labeled above; nothing sends anywhere).
+  var PARS={1:4,2:5,3:4,4:3,5:4,6:4,7:4,8:3,9:5,10:4,11:4,12:4,13:3,14:4,15:5,16:4,17:3,18:5};
+  var YDS={1:319,2:469,3:407,4:124,5:357,6:348,7:391,8:180,9:499,10:286,11:354,12:344,13:148,14:406,15:433,16:352,17:151,18:533};
+  var H={};
+  for(var i=1;i<=18;i++)H[i]={score:null,state:"empty"};
+  [[1,3],[2,4],[3,4],[4,3],[5,5]].forEach(function(p){H[p[0]]={score:p[1],state:"done"};});
+  H[6]={score:3,state:"sending"};
+  H[12]={score:4,state:"done"};H[13]={score:2,state:"done"};
+  H[14]={score:4,state:"conflict",sheet:5};
+
+  var open=null, replacing=false;
+  var $=function(s){return document.querySelector(s)};
+
+  function cls(h){
+    var d=H[h];
+    if(d.state==="conflict")return"cell conflict";
+    if(d.state==="sending")return"cell sending";
+    if(d.state==="done")return"cell done"+(d.justNow?" stamp":"");
+    return"cell"+(h===nextEmpty()?" next":"");
+  }
+  function scoreHTML(h){
+    var d=H[h];
+    if(d.state==="conflict")return'<span class="score">'+d.sheet+"·"+d.score+"</span>";
+    if(d.score===null)return'<span class="score"><span class="dash">–</span></span>';
+    var rel=d.score-PARS[h];
+    var c=d.state==="done"?(rel<0?" u":rel>1?" o":rel===1?" o":""):"";
+    return'<span class="score'+c+'">'+d.score+"</span>";
+  }
+  function markHTML(h){
+    var d=H[h];
+    if(d.state==="conflict")return'<span class="mark">▲</span>';
+    if(d.state==="sending")return'<span class="mark">⇡</span>';
+    if(d.state==="done")return'<span class="mark">▮</span>';
+    return'<span class="mark"></span>';
+  }
+  function nextEmpty(){for(var i=1;i<=18;i++)if(H[i].state==="empty")return i;return 0}
+
+  function paint(){
+    ["colOut","colIn"].forEach(function(id,ci){
+      var el=$("#"+id);el.innerHTML="";
+      for(var h=ci*9+1;h<=ci*9+9;h++){
+        var b=document.createElement("button");
+        b.className=cls(h);b.dataset.h=h;
+        b.setAttribute("aria-label","Hole "+h+", par "+PARS[h]);
+        b.innerHTML='<span class="hole-n">'+h+'</span><span class="hole-par">Par '+PARS[h]+"<br>"+YDS[h]+" yds</span>"+scoreHTML(h)+markHTML(h);
+        b.addEventListener("click",tapCell);
+        el.appendChild(b);
+        H[h].justNow=false;
+      }
+    });
+    var out=0,op=0,inn=0,ip=0,n=0;
+    for(var h=1;h<=18;h++){var d=H[h];if(d.score!==null&&d.state!=="conflict"){n++;
+      if(h<10){out+=d.score;op+=PARS[h]}else{inn+=d.score;ip+=PARS[h]}}}
+    $("#tOut").textContent=out||"–";$("#tIn").textContent=inn||"–";
+    $("#tTot").textContent=(out+inn)||"–";
+    var rel=(out+inn)-(op+ip);
+    $("#tPar").textContent=n?(rel===0?"E":(rel>0?"+":"")+rel):"–";
+    $("#tPar").className="v"+(rel<0?" u":"");
+    $("#tParK").textContent="To par · thru "+n;
+    $("#subOut").textContent=out?out+" strokes":"";$("#subIn").textContent=inn?inn+" strokes":"";
+  }
+
+  function tapCell(e){
+    var h=+e.currentTarget.dataset.h,d=H[h];
+    if(d.state==="conflict"){$("#conHole").textContent="Hole "+h;openSheet("conSheet");return}
+    open=h;replacing=(d.score!==null);
+    $("#shHole").textContent="Hole "+h;
+    $("#shPar").textContent="Par "+PARS[h]+" · "+YDS[h]+" yds";
+    $("#shReplace").hidden=!replacing;
+    if(replacing)$("#shCur").textContent=d.score;
+    buildPad(PARS[h]);
+    openSheet("sheet");
+  }
+  function buildPad(par){
+    var names={"-2":"Eagle","-1":"Birdie","0":"Par","1":"Bogey"};
+    var pad=$("#pad");pad.innerHTML="";
+    for(var r=-2;r<=4;r++){
+      var s=par+r;if(s<1)continue;
+      var k=document.createElement("button");
+      k.className="key"+(r===-2?" eagle":r===-1?" birdie":r===0?" parkey":r===1?" bogey":"");
+      k.innerHTML="<b>"+s+"</b><small>"+(names[r]||"+"+r)+"</small>";
+      k.dataset.s=s;k.addEventListener("click",send);
+      pad.appendChild(k);
+    }
+    var other=document.createElement("button");
+    other.className="key other";other.innerHTML="<b>Other</b>";
+    other.addEventListener("click",function(){$("#numrow").classList.toggle("on")});
+    pad.appendChild(other);
+    var nr=$("#numrow");nr.innerHTML="";nr.classList.remove("on");
+    for(var v=par+5;v<=par+10&&v<=19;v++){
+      var kk=document.createElement("button");kk.className="key";kk.innerHTML="<b>"+v+"</b>";
+      kk.dataset.s=v;kk.addEventListener("click",send);nr.appendChild(kk);
+    }
+  }
+  function send(e){
+    var s=+e.currentTarget.dataset.s,h=open;
+    closeSheets();
+    H[h]={score:s,state:"sending"};paint();
+    setTimeout(function(){
+      H[h].state="done";H[h].justNow=true;paint();
+      var rel=s-PARS[h],lab=rel===-2?"Eagle":rel===-1?"Birdie":rel===0?"Par":rel===1?"Bogey":(rel>0?"+"+rel:rel);
+      toast('✓ On the sheet — <span class="u">'+lab+" "+s+"</span> · hole "+h);
+    },1100);
+  }
+  $("#conKeep").addEventListener("click",function(){H[14]={score:5,state:"done",justNow:true};closeSheets();paint();toast("✓ Kept the sheet's 5 · hole 14")});
+  $("#conMine").addEventListener("click",function(){
+    closeSheets();H[14]={score:4,state:"sending"};paint();
+    setTimeout(function(){H[14].state="done";H[14].justNow=true;paint();toast('✓ On the sheet — <span class="u">4</span> replaced 5 · hole 14')},1100);
+  });
+  var chipAuto=true;
+  $("#chip").addEventListener("click",function(){
+    chipAuto=!chipAuto;
+    this.innerHTML=chipAuto?"Round 2<small>Sat · auto</small>":"Round 1<small>manual · one entry</small>";
+  });
+
+  function openSheet(id){$("#veil").classList.add("on");$("#"+id).classList.add("on")}
+  function closeSheets(){$("#veil").classList.remove("on");$("#sheet").classList.remove("on");$("#conSheet").classList.remove("on")}
+  $("#veil").addEventListener("click",closeSheets);
+  $("#shClose").addEventListener("click",closeSheets);
+  $("#conClose").addEventListener("click",closeSheets);
+  var toastT=null;
+  function toast(html){var t=$("#toast");t.innerHTML=html;t.classList.add("on");
+    clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove("on")},2600)}
+
+  // demo: the sending cell (6) resolves shortly after load — signal came back
+  $("#switchLink").addEventListener("click",function(){toast("Team picker opens here in the real build")});
+  setTimeout(function(){H[6].state="done";H[6].justNow=true;paint();toast('✓ Queued send landed — <span class="u">Birdie 3</span> · hole 6')},2600);
+  paint();
+})();
+</script>
