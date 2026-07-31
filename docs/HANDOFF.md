@@ -188,3 +188,5 @@ Trail: `.superpowers/sdd/2026-07-31-gfy-d3-par-validation/progress.md` + task re
   suppression (Pos "—", calcutta "awaiting pars") to finish amendment 2's rationale site-wide.
 - Housekeeping: worktrees scorer-rev3 + d3-par and one superseded stash retained; safe to clean
   post-push. Suppressed-glance copy ("Thru 7" vs "· thru 7") open for Riley re-styling.
+
+**D3 PUSHED + LIVE 2026-07-31:** main = `5ddc36b`, live md5 == tip, D3 markers served. Next-push rollback ref = `5ddc36b`. §21 suppression-rank wave building in `.worktrees/rank-supp`.
