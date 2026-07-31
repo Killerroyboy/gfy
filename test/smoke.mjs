@@ -2344,16 +2344,31 @@ async function openScorer(dom, { noSheet = false } = {}) {
   return doc;
 }
 {
-  // X7: 18 sc-cell buttons, split 9/9 across two .sc-row containers, each aria-labeled "Hole N".
+  // X7 (rev 3, SC-UI-V): vertical Out|In card — #scCard > .sc-cardgrid holds
+  // exactly 2 .sc-col containers (9 button.sc-cell[data-hole] each, 18
+  // total); every cell carries .sc-hole-n (the hole face), .sc-hole-par
+  // (matching /Par \d/ AND /yds/ — fixtures/course.csv has real par+yards
+  // for all 18 holes), a .sc-score span, and a .sc-mark span (present on
+  // every cell, even when its text is empty under noSheet/no-journal, so a
+  // state mark always has somewhere to render). The old 9-across .sc-row
+  // assert is retired with the layout it described.
   const domX7 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX7 = await openScorer(domX7, { noSheet: true });
-  const rowsX7 = [...docX7.querySelectorAll("#scCard .sc-row")];
-  const cellsX7 = [...docX7.querySelectorAll("#scCard .sc-cell")];
-  const perRowX7 = rowsX7.map(r => r.querySelectorAll(".sc-cell").length);
-  const ariaOkX7 = cellsX7.every((b, i) => b.getAttribute("aria-label") === `Hole ${i + 1}`);
-  check("X7: 18 button.sc-cell[data-hole] split 9/9 across two .sc-row rows, aria-label='Hole N'",
-    cellsX7.length === 18 && rowsX7.length === 2 && perRowX7.every(n => n === 9) && ariaOkX7,
-    "cells=" + cellsX7.length + " rows=" + JSON.stringify(perRowX7) + " aria0=" + (cellsX7[0]?.getAttribute("aria-label")));
+  const colsX7 = [...docX7.querySelectorAll("#scCard .sc-cardgrid .sc-col")];
+  const cellsX7 = [...docX7.querySelectorAll("#scCard .sc-cardgrid .sc-cell")];
+  const perColX7 = colsX7.map(c => c.querySelectorAll(".sc-cell").length);
+  const partsOkX7 = cellsX7.every(b =>
+    !!b.querySelector(".sc-hole-n") &&
+    /Par \d/.test(b.querySelector(".sc-hole-par")?.textContent || "") &&
+    /yds/.test(b.querySelector(".sc-hole-par")?.textContent || "") &&
+    !!b.querySelector(".sc-score") &&
+    !!b.querySelector(".sc-mark"));
+  const holeNOkX7 = cellsX7.every((b, i) => b.querySelector(".sc-hole-n")?.textContent === String(i + 1));
+  const ariaOkX7 = cellsX7.every((b, i) => new RegExp("^Hole " + (i + 1) + ", par \\d").test(b.getAttribute("aria-label") || ""));
+  check("X7: SC-UI-V — #scCard > .sc-cardgrid holds 2 .sc-col x 9 button.sc-cell[data-hole] (18 total, split 9/9 Out|In); every cell has .sc-hole-n/.sc-hole-par (/Par \\d/ + /yds/)/.sc-score/.sc-mark; aria-label='Hole N, par P...'",
+    cellsX7.length === 18 && colsX7.length === 2 && perColX7.every(n => n === 9) && partsOkX7 && holeNOkX7 && ariaOkX7,
+    "cells=" + cellsX7.length + " cols=" + JSON.stringify(perColX7) + " parts=" + partsOkX7 +
+      " holeN=" + holeNOkX7 + " aria=" + ariaOkX7 + " aria0=" + (cellsX7[0]?.getAttribute("aria-label")));
   domX7.window.close();
 
   // X8: SC-PAR — pad labels derive from THAT hole's real par. fixtures/course.csv
@@ -2370,22 +2385,46 @@ async function openScorer(dom, { noSheet = false } = {}) {
   // score->label table.
   const domX8 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX8 = await openScorer(domX8, { noSheet: true });
-  const labFor = (pad, score) => [...pad.querySelectorAll(".sc-num[data-score]")]
-    .find(b => b.dataset.score === score)?.querySelector(".sc-num-lab")?.textContent;
+  // Rev 3 (SC-PAD-SHEET, task 2): .sc-num -> .sc-key / .sc-num-lab ->
+  // .sc-key-lab (the "Other" overflow row's keys share the SAME .sc-key
+  // class+data-score, but never a .sc-key-lab span, so this query still
+  // reads only the par-relative grid's own labels).
+  const labFor = (pad, score) => [...pad.querySelectorAll(".sc-key[data-score]")]
+    .find(b => b.dataset.score === score)?.querySelector(".sc-key-lab")?.textContent;
+  // Rev 3 addition (same X-number, no new check() count, per the brief's own
+  // "X8 adapted to .sc-key/.sc-parkey" instruction): the par key ALONE
+  // carries the primary .sc-parkey class — proves the par-shift labeling
+  // and the visual-primacy class are driven by the SAME delta===0 branch,
+  // not two independently-maintained lists that could drift apart.
+  const parKeyClassFor = (pad, score) => [...pad.querySelectorAll(".sc-key[data-score]")]
+    .find(b => b.dataset.score === score)?.classList.contains("sc-parkey");
   docX8.querySelector('.sc-cell[data-hole="7"]').click();
-  await until(() => (docX8.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 7"));
-  const pad7 = docX8.querySelector("#scPad");
+  await until(() => (docX8.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 7"));
+  const pad7 = docX8.querySelector("#scSheet");
   const lab7Par = labFor(pad7, "3");    // hole7 par3, delta 0
   const lab7Birdie = labFor(pad7, "2"); // hole7 par3, delta -1
+  const parKeyOkX8 = parKeyClassFor(pad7, "3") === true;
+  // Fix wave item 4: X8's own name claims the par key "alone carries" the
+  // primary class — but until now the check only asserted the ONE known
+  // par key HAS .sc-parkey, never that it's the ONLY .sc-key with it. A
+  // regression that slapped .sc-parkey on every key in the grid would still
+  // pass the pre-existing assert. Count .sc-parkey occurrences in the whole
+  // pad grid instead.
+  const parKeyCountX8 = pad7.querySelectorAll(".sc-key.sc-parkey").length;
   docX8.querySelector('.sc-cell[data-hole="8"]').click();
-  await until(() => (docX8.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 8"));
-  const pad8 = docX8.querySelector("#scPad");
+  await until(() => (docX8.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 8"));
+  const pad8 = docX8.querySelector("#scSheet");
   const lab8Par = labFor(pad8, "4");    // hole8 par4, delta 0
   const lab8Birdie = labFor(pad8, "3"); // hole8 par4, delta -1
   const lab8Eagle = labFor(pad8, "2");  // hole8 par4, delta -2 — same raw score as hole7's Birdie above
-  check("X8: SC-PAR — pad(7)[par3]/pad(8)[par4] both label their own par 'Par' AND their own par-1 'Birdie'; the SAME score (2) reads 'Birdie' on the par-3 but 'Eagle' on the par-4 (delta tracks each hole's real par, not a hardcoded label)",
-    lab7Par === "Par" && lab8Par === "Par" && lab7Birdie === "Birdie" && lab8Birdie === "Birdie" && lab8Eagle === "Eagle",
-    "h7Par:" + lab7Par + " h8Par:" + lab8Par + " h7Birdie:" + lab7Birdie + " h8Birdie:" + lab8Birdie + " h8Eagle:" + lab8Eagle);
+  const parKeyOkX8b = parKeyClassFor(pad8, "4") === true;
+  const parKeyCountX8b = pad8.querySelectorAll(".sc-key.sc-parkey").length;
+  check("X8: SC-PAR — pad(7)[par3]/pad(8)[par4] both label their own par 'Par' AND their own par-1 'Birdie'; the SAME score (2) reads 'Birdie' on the par-3 but 'Eagle' on the par-4 (delta tracks each hole's real par, not a hardcoded label); the par key ALONE carries the .sc-parkey primary class on both holes — exactly ONE .sc-parkey per pad grid, not just present (rev 3)",
+    lab7Par === "Par" && lab8Par === "Par" && lab7Birdie === "Birdie" && lab8Birdie === "Birdie" && lab8Eagle === "Eagle" &&
+      parKeyOkX8 && parKeyOkX8b && parKeyCountX8 === 1 && parKeyCountX8b === 1,
+    "h7Par:" + lab7Par + " h8Par:" + lab8Par + " h7Birdie:" + lab7Birdie + " h8Birdie:" + lab8Birdie + " h8Eagle:" + lab8Eagle +
+      " parKeyOk7:" + parKeyOkX8 + " parKeyOk8:" + parKeyOkX8b +
+      " parKeyCount7:" + parKeyCountX8 + " parKeyCount8:" + parKeyCountX8b);
   domX8.window.close();
 
   // X9/X10 variant: course fixture with hole 5's row entirely removed. courseMap()
@@ -2404,14 +2443,14 @@ async function openScorer(dom, { noSheet = false } = {}) {
   const domX9 = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX9);
   const docX9 = await openScorer(domX9, { noSheet: true });
   docX9.querySelector('.sc-cell[data-hole="5"]').click();
-  await until(() => (docX9.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 5"));
-  const pad5 = docX9.querySelector("#scPad");
-  const labs5 = [...pad5.querySelectorAll(".sc-num[data-score] .sc-num-lab")];
+  await until(() => (docX9.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 5"));
+  const pad5 = docX9.querySelector("#scSheet");
+  const labs5 = [...pad5.querySelectorAll(".sc-key[data-score] .sc-key-lab")];
   docX9.querySelector('.sc-cell[data-hole="7"]').click();
-  await until(() => (docX9.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 7"));
-  const pad7b = docX9.querySelector("#scPad");
-  const lab7b = [...pad7b.querySelectorAll(".sc-num[data-score]")]
-    .find(b => b.dataset.score === "3")?.querySelector(".sc-num-lab")?.textContent;
+  await until(() => (docX9.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 7"));
+  const pad7b = docX9.querySelector("#scSheet");
+  const lab7b = [...pad7b.querySelectorAll(".sc-key[data-score]")]
+    .find(b => b.dataset.score === "3")?.querySelector(".sc-key-lab")?.textContent;
   check("X9: SC-PAR degrade — course variant blanking h5's row: pad(5) has NO golf-term labels (plain numbers); pad(7) (untouched) still labeled",
     labs5.length === 0 && lab7b === "Par",
     "labs5.length=" + labs5.length + " lab7b=" + lab7b);
@@ -2423,12 +2462,16 @@ async function openScorer(dom, { noSheet = false } = {}) {
   // pass 171/171 — now also asserts the happy path (complete course data ->
   // data-mode="topar") on the standard fixture, alongside the h5-blanked
   // variant degrading to strokes-only.
+  // Rev 3 (task 3, header/SC-TALLY-HONEST): #scTally moved from #scCard's own
+  // innerHTML into the sticky #scHeader block — selector updated to match
+  // (by id, so it's found regardless of which container renders it); the
+  // data-mode semantics this check actually cares about are unchanged.
   const domX10std = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX10std = await openScorer(domX10std, { noSheet: true });
-  const tallyX10std = docX10std.querySelector("#scCard .sc-tally");
+  const tallyX10std = docX10std.querySelector("#scTally");
   const domX10 = makeDom("#score?team=" + encodeURIComponent("Duck"), overrideX9);
   const docX10 = await openScorer(domX10, { noSheet: true });
-  const tallyX10 = docX10.querySelector("#scCard .sc-tally");
+  const tallyX10 = docX10.querySelector("#scTally");
   check("X10: to-par tally — complete course data renders data-mode='topar' (happy path); the h5-blanked variant degrades to strokes-only (data-mode='strokes') when courseMap() is null (all-18 rule)",
     !!tallyX10std && tallyX10std.getAttribute("data-mode") === "topar" &&
     !!tallyX10 && tallyX10.getAttribute("data-mode") === "strokes",
@@ -2449,47 +2492,156 @@ async function openScorer(dom, { noSheet = false } = {}) {
   docX11.querySelector("#scRound").click();
   const toggledX11 = chipX11();
   docX11.querySelector('.sc-cell[data-hole="1"]').click();
-  await until(() => !docX11.querySelector("#scPad")?.hidden);
-  docX11.querySelector("#scPad .sc-num[data-score]").click();
+  await until(() => !docX11.querySelector("#scSheet")?.hidden);
+  docX11.querySelector("#scSheet .sc-key[data-score]").click();
   await until(() => chipX11() === initialX11);
   check("X11: SC-ROUND spring — toggle flips the chip for one submission, then auto-returns to the derived default",
     !!initialX11 && initialX11 !== toggledX11 && chipX11() === initialX11,
     "initial=" + initialX11 + " toggled=" + toggledX11 + " after=" + chipX11());
   domX11.window.close();
 
-  // X12: edit mode — re-tapping an already-filled cell shows "currently N" and
-  // arms a "Replace N with M" confirm after picking M (send-on-tap does NOT
-  // fire immediately in edit mode — NOCLOBBER asymmetry).
+  // X12 (rev 3, SC-PAD-SHEET — task 2 adaptation): re-tapping an
+  // already-filled cell shows the rev-3 replace-line naming the current
+  // value; a SINGLE number tap then fires the send immediately (the
+  // replace-line's named current value + this one deliberate number tap
+  // together ARE the explicit two-number act, I2/C3 — the separate
+  // "Replace N with M" arm-and-confirm button, #scPadReplace, is retired).
   const domX12 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX12 = await openScorer(domX12, { noSheet: true });
   docX12.querySelector('.sc-cell[data-hole="2"]').click(); // hole 2, par 4
-  await until(() => !docX12.querySelector("#scPad")?.hidden);
-  [...docX12.querySelectorAll("#scPad .sc-num[data-score]")].find(b => b.dataset.score === "4").click();
-  await until(() => docX12.querySelector('.sc-cell[data-hole="2"] b')?.textContent === "4");
-  docX12.querySelector('.sc-cell[data-hole="2"]').click(); // re-tap the filled cell -> edit mode
-  await until(() => /currently 4/.test(docX12.querySelector("#scPad")?.textContent || ""));
-  const currentOkX12 = /currently 4/.test(docX12.querySelector("#scPad")?.textContent || "");
-  [...docX12.querySelectorAll("#scPad .sc-num[data-score]")].find(b => b.dataset.score === "6").click();
-  await until(() => /Replace 4 with 6/.test(docX12.querySelector("#scPad")?.textContent || ""));
-  const replaceOkX12 = /Replace 4 with 6/.test(docX12.querySelector("#scPad")?.textContent || "");
+  await until(() => !docX12.querySelector("#scSheet")?.hidden);
+  [...docX12.querySelectorAll("#scSheet .sc-key[data-score]")].find(b => b.dataset.score === "4").click();
+  await until(() => docX12.querySelector('.sc-cell[data-hole="2"] .sc-score')?.textContent === "4");
+  // Fresh tap already closed the sheet (send-on-tap, unchanged behavior) —
+  // half of S14's open->close proof, before the edit-mode leg below.
+  const closedAfterFreshX12 = docX12.querySelector("#scSheet")?.hidden === true;
 
-  // Review round 1 (finding 3): the periodic refresh drives renderScorer() ->
-  // scShowCard() -> an UNCONDITIONAL renderScCard() rebuild (same path a
-  // 60s auto-refresh takes) which used to silently blank an in-progress
-  // "Other" entry — the typed value lived only in the DOM input node, not in
-  // STATE, so rebuilding #scPad's innerHTML from scratch discarded it.
-  // Proven here on a fresh hole (9, untouched by the edit-mode flow above):
-  // open Other, type "13", force a renderScCard() the same way a refresh
-  // would, and assert the input still reads "13" afterward.
+  docX12.querySelector('.sc-cell[data-hole="2"]').click(); // re-tap the filled cell -> edit mode
+  await until(() => /currently 4/i.test(docX12.querySelector("#scSheet .sc-replace-line")?.textContent || ""));
+  const replaceLineOkX12 = /currently 4/i.test(docX12.querySelector("#scSheet .sc-replace-line")?.textContent || "") &&
+    docX12.querySelector("#scSheet .sc-replace-line b")?.textContent === "4";
+  const noReplaceBtnX12 = !docX12.querySelector("#scPadReplace"); // retired — no arm-and-confirm element exists
+
+  // Spy on window.scJournalSave (the real Task-5 implementation, a plain
+  // top-level function reached via `window.` explicitly in scSubmitScore —
+  // the same seam X20/X11 already override for scSheetHoles) to prove the
+  // replace tap fires it EXACTLY once, directly, rather than inferring
+  // "no second confirm" only from the DOM.
+  let saveCallsX12 = 0;
+  const realSaveX12 = domX12.window.scJournalSave;
+  domX12.window.scJournalSave = function (...args) { saveCallsX12++; return realSaveX12.apply(this, args); };
+  [...docX12.querySelectorAll("#scSheet .sc-key[data-score]")].find(b => b.dataset.score === "6").click(); // the ONE tap that replaces
+  await until(() => docX12.querySelector('.sc-cell[data-hole="2"] .sc-score')?.textContent === "6");
+  const oneSaveOnReplaceX12 = saveCallsX12 === 1;
+  const closedAfterReplaceX12 = docX12.querySelector("#scSheet")?.hidden === true; // send-on-tap closes the sheet, same as a fresh tap
+
+  // S14: full open -> close -> reopen cycle, both named exits (veil tap AND
+  // the sheet-head's Close button), on the now-filled hole 2 cell.
+  docX12.querySelector('.sc-cell[data-hole="2"]').click();
+  await until(() => !docX12.querySelector("#scSheet")?.hidden);
+  const openViaCellX12 = !docX12.querySelector("#scSheet")?.hidden;
+  // Fix round 1 (review Important #1, structural assert): #scSheet/#scVeil
+  // must NOT be nested inside .wrap — .wrap establishes its own stacking
+  // context (position:relative+z-index:1), which traps position:fixed
+  // descendants below OTHER top-level z-index layers (.nav z:20,
+  // #healthStrip z:999) regardless of these elements' own (now-raised)
+  // z-index. closest(".wrap") returning null proves the escape structurally
+  // (via #scSheetHost), not just "it happens to render on top" by accident.
+  const sheetEscapesWrapX12 = !docX12.querySelector("#scSheet")?.closest(".wrap") &&
+    !docX12.querySelector("#scVeil")?.closest(".wrap");
+  docX12.querySelector("#scVeil").click(); // exit #1: veil tap
+  await until(() => docX12.querySelector("#scSheet")?.hidden === true);
+  const closedViaVeilX12 = docX12.querySelector("#scSheet")?.hidden === true;
+  docX12.querySelector('.sc-cell[data-hole="2"]').click(); // reopen
+  await until(() => !docX12.querySelector("#scSheet")?.hidden);
+  const reopenedX12 = !docX12.querySelector("#scSheet")?.hidden;
+  docX12.querySelector("#scSheetClose").click(); // exit #2: the sheet-head's Close button
+  await until(() => docX12.querySelector("#scSheet")?.hidden === true);
+  const closedViaCloseBtnX12 = docX12.querySelector("#scSheet")?.hidden === true;
+
+  // Review round 1 (finding 3), rev-3 mechanism (task-2 pinned resolution):
+  // the periodic refresh drives renderScorer() -> scShowCard() -> an
+  // UNCONDITIONAL renderScCard() rebuild (same path a 60s auto-refresh
+  // takes). STATE.scPadOtherVal's free-text-input echo is RETIRED (the
+  // overflow rows now cover the full range as buttons); the SAME
+  // refresh-survival protection is now proven via STATE.scPadOtherOpen
+  // (already existed, unchanged mechanism) — open the numrow, force the
+  // SAME rebuild a refresh takes, and assert it's still open afterward on a
+  // genuinely NEW DOM node (not a leftover — node-identity inequality,
+  // same proof style the old input-node check used).
   docX12.querySelector('.sc-cell[data-hole="9"]').click();
-  await until(() => (docX12.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 9"));
+  await until(() => (docX12.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 9"));
+  // Fix round 1 (review Important #2 — Riley RULED in-chat: the 1-19 hard
+  // rule governs the pinned formula): exhaustive reachability audit, not a
+  // two-value boundary spot-check — every value 1-19 must have EXACTLY ONE
+  // tappable .sc-key[data-score] across the main grid + overflow row
+  // combined. The overflow row's buttons are unconditionally in the DOM
+  // regardless of the numrow's `.on` toggle (only its CSS display class is
+  // gated by STATE.scPadOtherOpen — scPadKeysHTML always renders the
+  // buttons), so this counts correctly whether or not "Other" has been
+  // tapped open. Run across all 3 representative pars the fixture actually
+  // has (hole 9 par 5, hole 7 par 3, hole 8 par 4 — fixtures/course.csv) —
+  // proves the down-range guard (par-2>1) AND the uncapped up-range both
+  // hold across the low/mid/high-par spectrum, not just at two extremes.
+  const scKeyAuditX12 = sheetEl => {
+    const counts = {};
+    [...sheetEl.querySelectorAll(".sc-key[data-score]")].forEach(b => {
+      counts[b.dataset.score] = (counts[b.dataset.score] || 0) + 1;
+    });
+    const bad = [];
+    for (let v = 1; v <= 19; v++) { const c = counts[String(v)] || 0; if (c !== 1) bad.push(v + ":" + c); }
+    return { ok: bad.length === 0, bad };
+  };
+  const audit9X12 = scKeyAuditX12(docX12.querySelector("#scSheet")); // par 5 (fixtures h9=5): main grid bottoms at 3, overflow must add 1-2 low + 10-19 high
+
   docX12.querySelector("#scPadOtherBtn").click();
-  await until(() => !!docX12.querySelector("#scPadOtherInput"));
-  const otherInputX12 = docX12.querySelector("#scPadOtherInput");
-  otherInputX12.value = "13";
-  otherInputX12.dispatchEvent(new domX12.window.Event("input", { bubbles: true }));
+  await until(() => docX12.querySelector(".sc-numrow")?.classList.contains("on"));
+  const numrowBeforeX12 = docX12.querySelector(".sc-numrow");
+
   domX12.window.renderScCard(); // simulate the periodic-refresh's unconditional rebuild
-  const otherSurvivedX12 = docX12.querySelector("#scPadOtherInput")?.value === "13";
+
+  const numrowAfterX12 = docX12.querySelector(".sc-numrow");
+  const numrowRebuiltX12 = !!numrowAfterX12 && numrowAfterX12 !== numrowBeforeX12;
+  const numrowSurvivedX12 = numrowAfterX12?.classList.contains("on") === true &&
+    numrowAfterX12.querySelectorAll(".sc-key[data-score]").length > 0;
+
+  docX12.querySelector('.sc-cell[data-hole="7"]').click(); // hole 7, par 3 — second scPadOpen
+  await until(() => (docX12.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 7"));
+  const audit7X12 = scKeyAuditX12(docX12.querySelector("#scSheet")); // par 3 (h7=3): main grid already reaches 1 via par-2 — overflow must NOT duplicate it
+
+  docX12.querySelector('.sc-cell[data-hole="8"]').click(); // hole 8, par 4 — third scPadOpen
+  await until(() => (docX12.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 8"));
+  const audit8X12 = scKeyAuditX12(docX12.querySelector("#scSheet")); // par 4 (h8=4): main grid bottoms at 2, overflow adds 1 low + 9-19 high
+
+  // Fix round 2 (review Important — regression introduced by fix round 1's
+  // OWN #scSheetHost escape): #scSheetHost is now a body-level sibling of
+  // <footer>, OUTSIDE <section id="score" class="view">, so the
+  // .view[hidden] cascade that used to hide a stray-open sheet "for free"
+  // whenever #score itself hid no longer reaches it — showView() (a
+  // separate hash-router script) only ever toggles `.hidden` on `.view`
+  // elements, never #scSheetHost. Open the sheet on hole 3 (untouched
+  // elsewhere in this dom), navigate away via hashchange to #board (same
+  // pattern X24/X25 use) — this specifically bypasses the veil's own
+  // click-to-close, since no click ever happens (back button/typed
+  // URL/nav tap are indistinguishable from this dom's perspective) —
+  // assert the sheet+veil are gone (not just visually hidden: #scSheetHost
+  // genuinely cleared, matching the SAME reset renderScCard's own
+  // `!STATE.scTeam` branch already performs). Then navigate BACK to
+  // #score and assert the sheet stays closed (S14-style full cycle — "it
+  // got cleared once" isn't proof it doesn't come back unbidden on the
+  // very next repaint).
+  docX12.querySelector('.sc-cell[data-hole="3"]').click(); // hole 3, par 3 — untouched elsewhere in this dom
+  await until(() => !docX12.querySelector("#scSheet")?.hidden);
+  const openBeforeNavX12 = !docX12.querySelector("#scSheet")?.hidden;
+  domX12.window.location.hash = "#board";
+  domX12.window.dispatchEvent(new domX12.window.Event("hashchange"));
+  const sheetGoneAfterNavX12 = !docX12.querySelector("#scSheet");
+  const veilGoneAfterNavX12 = !docX12.querySelector("#scVeil");
+  const sheetHostClearedX12 = (docX12.querySelector("#scSheetHost")?.innerHTML || "") === "";
+  domX12.window.location.hash = "#score?team=" + encodeURIComponent("Duck");
+  domX12.window.dispatchEvent(new domX12.window.Event("hashchange"));
+  await until(() => docX12.querySelectorAll("#scCard .sc-cell").length > 0);
+  const noResurrectX12 = docX12.querySelector("#scSheet")?.hidden === true;
 
   domX12.window.close();
 
@@ -2497,15 +2649,15 @@ async function openScorer(dom, { noSheet = false } = {}) {
   // replace-confirm path (scSubmitScore's overrideSheet check, Task 5 fix
   // round 1) had ZERO committed coverage — a mutation forcing
   // overrideSheet to false slipped through 182/182 undetected (reviewer-
-  // proven). Folded in here, same edit-mode/Replace theme as the rest of
+  // proven). Folded in here, same edit-mode/replace theme as the rest of
   // X12: stub the sheet to a DIFFERING value for hole 7 (par 3, sheet
   // already says 3), tap the cell — this opens in edit mode against the
   // SHEET's value (not a plain fresh pad, since scCellState's "sheet" kind
-  // behaves like an existing score for pad purposes) — pick a new number,
-  // confirm via the SAME single Replace control used everywhere else in
-  // this suite (no second confirm, no force-send tap anywhere), and assert
-  // the POST actually reaches the network while the hole was genuinely
-  // sheet-differing the whole time.
+  // behaves like an existing score for pad purposes) — pick a new number
+  // via the SAME single tap used everywhere else in this suite (rev 3: no
+  // second confirm, no force-send tap anywhere — there IS no confirm
+  // element to tap), and assert the POST actually reaches the network while
+  // the hole was genuinely sheet-differing the whole time.
   const epUrlX12b = "https://script.example/exec";
   const bodiesX12b = [];
   const fetchX12b = (url, opts) => {
@@ -2520,22 +2672,31 @@ async function openScorer(dom, { noSheet = false } = {}) {
   const docX12b = await openScorer(domX12b, { noSheet: true });
   domX12b.window.scSheetHoles = () => ({ 7: 3 }); // hole 7, par 3 — sheet already shows 3
   docX12b.querySelector('.sc-cell[data-hole="7"]').click();
-  await until(() => /currently 3/.test(docX12b.querySelector("#scPad")?.textContent || ""));
-  const editModeFromSheetX12b = /currently 3/.test(docX12b.querySelector("#scPad")?.textContent || "");
-  docX12b.querySelector('#scPad .sc-num[data-score="5"]').click(); // par 3, delta +2 ("+2" label) — a valid preset
-  await until(() => /Replace 3 with 5/.test(docX12b.querySelector("#scPad")?.textContent || ""));
-  docX12b.querySelector("#scPadReplace").click(); // the ONE confirm — I2: carries override through, no second tap anywhere
+  await until(() => /currently 3/i.test(docX12b.querySelector("#scSheet .sc-replace-line")?.textContent || ""));
+  const editModeFromSheetX12b = /currently 3/i.test(docX12b.querySelector("#scSheet .sc-replace-line")?.textContent || "");
+  docX12b.querySelector('#scSheet .sc-key[data-score="5"]').click(); // par 3, delta +2 ("+2" label) — a valid preset; the ONE tap — I2: carries override through
   await until(() => bodiesX12b.some(b => b.hole === 7));
   await settle(150);
   const overrideSentX12b = bodiesX12b.length === 1 && bodiesX12b[0].hole === 7 && bodiesX12b[0].score === 5;
   domX12b.window.close();
 
-  check("X12: edit mode — re-tapping a filled cell shows 'currently N'; picking M arms 'Replace N with M' (no immediate send); an in-progress 'Other' entry survives a forced renderScCard() rebuild (periodic-refresh regression); replace-confirming an ALREADY-KNOWN differing sheet value (I2) sends via the SAME single confirm, no second tap anywhere",
-    currentOkX12 && replaceOkX12 && otherSurvivedX12 && editModeFromSheetX12b && overrideSentX12b,
-    "currentOk=" + currentOkX12 + " replaceOk=" + replaceOkX12 + " otherSurvived=" + otherSurvivedX12 +
+  check("X12: edit mode — re-tapping a filled cell shows the rev-3 replace-line naming the current value; a SINGLE number tap fires exactly one scJournalSave with the new value and closes the sheet (no second confirm element anywhere, #scPadReplace retired); the sheet/veil structurally escape .wrap's stacking context (fix round 1, review Important #1 — closest('.wrap') is null, not just 'renders on top by accident'); the full open->close->reopen cycle works via BOTH the veil tap and the sheet-head's Close button (S14); the 'Other' overflow row survives a forced renderScCard() rebuild (periodic-refresh regression, rev-3 mechanism via STATE.scPadOtherOpen); every value 1-19 has EXACTLY ONE tappable key across main grid + overflow row on 3 representative real-fixture pars (fix round 1, review Important #2, RULED — hole 7=par3, hole 8=par4, hole 9=par5); navigating away from #score via hashchange while the sheet is open clears it (not just visually hidden — #scSheetHost genuinely emptied) instead of lingering over the next view, and it does NOT resurrect on navigating back (fix round 2, review Important — regression from fix round 1's OWN #scSheetHost escape); replace-confirming an ALREADY-KNOWN differing sheet value (I2) sends via that SAME single number tap, no second tap anywhere",
+    closedAfterFreshX12 && replaceLineOkX12 && noReplaceBtnX12 && oneSaveOnReplaceX12 && closedAfterReplaceX12 &&
+      openViaCellX12 && sheetEscapesWrapX12 && closedViaVeilX12 && reopenedX12 && closedViaCloseBtnX12 &&
+      numrowRebuiltX12 && numrowSurvivedX12 &&
+      audit9X12.ok && audit7X12.ok && audit8X12.ok &&
+      openBeforeNavX12 && sheetGoneAfterNavX12 && veilGoneAfterNavX12 && sheetHostClearedX12 && noResurrectX12 &&
+      editModeFromSheetX12b && overrideSentX12b,
+    "closedAfterFresh=" + closedAfterFreshX12 + " replaceLineOk=" + replaceLineOkX12 + " noReplaceBtn=" + noReplaceBtnX12 +
+      " oneSaveOnReplace=" + oneSaveOnReplaceX12 + " (calls=" + saveCallsX12 + ") closedAfterReplace=" + closedAfterReplaceX12 +
+      " openViaCell=" + openViaCellX12 + " sheetEscapesWrap=" + sheetEscapesWrapX12 + " closedViaVeil=" + closedViaVeilX12 + " reopened=" + reopenedX12 +
+      " closedViaCloseBtn=" + closedViaCloseBtnX12 +
+      " numrowRebuilt=" + numrowRebuiltX12 + " numrowSurvived=" + numrowSurvivedX12 +
+      " audit9(par5).bad=" + JSON.stringify(audit9X12.bad) + " audit7(par3).bad=" + JSON.stringify(audit7X12.bad) + " audit8(par4).bad=" + JSON.stringify(audit8X12.bad) +
+      " openBeforeNav=" + openBeforeNavX12 + " sheetGoneAfterNav=" + sheetGoneAfterNavX12 + " veilGoneAfterNav=" + veilGoneAfterNavX12 +
+      " sheetHostCleared=" + sheetHostClearedX12 + " noResurrect=" + noResurrectX12 +
       " editModeFromSheet=" + editModeFromSheetX12b + " overrideSent=" + overrideSentX12b +
-      " bodiesX12b=" + JSON.stringify(bodiesX12b) + " text=" +
-      (docX12.querySelector("#scPad")?.textContent || "").slice(0, 160));
+      " bodiesX12b=" + JSON.stringify(bodiesX12b));
 }
 
 /* ---------------------------------------------------------------------
@@ -2685,7 +2846,7 @@ async function openScorer(dom, { noSheet = false } = {}) {
   const dbgTextX15 = docX15.getElementById("debugPanel")?.textContent || "";
   const cardVisibleX15 = docX15.querySelectorAll("#scCard .sc-cell").length === 18
     && docX15.querySelector("#scCard")?.hidden !== true;
-  const noSentCellX15 = [...docX15.querySelectorAll("#scCard .sc-cell b")].every(b => b.textContent === "–");
+  const noSentCellX15 = [...docX15.querySelectorAll("#scCard .sc-cell .sc-score")].every(b => b.textContent === "–");
 
   let sendErrX15;
   try {
@@ -2725,22 +2886,43 @@ const epUrl = "https://script.example/exec";
   const domX16 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX16);
   const docX16 = await openScorer(domX16, { noSheet: true });
   docX16.querySelector('.sc-cell[data-hole="3"]').click();        // hole 3, par 3
-  await until(() => !docX16.querySelector("#scPad")?.hidden);
-  docX16.querySelector('#scPad .sc-num[data-score="3"]').click(); // fresh cell, send-on-tap
+  await until(() => !docX16.querySelector("#scSheet")?.hidden);
+  docX16.querySelector('#scSheet .sc-key[data-score="3"]').click(); // fresh cell, send-on-tap
   const cellX16 = docX16.querySelector('.sc-cell[data-hole="3"]');
-  const queuedNowX16 = !!cellX16 && cellX16.classList.contains("sc-queued") && cellX16.querySelector("b")?.textContent === "3";
+  const queuedNowX16 = !!cellX16 && cellX16.classList.contains("sc-queued") && cellX16.querySelector(".sc-score")?.textContent === "3";
   // C4 (review round 1): the queued state was color-only (the sc-queued
   // CSS class alone) — a regression that dropped the CSS class but kept
   // the cell otherwise looking identical would be invisible to a
-  // class-only assertion. Requiring the ⇡ glyph's actual TEXT (not just a
+  // class-only assertion. Requiring the ⇡ mark's actual TEXT (not just a
   // class name) closes that gap and matches the never-color-only rule.
-  const glyphShownX16 = /⇡/.test(cellX16?.textContent || "");
+  // Rev 3 (SC-UI-V/SC-SKIN): the mark lives in .sc-mark now (renamed from
+  // the bare state glyph), but the glyph itself is UNCHANGED for queued/
+  // sending (⇡ — only the conflict glyph moves, ? -> ▲, asserted in X20).
+  const glyphShownX16 = /⇡/.test(cellX16?.querySelector(".sc-mark")?.textContent || "");
   const noErrorUIX16 = !docX16.querySelector(".sc-degrade") && !docX16.querySelector(".sc-loud-config");
-  check("X16: offline-first — stub fetch rejects (network): tap score -> cell shows queued state INSTANTLY (class AND the ⇡ glyph — never color-only), no error UI",
-    queuedNowX16 && glyphShownX16 && noErrorUIX16 && domX16.pageErrors.length === 0,
-    "queuedNow=" + queuedNowX16 + " glyphShown=" + glyphShownX16 + " noErrorUI=" + noErrorUIX16 +
-      " cellClass=" + cellX16?.className + " cellText=" + cellX16?.textContent + " pageErrors=" + domX16.pageErrors.length);
   domX16.window.close();
+
+  // Rev 3 addition (same X-number, no new check() count): an on-sheet cell
+  // via the REAL SC-DERIVE merge (no noSheet stub) carries the rev-3 ▮ mark
+  // and the renamed .sc-onsheet class (was .sc-sheet pre-rev-3). Duck's
+  // round-1 sheet fixture is fully populated (18/18 holes), so
+  // scRoundDefault()'s team-state-first rule always lands on round 2 here
+  // regardless of wall-clock date — hole 1 is on the sheet at 4 either way
+  // (r1 h1=4, r2 h1=4 — fixtures/scores.csv), so no round-pinning trick is
+  // needed for this assertion to be deterministic.
+  const domX16b = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docX16b = await openScorer(domX16b);
+  const cellX16b = docX16b.querySelector('.sc-cell[data-hole="1"]');
+  const onSheetClassX16b = !!cellX16b && cellX16b.classList.contains("sc-onsheet");
+  const onSheetMarkX16b = (cellX16b?.querySelector(".sc-mark")?.textContent || "") === "▮";
+  domX16b.window.close();
+
+  check("X16: offline-first — stub fetch rejects (network): tap score -> cell shows queued state INSTANTLY (class AND the ⇡ mark — never color-only), no error UI; PLUS (rev 3) an on-sheet cell via the real derivation carries the ▮ mark + .sc-onsheet class",
+    queuedNowX16 && glyphShownX16 && noErrorUIX16 && domX16.pageErrors.length === 0 &&
+      onSheetClassX16b && onSheetMarkX16b,
+    "queuedNow=" + queuedNowX16 + " glyphShown=" + glyphShownX16 + " noErrorUI=" + noErrorUIX16 +
+      " cellClass=" + cellX16?.className + " cellText=" + cellX16?.textContent + " pageErrors=" + domX16.pageErrors.length +
+      " onSheetClass=" + onSheetClassX16b + " onSheetMark=" + onSheetMarkX16b);
 }
 
 // Shared shape for X17's three independent trigger scenarios (online,
@@ -2766,7 +2948,7 @@ async function cellSettledOk(doc, hole) {
   return until(() => {
     const c = doc.querySelector('.sc-cell[data-hole="' + hole + '"]');
     return !!c && !c.classList.contains("sc-queued") && !c.classList.contains("sc-sending") &&
-      !c.classList.contains("sc-rejected") && c.querySelector("b")?.textContent != null;
+      !c.classList.contains("sc-rejected") && c.querySelector(".sc-score")?.textContent != null;
   });
 }
 
@@ -2785,8 +2967,8 @@ async function cellSettledOk(doc, hole) {
   const domOnline17 = makeDom("#score?team=" + encodeURIComponent("Duck"), online17.fetch);
   const docOnline17 = await openScorer(domOnline17, { noSheet: true });
   docOnline17.querySelector('.sc-cell[data-hole="4"]').click();        // hole 4, par 5
-  await until(() => !docOnline17.querySelector("#scPad")?.hidden);
-  docOnline17.querySelector('#scPad .sc-num[data-score="5"]').click();
+  await until(() => !docOnline17.querySelector("#scSheet")?.hidden);
+  docOnline17.querySelector('#scSheet .sc-key[data-score="5"]').click();
   await until(() => docOnline17.querySelector('.sc-cell[data-hole="4"]')?.classList.contains("sc-queued"));
   online17.online = true;
   domOnline17.window.dispatchEvent(new domOnline17.window.Event("online"));
@@ -2806,8 +2988,8 @@ async function cellSettledOk(doc, hole) {
   const domPageshow17 = makeDom("#score?team=" + encodeURIComponent("Duck"), pageshow17.fetch);
   const docPageshow17 = await openScorer(domPageshow17, { noSheet: true });
   docPageshow17.querySelector('.sc-cell[data-hole="10"]').click();      // hole 10, par 4
-  await until(() => !docPageshow17.querySelector("#scPad")?.hidden);
-  docPageshow17.querySelector('#scPad .sc-num[data-score="4"]').click();
+  await until(() => !docPageshow17.querySelector("#scSheet")?.hidden);
+  docPageshow17.querySelector('#scSheet .sc-key[data-score="4"]').click();
   await until(() => docPageshow17.querySelector('.sc-cell[data-hole="10"]')?.classList.contains("sc-queued"));
   pageshow17.online = true;
   domPageshow17.window.dispatchEvent(new domPageshow17.window.Event("pageshow"));
@@ -2820,8 +3002,8 @@ async function cellSettledOk(doc, hole) {
   const domVis17 = makeDom("#score?team=" + encodeURIComponent("Duck"), vis17.fetch);
   const docVis17 = await openScorer(domVis17, { noSheet: true });
   docVis17.querySelector('.sc-cell[data-hole="11"]').click();          // hole 11, par 5
-  await until(() => !docVis17.querySelector("#scPad")?.hidden);
-  docVis17.querySelector('#scPad .sc-num[data-score="5"]').click();
+  await until(() => !docVis17.querySelector("#scSheet")?.hidden);
+  docVis17.querySelector('#scSheet .sc-key[data-score="5"]').click();
   await until(() => docVis17.querySelector('.sc-cell[data-hole="11"]')?.classList.contains("sc-queued"));
   vis17.online = true;
   domVis17.window.document.dispatchEvent(new domVis17.window.Event("visibilitychange"));
@@ -2839,8 +3021,9 @@ async function cellSettledOk(doc, hole) {
 
 {
   // X18: coalescing — while offline, tap 4 then 6 on the same hole (the
-  // second tap goes through the existing edit-mode Replace-confirm, same
-  // as X12 — the ONLY way to change an already-filled cell). The journal
+  // second tap goes through the edit-mode replace-line flow, same as X12 —
+  // the ONLY way to change an already-filled cell; rev 3: that second tap
+  // fires the replace directly, no separate confirm element). The journal
   // must hold ONE entry per hole: the earlier value is fully replaced, not
   // queued alongside it, so once reconnected at most one body is ever
   // captured for that hole, and its score is the FINAL value (6).
@@ -2858,15 +3041,13 @@ async function cellSettledOk(doc, hole) {
   const domX18 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX18);
   const docX18 = await openScorer(domX18, { noSheet: true });
   docX18.querySelector('.sc-cell[data-hole="6"]').click();        // hole 6, par 4
-  await until(() => !docX18.querySelector("#scPad")?.hidden);
-  docX18.querySelector('#scPad .sc-num[data-score="4"]').click(); // tap #1: fresh, send-on-tap -> queued 4
-  await until(() => docX18.querySelector('.sc-cell[data-hole="6"] b')?.textContent === "4");
+  await until(() => !docX18.querySelector("#scSheet")?.hidden);
+  docX18.querySelector('#scSheet .sc-key[data-score="4"]').click(); // tap #1: fresh, send-on-tap -> queued 4
+  await until(() => docX18.querySelector('.sc-cell[data-hole="6"] .sc-score')?.textContent === "4");
   docX18.querySelector('.sc-cell[data-hole="6"]').click();        // re-tap the filled cell -> edit mode
-  await until(() => /currently 4/.test(docX18.querySelector("#scPad")?.textContent || ""));
-  docX18.querySelector('#scPad .sc-num[data-score="6"]').click(); // tap #2: arms "Replace 4 with 6"
-  await until(() => /Replace 4 with 6/.test(docX18.querySelector("#scPad")?.textContent || ""));
-  docX18.querySelector("#scPadReplace").click();                 // confirm -> coalesces to score 6, new seq
-  await until(() => docX18.querySelector('.sc-cell[data-hole="6"] b')?.textContent === "6");
+  await until(() => /currently 4/i.test(docX18.querySelector("#scSheet .sc-replace-line")?.textContent || ""));
+  docX18.querySelector('#scSheet .sc-key[data-score="6"]').click(); // tap #2: fires the replace directly -> coalesces to score 6, new seq
+  await until(() => docX18.querySelector('.sc-cell[data-hole="6"] .sc-score')?.textContent === "6");
   onlineX18 = true;
   domX18.window.dispatchEvent(new domX18.window.Event("online"));
   await until(() => bodiesX18.length > 0);
@@ -2895,13 +3076,13 @@ async function cellSettledOk(doc, hole) {
   const domX19 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX19);
   const docX19 = await openScorer(domX19, { noSheet: true });
   docX19.querySelector('.sc-cell[data-hole="2"]').click();        // hole 2, par 4
-  await until(() => !docX19.querySelector("#scPad")?.hidden);
-  docX19.querySelector('#scPad .sc-num[data-score="4"]').click();
-  await until(() => docX19.querySelector('.sc-cell[data-hole="2"] b')?.textContent === "4");
+  await until(() => !docX19.querySelector("#scSheet")?.hidden);
+  docX19.querySelector('#scSheet .sc-key[data-score="4"]').click();
+  await until(() => docX19.querySelector('.sc-cell[data-hole="2"] .sc-score')?.textContent === "4");
   docX19.querySelector('.sc-cell[data-hole="3"]').click();        // hole 3, par 3
-  await until(() => !docX19.querySelector("#scPad")?.hidden);
-  docX19.querySelector('#scPad .sc-num[data-score="3"]').click();
-  await until(() => docX19.querySelector('.sc-cell[data-hole="3"] b')?.textContent === "3");
+  await until(() => !docX19.querySelector("#scSheet")?.hidden);
+  docX19.querySelector('#scSheet .sc-key[data-score="3"]').click();
+  await until(() => docX19.querySelector('.sc-cell[data-hole="3"] .sc-score')?.textContent === "3");
   onlineX19 = true;
   domX19.window.dispatchEvent(new domX19.window.Event("online"));
   await until(() => bodiesX19.length >= 2);
@@ -2978,8 +3159,8 @@ async function cellSettledOk(doc, hole) {
   // so hole 14 opens the plain numeric pad (no edit mode) and picking 6
   // sends-on-tap immediately: a plain queued entry, override:false.
   docX20.querySelector('.sc-cell[data-hole="14"]').click();
-  await until(() => !docX20.querySelector("#scPad")?.hidden);
-  docX20.querySelector('#scPad .sc-num[data-score="6"]').click();
+  await until(() => !docX20.querySelector("#scSheet")?.hidden);
+  docX20.querySelector('#scSheet .sc-key[data-score="6"]').click();
   // Stub the sheet value IMMEDIATELY after (still synchronous, before the
   // save's deferred setTimeout(scDrain,0) has had a single tick to run) so
   // the very FIRST drain attempt already sees the conflict — never a race
@@ -2991,9 +3172,14 @@ async function cellSettledOk(doc, hole) {
   await settle(300); // give the auto-drain every chance to (wrongly) fire before asserting it didn't
   const cellX20 = docX20.querySelector('.sc-cell[data-hole="14"]');
   const cellConflictClassX20 = !!cellX20 && cellX20.classList.contains("sc-conflict");
-  const cellGlyphX20 = (cellX20?.querySelector(".sc-state-glyph")?.textContent || "") === "?";
-  const scoreSpanX20 = cellX20?.querySelector("b")?.textContent || "";
-  const scoreSpanOkX20 = scoreSpanX20 === "6·4";
+  // Rev 3 (SC-UI-V/SC-SKIN): the state mark moved to .sc-mark (renamed from
+  // .sc-state-glyph) and the conflict glyph itself changed, ? -> ▲. The
+  // score span's number order also flips to the spec's literal SHEET·MINE
+  // wording (was MINE·SHEET pre-rev-3) — sheet=4 (stubbed above), mine=6
+  // (queued), so "4·6".
+  const cellGlyphX20 = (cellX20?.querySelector(".sc-mark")?.textContent || "") === "▲";
+  const scoreSpanX20 = cellX20?.querySelector(".sc-score")?.textContent || "";
+  const scoreSpanOkX20 = scoreSpanX20 === "4·6";
   const noPostYetX20 = bodiesX20.length === 0;
 
   // Read the held entry's seq directly from the journal (scKey/nkey are
@@ -3007,26 +3193,49 @@ async function cellSettledOk(doc, hole) {
   const heldEntryX20 = domX20.window.scJournalRead(journalKeyX20).entries[entryKeyX20];
   const heldSeqX20 = heldEntryX20 && heldEntryX20.seq;
 
-  docX20.querySelector('.sc-cell[data-hole="14"]').click(); // reopen -> conflict pad (C3 layout)
-  await until(() => !!docX20.querySelector("#scPad #scPadForceSend"));
-  const padTextX20 = docX20.querySelector("#scPad")?.textContent || "";
-  const padHasNumsX20 = !!docX20.querySelector("#scPad .sc-num[data-score]");
-  const padHasKeepSheetX20 = !!docX20.querySelector("#scPad #scPadKeepSheet");
-  const keepSheetEnabledBeforeX20 = docX20.querySelector("#scPad #scPadKeepSheet")?.disabled !== true;
+  // Task 4 (SC-CONFLICT-UI): reopening a conflict cell now renders a
+  // SEPARATE dialog, #scConSheet — never #scSheet (which stays hidden+empty
+  // the whole time a conflict is open, the SAME "closed" contract every
+  // other state relies on) — with the prototype's verbatim two-button
+  // ruling copy, no number-picking grid at all (Task 2's interim 3-way
+  // layout is retired).
+  docX20.querySelector('.sc-cell[data-hole="14"]').click(); // reopen -> conflict SHEET (#scConSheet)
+  await until(() => !!docX20.querySelector("#scConSheet #scPadForceSend"));
+  const conSheetVisibleX20 = !!docX20.querySelector("#scConSheet") &&
+    docX20.querySelector("#scSheet")?.hidden === true;
+  const conCopyTextX20 = docX20.querySelector("#scConSheet .sc-con-copy")?.textContent || "";
+  // Review fix (Important #1): the ORIGINAL version of this assert only
+  // checked the two fixture NUMBERS — it never guarded the pinned plain-
+  // words sentence itself, nor the two button LABELS, so deleting "Nothing
+  // resends on its own — pick which number is true." (the exact sentence
+  // the global constraint calls out by name) or relabelling either button
+  // left the suite green. Both are now asserted explicitly.
+  const copyMatchesX20 = /sheet says 4/i.test(conCopyTextX20) && /this phone sent 6/i.test(conCopyTextX20) &&
+    /Nothing resends on its own — pick which number is true\./.test(conCopyTextX20);
+  const noKeyGridInConSheetX20 = !docX20.querySelector("#scConSheet .sc-key");
+  const conBtnsX20 = [...docX20.querySelectorAll("#scConSheet .sc-con-btn")];
+  const twoBtnsX20 = conBtnsX20.length === 2;
+  const conBtnLabelsOkX20 = conBtnsX20.some(b => /Keep the sheet/.test(b.textContent || "")) &&
+    conBtnsX20.some(b => /Replace with mine/i.test(b.textContent || ""));
+  const padHasKeepSheetX20 = !!docX20.querySelector("#scConSheet #scPadKeepSheet");
+  const padHasForceSendX20 = !!docX20.querySelector("#scConSheet #scPadForceSend");
+  const keepSheetEnabledBeforeX20 = docX20.querySelector("#scConSheet #scPadKeepSheet")?.disabled !== true;
 
-  // I4 + NEW CRITICAL fix (round 2): click force-send — the request goes
-  // out (captured) but stays UNRESOLVED (forceSendGateX20). Reopen the pad
-  // MID-FLIGHT: "Keep the sheet's N" must render disabled. Attempt the
-  // race anyway (click it) — it must be a no-op: the held entry must still
-  // exist in the journal, untouched, while the send is still in flight.
+  // I4 + NEW CRITICAL fix (round 2, carried): click force-send — the
+  // request goes out (captured) but stays UNRESOLVED (forceSendGateX20).
+  // Reopen the pad MID-FLIGHT: BOTH ruling buttons must render disabled
+  // with "sending — wait" (the v2.6 in-flight assert, carried). Attempt the
+  // race anyway (click Keep-the-sheet) — it must be a no-op: the held entry
+  // must still exist in the journal, untouched, while the send is in flight.
   docX20.querySelector("#scPadForceSend").click();
   await until(() => bodiesX20.some(b => b.hole === 14)); // request captured...
   await until(() => docX20.querySelector('.sc-cell[data-hole="14"]')?.classList.contains("sc-sending")); // ...state flips synchronously, before the await
   docX20.querySelector('.sc-cell[data-hole="14"]').click(); // reopen mid-flight
-  await until(() => !!docX20.querySelector("#scPad #scPadKeepSheet"));
-  const keepSheetDisabledMidFlightX20 = docX20.querySelector("#scPad #scPadKeepSheet")?.disabled === true;
-  const forceSendDisabledMidFlightX20 = docX20.querySelector("#scPad #scPadForceSend")?.disabled === true;
-  docX20.querySelector("#scPad #scPadKeepSheet")?.click(); // the race — must no-op (disabled attr AND function-level guard)
+  await until(() => !!docX20.querySelector("#scConSheet #scPadKeepSheet"));
+  const keepSheetDisabledMidFlightX20 = docX20.querySelector("#scConSheet #scPadKeepSheet")?.disabled === true;
+  const forceSendDisabledMidFlightX20 = docX20.querySelector("#scConSheet #scPadForceSend")?.disabled === true;
+  const midFlightCopyOkX20 = /sending — wait/i.test(docX20.querySelector("#scConSheet")?.textContent || "");
+  docX20.querySelector("#scConSheet #scPadKeepSheet")?.click(); // the race — must no-op (disabled attr AND function-level guard)
   await settle(150);
   const entrySurvivedRaceX20 = !!domX20.window.scJournalRead(journalKeyX20).entries[entryKeyX20];
 
@@ -3039,25 +3248,58 @@ async function cellSettledOk(doc, hole) {
   await settle(200); // let scDrain's own async continuation (post-await renderScCard + loop) fully finish before tearing the window down
   const sentHolesX20 = bodiesX20.map(b => b.hole);
   const forceSendBodyX20 = bodiesX20.find(b => b.hole === 14);
+
+  // NEW (Task 4 Step 1): a CLEAN (not mid-flight) "Keep the sheet" click —
+  // journal entry gone + cell reverts — on a SEPARATE hole (5) so it can't
+  // interact with hole 14's already-resolved force-send above. Same
+  // drain-time-discovery technique: a fresh tap+pick queues the phone's own
+  // value BEFORE the sheet value (9) becomes known, so the very first drain
+  // attempt discovers the mismatch and holds — never a race where an unheld
+  // send could slip out first.
+  docX20.querySelector('.sc-cell[data-hole="5"]').click();
+  await until(() => !docX20.querySelector("#scSheet")?.hidden);
+  docX20.querySelector('#scSheet .sc-key[data-score="3"]').click();
+  domX20.window.scSheetHoles = () => ({ 14: 4, 5: 9 });
+  await until(() => docX20.querySelector('.sc-cell[data-hole="5"]')?.classList.contains("sc-conflict"));
+  await settle(200); // give the auto-drain every chance to (wrongly) fire before the keep-sheet click below
+  const noPostForHole5X20 = !bodiesX20.some(b => b.hole === 5);
+  const entryKey5X20 = domX20.window.scEntryKeyOf(roundActiveX20, 5);
+  const heldBeforeKeepX20 = !!domX20.window.scJournalRead(journalKeyX20).entries[entryKey5X20];
+  docX20.querySelector('.sc-cell[data-hole="5"]').click(); // reopen -> conflict sheet for hole 5
+  await until(() => !!docX20.querySelector("#scConSheet #scPadKeepSheet"));
+  const keepCopyOkX20 = /sheet says 9/i.test(docX20.querySelector("#scConSheet .sc-con-copy")?.textContent || "") &&
+    /this phone sent 3/i.test(docX20.querySelector("#scConSheet .sc-con-copy")?.textContent || "");
+  docX20.querySelector("#scConSheet #scPadKeepSheet").click(); // clean keep — no in-flight race this time
+  await until(() => !docX20.querySelector('.sc-cell[data-hole="5"]')?.classList.contains("sc-conflict"));
+  const entryGoneAfterKeepX20 = !domX20.window.scJournalRead(journalKeyX20).entries[entryKey5X20];
+  const cellRevertedX20 = !docX20.querySelector('.sc-cell[data-hole="5"]')?.classList.contains("sc-conflict");
+  const sheetClosedAfterKeepX20 = docX20.querySelector("#scSheet")?.hidden === true && !docX20.querySelector("#scConSheet");
   domX20.window.close();
 
-  check("X20: SC-NOCLOBBER — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict IMMEDIATELY with no intervening tap (score span '6·4', .sc-conflict class, ? glyph); pad(14) opens in replace-confirm naming both (C3 layout: numbers + Keep-the-sheet + Force-send); Keep-the-sheet/Force-send disable mid-flight and a race-click while sending never deletes the entry; force-send (I4) carries the SAME seq the held entry already had",
+  check("X20: SC-NOCLOBBER/SC-CONFLICT-UI — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict IMMEDIATELY with no intervening tap (score span '4·6' SHEET·MINE, .sc-conflict class, ▲ mark); reopening renders #scConSheet (never #scSheet, which stays hidden) with the prototype's verbatim ruling copy ('sheet says 4' / 'this phone sent 6' / 'Nothing resends on its own — pick which number is true.'), exactly 2 .sc-con-btns labeled 'Keep the sheet' / 'Replace with mine', no number grid; Keep-the-sheet/Replace-with-mine disable mid-flight with 'sending — wait' text and a race-click while sending never deletes the entry; force-send (I4) carries the SAME seq the held entry already had; on a separate hole, a CLEAN (non-racing) Keep-the-sheet click deletes the journal entry and reverts the cell out of conflict",
     roundOkX20 && noPostYetX20 && cellConflictClassX20 && cellGlyphX20 && scoreSpanOkX20 &&
-      /6/.test(padTextX20) && /4/.test(padTextX20) && /anyway/i.test(padTextX20) &&
-      padHasNumsX20 && padHasKeepSheetX20 && keepSheetEnabledBeforeX20 &&
-      keepSheetDisabledMidFlightX20 && forceSendDisabledMidFlightX20 && entrySurvivedRaceX20 &&
+      conSheetVisibleX20 && copyMatchesX20 && noKeyGridInConSheetX20 && twoBtnsX20 && conBtnLabelsOkX20 &&
+      padHasKeepSheetX20 && padHasForceSendX20 && keepSheetEnabledBeforeX20 &&
+      keepSheetDisabledMidFlightX20 && forceSendDisabledMidFlightX20 && midFlightCopyOkX20 && entrySurvivedRaceX20 &&
       JSON.stringify(sentHolesX20) === JSON.stringify([14]) &&
       !!forceSendBodyX20 && forceSendBodyX20.score === 6 && forceSendBodyX20.seq === heldSeqX20 &&
-      typeof heldSeqX20 === "number",
+      typeof heldSeqX20 === "number" &&
+      noPostForHole5X20 && heldBeforeKeepX20 && keepCopyOkX20 &&
+      entryGoneAfterKeepX20 && cellRevertedX20 && sheetClosedAfterKeepX20,
     "roundOk=" + roundOkX20 + " noPostYet=" + noPostYetX20 + " cellConflictClass=" + cellConflictClassX20 +
       " cellGlyph=" + cellGlyphX20 + " scoreSpan=" + scoreSpanX20 +
-      " padHasNums=" + padHasNumsX20 + " padHasKeepSheet=" + padHasKeepSheetX20 +
+      " conSheetVisible=" + conSheetVisibleX20 + " copyMatches=" + copyMatchesX20 + " conCopyText=" + conCopyTextX20 +
+      " noKeyGrid=" + noKeyGridInConSheetX20 + " twoBtns=" + twoBtnsX20 + " conBtnLabelsOk=" + conBtnLabelsOkX20 +
+      " padHasKeepSheet=" + padHasKeepSheetX20 + " padHasForceSend=" + padHasForceSendX20 +
       " keepSheetEnabledBefore=" + keepSheetEnabledBeforeX20 +
       " keepSheetDisabledMidFlight=" + keepSheetDisabledMidFlightX20 +
-      " forceSendDisabledMidFlight=" + forceSendDisabledMidFlightX20 +
+      " forceSendDisabledMidFlight=" + forceSendDisabledMidFlightX20 + " midFlightCopyOk=" + midFlightCopyOkX20 +
       " entrySurvivedRace=" + entrySurvivedRaceX20 +
       " sentHoles=" + JSON.stringify(sentHolesX20) + " heldSeq=" + heldSeqX20 +
-      " forceSendBody=" + JSON.stringify(forceSendBodyX20) + " padText=" + padTextX20.slice(0, 200));
+      " forceSendBody=" + JSON.stringify(forceSendBodyX20) +
+      " noPostForHole5=" + noPostForHole5X20 + " heldBeforeKeep=" + heldBeforeKeepX20 + " keepCopyOk=" + keepCopyOkX20 +
+      " entryGoneAfterKeep=" + entryGoneAfterKeepX20 + " cellReverted=" + cellRevertedX20 +
+      " sheetClosedAfterKeep=" + sheetClosedAfterKeepX20);
 }
 
 {
@@ -3078,20 +3320,20 @@ async function cellSettledOk(doc, hole) {
   const domX21 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX21);
   const docX21 = await openScorer(domX21, { noSheet: true });
   docX21.querySelector('.sc-cell[data-hole="9"]').click();        // hole 9, par 5
-  await until(() => !docX21.querySelector("#scPad")?.hidden);
-  docX21.querySelector('#scPad .sc-num[data-score="5"]').click();
+  await until(() => !docX21.querySelector("#scSheet")?.hidden);
+  docX21.querySelector('#scSheet .sc-key[data-score="5"]').click();
   await until(() => docX21.querySelector('.sc-cell[data-hole="9"]')?.classList.contains("sc-rejected"));
   const cellX21 = docX21.querySelector('.sc-cell[data-hole="9"]');
   const cellVerdictOkX21 = (cellX21?.getAttribute("title") || "").includes("team not in roster");
   docX21.querySelector('.sc-cell[data-hole="9"]').click();        // reopen -> rejected pad
   await until(() => !!docX21.querySelector("#scPadRetry"));
-  const padVerdictOkX21 = /team not in roster/.test(docX21.querySelector("#scPad")?.textContent || "");
-  const noEscalateYetX21 = !/text Riley/i.test(docX21.querySelector("#scPad")?.textContent || "");
+  const padVerdictOkX21 = /team not in roster/.test(docX21.querySelector("#scSheet")?.textContent || "");
+  const noEscalateYetX21 = !/text Riley/i.test(docX21.querySelector("#scSheet")?.textContent || "");
   docX21.querySelector("#scPadRetry").click();                    // manual retry #1 — same seq, still rejected
   await until(() => docX21.querySelector('.sc-cell[data-hole="9"]')?.classList.contains("sc-rejected"));
   docX21.querySelector("#scPadRetry").click();                    // manual retry #2
-  await until(() => /text Riley/i.test(docX21.querySelector("#scPad")?.textContent || ""));
-  const escalateOkX21 = /text Riley/i.test(docX21.querySelector("#scPad")?.textContent || "");
+  await until(() => /text Riley/i.test(docX21.querySelector("#scSheet")?.textContent || ""));
+  const escalateOkX21 = /text Riley/i.test(docX21.querySelector("#scSheet")?.textContent || "");
   domX21.window.close();
 
   // Carried requirement (Task 4's review): when a drain hits {kind:"config"}
@@ -3107,8 +3349,8 @@ async function cellSettledOk(doc, hole) {
   const domX21b = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX21b);
   const docX21b = await openScorer(domX21b, { noSheet: true });
   docX21b.querySelector('.sc-cell[data-hole="10"]').click();      // hole 10, par 4
-  await until(() => !docX21b.querySelector("#scPad")?.hidden);
-  docX21b.querySelector('#scPad .sc-num[data-score="4"]').click();
+  await until(() => !docX21b.querySelector("#scSheet")?.hidden);
+  docX21b.querySelector('#scSheet .sc-key[data-score="4"]').click();
   await until(() => /scoring endpoint not reachable/i.test(docX21b.querySelector("#scHeader")?.textContent || ""));
   const bannerTextX21b = docX21b.querySelector("#scHeader")?.textContent || "";
   const bannerOkX21b = /scoring endpoint not reachable/i.test(bannerTextX21b);
@@ -3134,8 +3376,8 @@ async function cellSettledOk(doc, hole) {
   const docX21c = await openScorer(domX21c, { noSheet: true });
   docX21c.querySelector("#scRound").click();                      // spring to the OTHER round for one submission
   docX21c.querySelector('.sc-cell[data-hole="6"]').click();        // hole 6, par 4
-  await until(() => !docX21c.querySelector("#scPad")?.hidden);
-  docX21c.querySelector('#scPad .sc-num[data-score="4"]').click();
+  await until(() => !docX21c.querySelector("#scSheet")?.hidden);
+  docX21c.querySelector('#scSheet .sc-key[data-score="4"]').click();
   await until(() => /rejected — text Riley/i.test(docX21c.querySelector("#scCard")?.textContent || ""));
   const oldRoundLineOkX21c = /rejected — text Riley/i.test(
     [...docX21c.querySelectorAll(".sc-old-round")].map(e => e.textContent).join(" "));
@@ -3179,8 +3421,8 @@ async function cellSettledOk(doc, hole) {
   const domX22 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX22);
   const docX22 = await openScorer(domX22, { noSheet: true });
   docX22.querySelector('.sc-cell[data-hole="11"]').click();       // hole 11, par 5
-  await until(() => !docX22.querySelector("#scPad")?.hidden);
-  docX22.querySelector('#scPad .sc-num[data-score="5"]').click();
+  await until(() => !docX22.querySelector("#scSheet")?.hidden);
+  docX22.querySelector('#scSheet .sc-key[data-score="5"]').click();
   await until(() => attemptsX22 >= 1);
   await until(() => docX22.querySelector('.sc-cell[data-hole="11"]')?.classList.contains("sc-queued"));
   domX22.window.dispatchEvent(new domX22.window.Event("online"));
@@ -3315,12 +3557,12 @@ async function cellSettledOk(doc, hole) {
   };
   Object.defineProperty(domX23.window, "localStorage", { value: deadStorageX23, configurable: true });
   docX23.querySelector('.sc-cell[data-hole="12"]').click();       // hole 12, par 3
-  await until(() => !docX23.querySelector("#scPad")?.hidden);
-  docX23.querySelector('#scPad .sc-num[data-score="3"]').click();
-  await until(() => docX23.querySelector('.sc-cell[data-hole="12"] b')?.textContent === "3");
+  await until(() => !docX23.querySelector("#scSheet")?.hidden);
+  docX23.querySelector('#scSheet .sc-key[data-score="3"]').click();
+  await until(() => docX23.querySelector('.sc-cell[data-hole="12"] .sc-score')?.textContent === "3");
   await settle(300); // let the deferred drain (and its own scStore attempts against dead storage) run through
   const cellX23 = docX23.querySelector('.sc-cell[data-hole="12"]');
-  const cellOkX23 = cellX23?.querySelector("b")?.textContent === "3";
+  const cellOkX23 = cellX23?.querySelector(".sc-score")?.textContent === "3";
   const headerOkX23 = /can't remember sends/i.test(docX23.querySelector("#scHeader")?.textContent || "");
   const noErrorsX23 = domX23.pageErrors.length === 0;
   check("X23: storage-dead degrade — makeDom variant where localStorage.setItem throws: tap still updates the cell in-memory and the header shows the 'can't remember sends' copy; no uncaught errors",
@@ -3364,8 +3606,8 @@ async function cellSettledOk(doc, hole) {
   const domX24 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX24);
   const docX24 = await openScorer(domX24);
   await until(() => /Round 2/.test(docX24.querySelector("#scRound")?.textContent || ""));
-  const sheetVal = h => docX24.querySelector('.sc-cell[data-hole="' + h + '"] b')?.textContent;
-  const isSheet = h => !!docX24.querySelector('.sc-cell[data-hole="' + h + '"]')?.classList.contains("sc-sheet");
+  const sheetVal = h => docX24.querySelector('.sc-cell[data-hole="' + h + '"] .sc-score')?.textContent;
+  const isSheet = h => !!docX24.querySelector('.sc-cell[data-hole="' + h + '"]')?.classList.contains("sc-onsheet");
   const expectedX24 = ["4", "4", "3", "5", "3", "4"];
   const beforeValsX24 = [1, 2, 3, 4, 5, 6].map(sheetVal);
   const beforeClassesX24 = [1, 2, 3, 4, 5, 6].every(isSheet);
@@ -3424,12 +3666,12 @@ async function cellSettledOk(doc, hole) {
   // Tap two FRESH holes (9, 10 — blank on Tex's r2 sheet row) while
   // offline: they queue locally but never reach the sheet.
   docX25.querySelector('.sc-cell[data-hole="9"]').click();
-  await until(() => !docX25.querySelector("#scPad")?.hidden);
-  docX25.querySelector('#scPad .sc-num[data-score="4"]').click();
+  await until(() => !docX25.querySelector("#scSheet")?.hidden);
+  docX25.querySelector('#scSheet .sc-key[data-score="4"]').click();
   await until(() => docX25.querySelector('.sc-cell[data-hole="9"]')?.classList.contains("sc-queued"));
   docX25.querySelector('.sc-cell[data-hole="10"]').click();
-  await until(() => !docX25.querySelector("#scPad")?.hidden);
-  docX25.querySelector('#scPad .sc-num[data-score="4"]').click();
+  await until(() => !docX25.querySelector("#scSheet")?.hidden);
+  docX25.querySelector('#scSheet .sc-key[data-score="4"]').click();
   await until(() => docX25.querySelector('.sc-cell[data-hole="10"]')?.classList.contains("sc-queued"));
 
   const pendingTextX25 = docX25.querySelector(".sc-glance-pending")?.textContent || "";
@@ -3477,13 +3719,16 @@ async function cellSettledOk(doc, hole) {
 }
 
 {
-  // X26: render boundary. (a) open pad(7), start typing an "Other" value,
+  // X26: render boundary. (a) open pad(7), open the "Other" overflow row,
   // then run the SAME path the 60s auto-refresh timer uses (window.load()
   // — a plain top-level `function load(){}` declaration, which DOES become
   // a window property in a classic script, unlike scDrainTimer's `let`, per
   // the precedent Task 5 already established) — the pad must still be open
-  // on hole 7 and the in-progress Other value must survive a GENUINE DOM
-  // rebuild (asserted via node identity, not just a leftover value). (b)
+  // on hole 7 and the overflow row must still be open afterward too (rev 3,
+  // task 2 pinned resolution: STATE.scPadOtherVal's free-text-input echo is
+  // retired — the SAME refresh-survival protection this test always proved
+  // now runs through STATE.scPadOtherOpen instead, asserted via node
+  // identity on the numrow container, not just a leftover value). (b)
   // separately, the boundary must also protect #scConfirm: a captain
   // reached via the PICKER (no hash team — scShowConfirm called directly
   // from the pick button, nothing persisted) must not be bounced back to
@@ -3493,24 +3738,23 @@ async function cellSettledOk(doc, hole) {
   const domX26 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX26 = await openScorer(domX26, { noSheet: true });
   docX26.querySelector('.sc-cell[data-hole="7"]').click();
-  await until(() => (docX26.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 7"));
+  await until(() => (docX26.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 7"));
   docX26.querySelector("#scPadOtherBtn").click();
-  await until(() => !!docX26.querySelector("#scPadOtherInput"));
-  const inputBeforeX26 = docX26.querySelector("#scPadOtherInput");
-  inputBeforeX26.value = "9";
-  inputBeforeX26.dispatchEvent(new domX26.window.Event("input", { bubbles: true }));
+  await until(() => docX26.querySelector(".sc-numrow")?.classList.contains("on"));
+  const numrowBeforeX26 = docX26.querySelector(".sc-numrow");
 
   await domX26.window.load(); // the SAME path the 60s timer uses (setInterval(load, CONFIG.REFRESH_MS))
 
-  const padOpenAfterX26 = !docX26.querySelector("#scPad")?.hidden;
-  const holeStillX26 = (docX26.querySelector("#scPad .sc-pad-head")?.textContent || "").includes("Hole 7");
-  const inputAfterX26 = docX26.querySelector("#scPadOtherInput");
+  const padOpenAfterX26 = !docX26.querySelector("#scSheet")?.hidden;
+  const holeStillX26 = (docX26.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 7");
+  const numrowAfterX26 = docX26.querySelector(".sc-numrow");
   // Both layers: (1) the pad genuinely got torn down and rebuilt (a
   // DIFFERENT DOM node — proving this isn't just an untouched leftover),
-  // (2) the value re-hydrated from STATE, not carried by an accident of DOM
-  // survival.
-  const rebuiltX26 = !!inputAfterX26 && inputAfterX26 !== inputBeforeX26;
-  const otherSurvivedX26 = inputAfterX26?.value === "9";
+  // (2) the open state re-hydrated from STATE (STATE.scPadOtherOpen), not
+  // carried by an accident of DOM survival.
+  const rebuiltX26 = !!numrowAfterX26 && numrowAfterX26 !== numrowBeforeX26;
+  const otherSurvivedX26 = numrowAfterX26?.classList.contains("on") === true &&
+    numrowAfterX26.querySelectorAll(".sc-key[data-score]").length > 0;
   domX26.window.close();
 
   const domX26b = makeDom("#score", withScEndpoint());
@@ -3529,11 +3773,11 @@ async function cellSettledOk(doc, hole) {
   const sameTeamNamedX26b = /Duck/.test(confirmTextAfterX26b);
   domX26b.window.close();
 
-  check("X26: render boundary — a full load()/paint()/renderScorer() cycle (the 60s auto-refresh path) leaves pad(7) open on hole 7 with its in-progress Other value (9) surviving a genuine DOM rebuild (fresh node, STATE-backed); separately, a captain mid-decision on the identity confirm (reached via the picker, nothing persisted yet) is NOT bounced back to #scPicker by the same background cycle",
+  check("X26: render boundary — a full load()/paint()/renderScorer() cycle (the 60s auto-refresh path) leaves pad(7) open on hole 7 with its in-progress 'Other' overflow row still open, surviving a genuine DOM rebuild (fresh node, STATE-backed via STATE.scPadOtherOpen — rev 3 mechanism); separately, a captain mid-decision on the identity confirm (reached via the picker, nothing persisted yet) is NOT bounced back to #scPicker by the same background cycle",
     padOpenAfterX26 && holeStillX26 && rebuiltX26 && otherSurvivedX26 &&
       confirmStillUpX26b && pickerStillHiddenX26b && sameTeamNamedX26b,
     "padOpen=" + padOpenAfterX26 + " holeStill=" + holeStillX26 + " rebuilt=" + rebuiltX26 +
-      " otherSurvived=" + otherSurvivedX26 + " inputAfterVal=" + inputAfterX26?.value +
+      " otherSurvived=" + otherSurvivedX26 + " numrowAfterClass=" + numrowAfterX26?.className +
       " confirmTextBefore=" + confirmTextBeforeX26b.slice(0, 80) + " confirmTextAfter=" + confirmTextAfterX26b.slice(0, 80) +
       " confirmStillUp=" + confirmStillUpX26b + " pickerStillHidden=" + pickerStillHiddenX26b);
 }
@@ -3572,6 +3816,318 @@ async function cellSettledOk(doc, hole) {
   check("X28: SC-PUBBTN — config.js's SHEET_EDIT_URL value is \"\" (key preserved), the live sheet's document id (16Co2b...) is nowhere in the file, and no live spreadsheet edit URL appears under any key",
     valueCleared && noLiveId && noLiveEditUrl,
     "valueCleared=" + valueCleared + " noLiveId=" + noLiveId + " noLiveEditUrl=" + noLiveEditUrl);
+}
+
+/* ---------------------------------------------------------------------
+   X29-X31: sticky header — honest tallies, next-hint, always-reachable
+   switch (spec §18 rev 3, SC-TALLY-HONEST/SC-NEXT-HINT/header — task 3).
+   --------------------------------------------------------------------- */
+{
+  // X29: SC-TALLY-HONEST — Out/In/Total/To-par tiles all derive from ONE
+  // per-hole scCellState() walk (scTallyHTML in index.html); a conflicted
+  // hole counts toward NEITHER Out/In/Total nor the par sum behind To-par,
+  // on EITHER its sheet number or its phone number. Real SC-DERIVE merge
+  // active (no noSheet stub) — Duck's r2 sheet fixture (fixtures/scores.csv)
+  // is fully populated, so every OTHER hole renders real "sheet" state.
+  // Hole 9 (par 5, real sheet value 4) gets a planted journal entry scoring
+  // 8 — written directly via scStore (the SAME low-level seeding technique
+  // the C1/C1x journal tests already use), never through scJournalSave/the
+  // UI, so no send is ever attempted and there's no scConfigBroken banner
+  // risk. 8 is deliberately far from both the sheet's 4 AND hole 9's own
+  // par (5) — an implementation that wrongly counts the conflict via EITHER
+  // number would visibly wreck Out/Total/To-par/thru-N all at once, not
+  // just coincidentally match one of them.
+  const domX29 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docX29 = await openScorer(domX29); // real derivation, not noSheet — Duck r1 is ALSO fully populated, so round 2 is the active round (X16b's own established reasoning)
+  const seasonX29 = domX29.window.scorerSeason();
+  const roundX29 = domX29.window.scActiveRound();
+  const roundOkX29 = roundX29 === "2"; // sanity-check the precedent this test's fixture arithmetic depends on
+  const keyX29 = "gfy-scorer:" + seasonX29 + ":duck"; // nkey("Duck") === "duck"
+  const entryKeyX29 = domX29.window.scEntryKeyOf(roundX29, 9);
+  domX29.window.scStore(keyX29, root => {
+    root.seq = (root.seq || 0) + 1;
+    root.entries[entryKeyX29] = { round: roundX29, hole: 9, score: 8, seq: root.seq,
+      state: "queued", verdict: null, ts: Date.now(), retries: 0, override: false };
+  });
+  domX29.window.renderScCard();
+  await until(() => docX29.querySelector('.sc-cell[data-hole="9"]')?.classList.contains("sc-conflict"));
+
+  // Fixture arithmetic, computed HERE from the raw fixture files (never
+  // trusted from the app under test) — fixtures/scores.csv's Duck r2 h1-h18
+  // row and fixtures/course.csv's par column, hole 9 excluded (the planted
+  // conflict):
+  const R2 = [4, 4, 3, 5, 3, 4, 3, 4, 4, 4, 5, 4, 5, 4, 5, 3, 5, 5];   // hole 1..18
+  const PAR = [4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 5, 3, 4, 4, 4, 3, 5, 4];  // hole 1..18
+  let outSum = 0, inSum = 0, outPar = 0, inPar = 0, thruExpected = 0;
+  for (let h = 1; h <= 18; h++) {
+    if (h === 9) continue; // the planted conflict — absent from BOTH sides
+    const score = R2[h - 1], par = PAR[h - 1];
+    thruExpected++;
+    if (h <= 9) { outSum += score; outPar += par; } else { inSum += score; inPar += par; }
+  }
+  const totalExpected = outSum + inSum;
+  const relExpected = totalExpected - (outPar + inPar);
+  const toParExpected = relExpected === 0 ? "E" : (relExpected > 0 ? "+" : "") + relExpected;
+
+  const tallyElX29 = docX29.querySelector("#scTally");
+  const tilesX29 = [...(tallyElX29?.querySelectorAll(".sc-tile") || [])];
+  const tileV = i => tilesX29[i]?.querySelector(".sc-tile-v")?.textContent.trim();
+  const outOkX29 = tileV(0) === String(outSum);
+  const inOkX29 = tileV(1) === String(inSum);
+  const totalOkX29 = tileV(2) === String(totalExpected);
+  const toParOkX29 = tileV(3) === toParExpected;
+  const parLabelX29 = tilesX29[3]?.querySelector(".sc-tile-k")?.textContent || "";
+  const thruRegexOkX29 = /thru \d+/.test(parLabelX29);
+  const thruExactOkX29 = new RegExp("thru " + thruExpected + "\\b").test(parLabelX29);
+  const modeOkX29 = tallyElX29?.getAttribute("data-mode") === "topar";
+  // Hole 9's own conflict cell must show BOTH numbers (SHEET·MINE) — proves
+  // the exclusion is a TALLY-only rule, not the cell silently losing its own
+  // conflict truth.
+  const conflictCellScoreX29 = docX29.querySelector('.sc-cell[data-hole="9"] .sc-score')?.textContent;
+  const cellShowsBothX29 = conflictCellScoreX29 === "4·8";
+
+  domX29.window.close();
+
+  // Structural, source-level check (stated honestly as such — the actual
+  // sticky-range PROOF lives in a real-browser measurement harness outside
+  // this suite, per fix-round-1's report: jsdom does no layout at all, so
+  // it cannot observe whether position:sticky has any real travel room —
+  // only that the declaration is textually present). Fix round 1 (review
+  // CRITICAL): #scHeader had no CSS rule at all, so its box height equalled
+  // its sticky child's own height (zero slack — the child unstuck almost
+  // immediately and scrolled away with the page, measured directly:
+  // getBoundingClientRect().top went from 52 to roughly -200 after a full
+  // scroll). `#scHeader{display:contents}` removes it from the render tree
+  // as a box, making .sc-top's containing block .wrap instead — spanning
+  // the whole scrollable score view — confirmed fixed in the SAME harness
+  // (top stayed exactly 52 across the full scroll range, banner present or
+  // not). See task-3-report.md's fix-round-1 section for the harness
+  // command + full before/after measurements.
+  const scHeaderDisplayContentsX29 = /#scHeader\{[^}]*display:\s*contents/.test(html);
+
+  check("X29: SC-TALLY-HONEST — Out/In/Total/To-par all computed from ONE scCellState() walk over Duck's real r2 fixture, with hole 9's planted sheet(4)/phone(8) conflict excluded from every tally number (fixture-derived expectations: Out=" + outSum + " In=" + inSum + " Total=" + totalExpected + " toPar=" + toParExpected + " thru=" + thruExpected + "); to-par tile label matches /thru \\d+/ AND the exact count; data-mode stays 'topar' (full course fixture); the conflicted cell itself still shows both numbers (4·8); STRUCTURAL (source-check only — real sticky-range proof is a real-browser harness, see task-3-report.md fix round 1): #scHeader{display:contents} is present in the source, so .sc-top's containing block is .wrap (spans the whole scrollable view) rather than a zero-slack #scHeader box",
+    roundOkX29 && outOkX29 && inOkX29 && totalOkX29 && toParOkX29 && thruRegexOkX29 && thruExactOkX29 && modeOkX29 && cellShowsBothX29 &&
+      scHeaderDisplayContentsX29,
+    "roundOk=" + roundOkX29 + "(was " + roundX29 + ") out=" + tileV(0) + "(want " + outSum + ") in=" + tileV(1) + "(want " + inSum +
+      ") total=" + tileV(2) + "(want " + totalExpected + ") toPar=" + tileV(3) + "(want " + toParExpected + ") parLabel=" +
+      JSON.stringify(parLabelX29) + " mode=" + tallyElX29?.getAttribute("data-mode") + " conflictCellScore=" + conflictCellScoreX29 +
+      " scHeaderDisplayContents=" + scHeaderDisplayContentsX29);
+}
+
+{
+  // X30: SC-NEXT-HINT — .sc-next lands on exactly one cell: the FIRST hole
+  // whose scCellState().kind==="empty" (scFirstEmptyHole(), index.html) —
+  // never a queued/sheet/conflict/rejected cell, and never more than one at
+  // once. Presentational only: no click-behavior assertion here (a
+  // .sc-next cell gets the SAME plain scPadOpen(h) every other empty cell
+  // already gets — nothing new to prove there).
+  const domX30 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docX30 = await openScorer(domX30, { noSheet: true }); // every hole starts "empty" — no real derivation, no journal entries yet
+  const nextCellsFreshX30 = [...docX30.querySelectorAll(".sc-cell.sc-next")];
+  const uniqueFreshX30 = nextCellsFreshX30.length === 1;
+  const firstHoleFreshX30 = nextCellsFreshX30[0]?.dataset.hole === "1";
+
+  // Fill holes 1-3 directly via scStore (same seeding technique as X29 — no
+  // network, no scJournalSave) and force a repaint: .sc-next must move to 4.
+  const seasonX30 = domX30.window.scorerSeason();
+  const roundX30 = domX30.window.scActiveRound();
+  const keyX30 = "gfy-scorer:" + seasonX30 + ":duck";
+  [1, 2, 3].forEach(h => {
+    const entryKey = domX30.window.scEntryKeyOf(roundX30, h);
+    domX30.window.scStore(keyX30, root => {
+      root.seq = (root.seq || 0) + 1;
+      root.entries[entryKey] = { round: roundX30, hole: h, score: 4, seq: root.seq,
+        state: "ok", verdict: "applied", ts: Date.now(), retries: 0, override: false };
+    });
+  });
+  domX30.window.renderScCard();
+  const nextCellsFilledX30 = [...docX30.querySelectorAll(".sc-cell.sc-next")];
+  const uniqueFilledX30 = nextCellsFilledX30.length === 1;
+  const movedToFourX30 = nextCellsFilledX30[0]?.dataset.hole === "4";
+  const filledCellsNotNextX30 = [1, 2, 3].every(h =>
+    !docX30.querySelector('.sc-cell[data-hole="' + h + '"]')?.classList.contains("sc-next"));
+
+  domX30.window.close();
+
+  // Structural, source-level check (stated honestly as such — this proves
+  // the CSS SHAPE, not any runtime media-query evaluation, which jsdom
+  // can't do anyway): the .sc-next BREATHE ANIMATION must live textually
+  // inside a `@media (prefers-reduced-motion: no-preference)` block —
+  // never unconditional, never gated only by a JS check (there is none
+  // anywhere in the file — CSS-only, matching the prototype). Brace-counts
+  // the block (a naive lazy regex would truncate at the nested @keyframes'
+  // own first `}`) and confirms the ONE '.sc-next{...animation:...}' rule
+  // in the WHOLE file is the one found inside it — so moving the animation
+  // outside the media query, or deleting the gate entirely, fails this the
+  // same way a missing gate would.
+  const mqNeedle = "@media (prefers-reduced-motion: no-preference)";
+  const mqIdx = html.indexOf(mqNeedle);
+  let mqBlock = "";
+  if (mqIdx >= 0) {
+    const openIdx = html.indexOf("{", mqIdx);
+    let depth = 0, i = openIdx;
+    for (; i < html.length; i++) {
+      if (html[i] === "{") depth++;
+      else if (html[i] === "}") { depth--; if (depth === 0) break; }
+    }
+    mqBlock = html.slice(openIdx, i + 1);
+  }
+  const animRe = /\.sc-next[^{}]*\{[^{}]*animation\s*:/;
+  const wholeFileAnimCountX30 = (html.match(new RegExp(animRe.source, "g")) || []).length;
+  const blockAnimCountX30 = (mqBlock.match(new RegExp(animRe.source, "g")) || []).length;
+  const hasKeyframesInBlockX30 = /@keyframes/.test(mqBlock);
+  const structuralOkX30 = mqIdx >= 0 && wholeFileAnimCountX30 === 1 && blockAnimCountX30 === 1 && hasKeyframesInBlockX30;
+
+  check("X30: SC-NEXT-HINT — exactly one .sc-next cell, always the FIRST hole whose scCellState().kind==='empty' (hole 1 on a fresh board; moves to hole 4 once holes 1-3 are filled via direct journal writes, and 1-3 themselves never carry .sc-next); reduced-motion is CSS-only (structural check, stated honestly as such): the ONE '.sc-next{...animation:...}' rule in the whole file lives inside `@media (prefers-reduced-motion: no-preference)` alongside its @keyframes, found via brace-matching rather than a lazy-regex guess",
+    uniqueFreshX30 && firstHoleFreshX30 && uniqueFilledX30 && movedToFourX30 && filledCellsNotNextX30 && structuralOkX30,
+    "uniqueFresh=" + uniqueFreshX30 + " firstFresh=" + nextCellsFreshX30[0]?.dataset.hole +
+      " uniqueFilled=" + uniqueFilledX30 + " movedTo=" + nextCellsFilledX30[0]?.dataset.hole +
+      " filledCellsNotNext=" + filledCellsNotNextX30 +
+      " mqFound=" + (mqIdx >= 0) + " wholeFileAnimCount=" + wholeFileAnimCountX30 + " blockAnimCount=" + blockAnimCountX30 +
+      " hasKeyframesInBlock=" + hasKeyframesInBlockX30);
+}
+
+{
+  // X31: #scSwitch — always-reachable now (unlike rev 2's confirm-only
+  // #scNotYou link), wired to the SAME scShowPicker() the pre-confirm flow
+  // already used. Any confirmed-state dom works, per the brief — Duck's
+  // noSheet flow (openScorer's default confirm-then-cells wait) is the
+  // simplest one already established in this suite; Duck is genuinely
+  // {confirmed:true}-persisted by this point (openScorer's own confirm tap),
+  // which is exactly the precondition the fix-round-1 bug needed (a
+  // REMEMBERED/hash-matched team, not a fresh unconfirmed one).
+  // Fix round 1 (review Important #2, extended — same X-number, no new
+  // check()): #scSwitch used to (a) leave the previous team's #scCard/
+  // #scGlance/#scSheetHost fully visible UNDERNEATH the picker, and (b) get
+  // silently closed by the very next renderScorer() repaint (the 60s
+  // paint() cycle, worst case, possibly mid-tap) — location.hash still
+  // names Duck the whole time (#scSwitch never changes it), so the ONLY
+  // guard renderScorer() honored (scConfirmPending) never even applied:
+  // scConfirmedTeam()/hashTeam routing fired first and bounced straight
+  // back to scShowCard(). Both are asserted directly below, then the normal
+  // pick-a-team flow is proven to still resume correctly afterward, and the
+  // guard is proven not to strand the app once a team IS picked.
+  const domX31 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docX31 = await openScorer(domX31, { noSheet: true });
+  const pickerHiddenBeforeX31 = docX31.querySelector("#scPicker")?.hidden !== false;
+  const switchBtnX31 = docX31.querySelector("#scSwitch");
+  const switchIsButtonX31 = switchBtnX31?.tagName === "BUTTON"; // never an <a> — see X21b's #scHeader-a note in index.html
+  switchBtnX31?.click();
+  const pickerVisibleX31 = docX31.querySelector("#scPicker")?.hidden === false;
+  const teamBtnsX31 = [...docX31.querySelectorAll("#scPicker .sc-pick")];
+  const hasTeamBtnsX31 = teamBtnsX31.length > 0;
+  const hasDuckBtnX31 = teamBtnsX31.some(b => /Duck/.test(b.textContent || ""));
+
+  // (a) the previous team's card/rank-panel must not be visible underneath.
+  const cardHiddenAfterSwitchX31 = docX31.querySelector("#scCard")?.hidden === true;
+  const cardEmptyAfterSwitchX31 = (docX31.querySelector("#scCard")?.innerHTML || "").trim() === "";
+  const glanceEmptyAfterSwitchX31 = (docX31.querySelector("#scGlance")?.innerHTML || "").trim() === "";
+
+  // (b) repaint survival — the EXACT failure mode: force the same
+  // renderScorer() call the 60s paint() cycle (and every hashchange) makes,
+  // with location.hash STILL naming the already-confirmed Duck the whole
+  // time. Pre-fix this silently closed the picker and re-showed Duck's card.
+  domX31.window.renderScorer();
+  const pickerSurvivesRepaintX31 = docX31.querySelector("#scPicker")?.hidden === false;
+  const teamBtnsSurviveRepaintX31 = docX31.querySelectorAll("#scPicker .sc-pick").length > 0;
+  const cardStillHiddenAfterRepaintX31 = docX31.querySelector("#scCard")?.hidden === true;
+
+  // Fix wave item 1 (picker guard bypass, cross-task lifecycle gap — same
+  // X-number, no new check() per the instruction): renderScorer()'s own
+  // scPickerOpen check only guards ROUTING — but scDrain (the 20s poll,
+  // still running the whole time the picker is open, since the picker is
+  // part of the SAME #score view) calls renderScCard() DIRECTLY on every
+  // entry state flip, a path renderScorer()'s guard never sees at all.
+  // Simulate that EXACT drain-driven repaint: picker still open, hash still
+  // naming the already-confirmed team, call renderScCard() directly (not
+  // renderScorer()) and assert the picker survives with no header/glance
+  // chrome resurrecting underneath/around it.
+  domX31.window.renderScCard();
+  const pickerSurvivesDrainRepaintX31 = docX31.querySelector("#scPicker")?.hidden === false;
+  const teamBtnsSurviveDrainRepaintX31 = docX31.querySelectorAll("#scPicker .sc-pick").length > 0;
+  const cardStillHiddenAfterDrainRepaintX31 = docX31.querySelector("#scCard")?.hidden === true;
+  const cardStillEmptyAfterDrainRepaintX31 = (docX31.querySelector("#scCard")?.innerHTML || "").trim() === "";
+  const headerStillEmptyAfterDrainRepaintX31 = (docX31.querySelector("#scHeader")?.innerHTML || "").trim() === "";
+  const glanceStillEmptyAfterDrainRepaintX31 = (docX31.querySelector("#scGlance")?.innerHTML || "").trim() === "";
+
+  // Complete a team pick — the normal flow must still fully resume:
+  // picker -> confirm -> card, exactly like the pre-confirm path.
+  [...docX31.querySelectorAll("#scPicker .sc-pick")].find(b => /Duck/.test(b.textContent || "")).click();
+  const confirmVisibleAfterPickX31 = docX31.querySelector("#scConfirm")?.hidden === false;
+  docX31.querySelector("#scConfirmBtn")?.click();
+  const cardVisibleAfterConfirmX31 = docX31.querySelector("#scCard")?.hidden !== true &&
+    docX31.querySelectorAll("#scCard .sc-cell").length > 0;
+  const pickerHiddenAfterConfirmX31 = docX31.querySelector("#scPicker")?.hidden === true;
+
+  // Guard must not strand the app: one more forced repaint, now that a team
+  // IS confirmed and the picker is closed again, must NOT re-show the
+  // picker (STATE.scPickerOpen was cleared in scShowConfirm/scShowCard).
+  domX31.window.renderScorer();
+  const stillOnCardAfterFinalRepaintX31 = docX31.querySelector("#scCard")?.hidden !== true &&
+    docX31.querySelector("#scPicker")?.hidden === true;
+
+  domX31.window.close();
+  check("X31: #scSwitch — a <button> (never an <a>), click opens #scPicker (visible, hidden=false) with real team buttons (.sc-pick, including Duck), wired to the existing scShowPicker() — no new picker logic; the previous team's #scCard/#scGlance are hidden+cleared underneath (not layered under the picker); a forced renderScorer() (the exact 60s-paint()/hashchange repaint failure mode, with location.hash STILL naming the already-confirmed team) does NOT silently close the picker or re-show the old card; a DIRECT renderScCard() call (the exact scDrain repaint path, which bypasses renderScorer()'s routing guard entirely) ALSO does not close the picker, re-show the old card, or resurrect the old team's #scHeader/#scGlance chrome around it (fix wave item 1); completing a team pick still resumes the normal picker->confirm->card flow, and a further forced repaint afterward stays on the card (guard doesn't strand the app once a team is confirmed)",
+    pickerHiddenBeforeX31 && switchIsButtonX31 && pickerVisibleX31 && hasTeamBtnsX31 && hasDuckBtnX31 &&
+      cardHiddenAfterSwitchX31 && cardEmptyAfterSwitchX31 && glanceEmptyAfterSwitchX31 &&
+      pickerSurvivesRepaintX31 && teamBtnsSurviveRepaintX31 && cardStillHiddenAfterRepaintX31 &&
+      pickerSurvivesDrainRepaintX31 && teamBtnsSurviveDrainRepaintX31 && cardStillHiddenAfterDrainRepaintX31 &&
+      cardStillEmptyAfterDrainRepaintX31 && headerStillEmptyAfterDrainRepaintX31 && glanceStillEmptyAfterDrainRepaintX31 &&
+      confirmVisibleAfterPickX31 && cardVisibleAfterConfirmX31 && pickerHiddenAfterConfirmX31 &&
+      stillOnCardAfterFinalRepaintX31,
+    "hiddenBefore=" + pickerHiddenBeforeX31 + " isButton=" + switchIsButtonX31 + " visibleAfter=" + pickerVisibleX31 +
+      " teamBtnCount=" + teamBtnsX31.length + " hasDuck=" + hasDuckBtnX31 +
+      " cardHiddenAfterSwitch=" + cardHiddenAfterSwitchX31 + " cardEmptyAfterSwitch=" + cardEmptyAfterSwitchX31 +
+      " glanceEmptyAfterSwitch=" + glanceEmptyAfterSwitchX31 +
+      " pickerSurvivesRepaint=" + pickerSurvivesRepaintX31 + " teamBtnsSurviveRepaint=" + teamBtnsSurviveRepaintX31 +
+      " cardStillHiddenAfterRepaint=" + cardStillHiddenAfterRepaintX31 +
+      " pickerSurvivesDrainRepaint=" + pickerSurvivesDrainRepaintX31 + " teamBtnsSurviveDrainRepaint=" + teamBtnsSurviveDrainRepaintX31 +
+      " cardStillHiddenAfterDrainRepaint=" + cardStillHiddenAfterDrainRepaintX31 +
+      " cardStillEmptyAfterDrainRepaint=" + cardStillEmptyAfterDrainRepaintX31 +
+      " headerStillEmptyAfterDrainRepaint=" + headerStillEmptyAfterDrainRepaintX31 +
+      " glanceStillEmptyAfterDrainRepaint=" + glanceStillEmptyAfterDrainRepaintX31 +
+      " confirmVisibleAfterPick=" + confirmVisibleAfterPickX31 + " cardVisibleAfterConfirm=" + cardVisibleAfterConfirmX31 +
+      " pickerHiddenAfterConfirm=" + pickerHiddenAfterConfirmX31 +
+      " stillOnCardAfterFinalRepaint=" + stillOnCardAfterFinalRepaintX31);
+}
+
+{
+  // X32 (rev 3, SC-BOARD-BTN): #boardScoreBtn on the Leaderboard is gated
+  // STRICTLY on the persisted scorer identity — scConfirmedTeam()'s own
+  // localStorage read (the SAME scKey/{confirmed:true} shape scShowConfirm's
+  // real confirm-tap click handler already writes; read-only here, no new
+  // storage path). A fresh dom with no such key must render nothing at all.
+  const domX32 = makeDom("#board", withScEndpoint());
+  const docX32 = domX32.window.document;
+  await until(() => docX32.querySelectorAll("#lbBody .lb-row").length > 0);
+  const noBtnBeforeX32 = !docX32.querySelector("#boardScoreBtn");
+  const yearsPresentBeforeX32 = !!docX32.querySelector("#years"); // sanity: the row it's meant to sit beside is actually there
+
+  // Plant the SAME {confirmed:true} shape scShowConfirm's real write
+  // produces, hand-constructed exactly like journalKeyX20/entryKeyX20 above
+  // (scKey/nkey are `const`-bound, never window properties — scorerSeason()
+  // IS a plain top-level `function`, so it's used for the season half; team
+  // key literal "duck" is nkey("Duck"), established elsewhere in this file).
+  const seasonX32 = domX32.window.scorerSeason();
+  domX32.window.localStorage.setItem("gfy-scorer:" + seasonX32 + ":duck", JSON.stringify({ confirmed: true }));
+  domX32.window.renderAll(); // the SAME function periodic reload already calls — no new render path
+  await until(() => !!docX32.querySelector("#boardScoreBtn"));
+  const btnX32 = docX32.querySelector("#boardScoreBtn");
+  const btnTextOkX32 = /Enter scores/.test(btnX32?.textContent || "") && /Duck/.test(btnX32?.textContent || "");
+  const btnHrefOkX32 = btnX32?.getAttribute("href") === "#score";
+  const btnBesideYearsX32 = btnX32?.closest(".sc-board-row")?.contains(docX32.querySelector("#years")) === true;
+
+  btnX32.click();
+  await until(() => docX32.querySelector('.view[data-view="score"]')?.hidden === false);
+  const scoreViewShownX32 = docX32.querySelector('.view[data-view="score"]')?.hidden === false &&
+    docX32.querySelector('.view[data-view="board"]')?.hidden === true;
+  domX32.window.close();
+
+  check("X32: SC-BOARD-BTN — #boardScoreBtn is absent on a fresh #board load with no persisted scorer identity; planting the SAME {confirmed:true} localStorage key scShowConfirm's real confirm-tap writes makes it appear beside the year picker (#years) reading 'Enter scores — Team Duck', href=\"#score\"; clicking it shows the score view (and hides the board)",
+    noBtnBeforeX32 && yearsPresentBeforeX32 && btnTextOkX32 && btnHrefOkX32 && btnBesideYearsX32 && scoreViewShownX32,
+    "noBtnBefore=" + noBtnBeforeX32 + " yearsPresentBefore=" + yearsPresentBeforeX32 +
+      " btnText=" + (btnX32?.textContent || "") + " btnHref=" + btnX32?.getAttribute("href") +
+      " btnBesideYears=" + btnBesideYearsX32 + " scoreViewShown=" + scoreViewShownX32);
 }
 
 /* ---------------------------------------------------------------------
