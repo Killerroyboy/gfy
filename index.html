@@ -414,30 +414,49 @@
     background:none;border:1px solid rgba(200,162,74,.4);padding:8px 16px;cursor:pointer}
   .sc-tally{font-size:15px;color:var(--sage);margin:0 0 16px;font-variant-numeric:tabular-nums}
   .sc-tally .sc-tally-lab{font-size:13px;letter-spacing:.06em;text-transform:uppercase;margin-left:6px}
-  .sc-nine{margin:0 0 18px}
-  .sc-lab{display:block;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--brass);margin:0 0 8px}
-  .sc-row{display:grid;grid-template-columns:repeat(9,1fr);gap:4px}
-  .sc-cell{min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:2px;background:var(--pine-2);border:1px solid rgba(200,162,74,.22);color:var(--bone);
-    font-family:var(--ui);cursor:pointer;padding:4px 2px}
-  .sc-cell b{font-family:var(--display);font-size:18px;font-variant-numeric:tabular-nums;font-weight:400}
-  .sc-cell span{font-size:13px;color:var(--sage)}
-  .sc-cell .sc-glyph{font-size:13px;line-height:1;font-style:normal}
-  .sc-cell.under b{color:var(--brass)}
-  .sc-cell.bogey b{color:var(--sage)}
-  .sc-cell.blowup b{color:var(--rust)}
-  /* Task 5 — SC-HONEST/SC-NOCLOBBER truth-state modifiers (combine with the
-     scoreClass ones above; conflict skips scoreClass entirely — ambiguous). */
+  /* Rev-3 UI wave, task 1 (SC-UI-V/SC-SKIN) — vertical Out|In card,
+     transcribed from tools/scorer-rev3-prototype.html's .card/.colhead/
+     .col/.cell/.hole-n/.hole-par/.score/.mark rules into .sc-`-prefixed
+     site equivalents, reusing the SITE's own --display/--ui tokens (no
+     second :root block — the prototype's is a standalone copy, not reused).
+     Functional text stays >=13px (never squint on the tee) — the prototype's
+     9.5-11px sub-labels are decorative per the spec pin and exempt; ONLY
+     the hole-par sub-line and the legend qualify. The prototype's 11px mark
+     glyph is bumped to 13px here because the mark IS functional (it's the
+     one non-color signal for SC-HONEST state — never color-only). */
+  .sc-cardgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;margin:0 0 4px}
+  .sc-colhead{font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--brass);padding:0 2px 8px}
+  .sc-col{display:flex;flex-direction:column;gap:6px}
+  .sc-cell{display:flex;align-items:center;gap:9px;width:100%;min-height:52px;padding:6px 10px;
+    background:var(--pine-2);border:1px solid rgba(200,162,74,.22);border-radius:13px;color:var(--bone);
+    font-family:var(--ui);cursor:pointer;text-align:left}
+  .sc-cell:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+  .sc-hole-n{font-family:var(--display);font-size:20px;width:24px;text-align:center;color:var(--bone);
+    font-variant-numeric:tabular-nums;flex:none}
+  .sc-hole-par{font-size:10px;letter-spacing:.08em;color:var(--sage);flex:1;line-height:1.3}
+  .sc-score{font-family:var(--display);font-size:22px;font-variant-numeric:tabular-nums;min-width:36px;
+    text-align:right;color:var(--bone)}
+  .sc-score .sc-dash{color:var(--sage);font-size:18px}
+  .sc-glyph{font-size:13px;line-height:1;font-style:normal;color:var(--sage)}
+  .sc-mark{flex:none;width:16px;font-size:13px;line-height:1;font-style:normal;text-align:center;color:var(--sage)}
+  .sc-cell.under .sc-score{color:var(--brass)}
+  .sc-cell.bogey .sc-score{color:var(--sage)}
+  .sc-cell.blowup .sc-score{color:var(--rust)}
+  /* SC-HONEST/SC-NOCLOBBER truth-state marks (rev 2's four states + conflict
+     + rejected, rev 3's dress only): ▮ on-sheet · ⇡ queued/sending ·
+     ▲ conflict · ! rejected — the class combines with the scoreClass ones
+     above (conflict/rejected skip scoreClass entirely — score is ambiguous
+     or unset). Never color-only: every state's .sc-mark also carries the
+     glyph TEXT, not just a border/background tint. */
+  .sc-cell.sc-onsheet{border-color:var(--brass)}
   .sc-cell.sc-queued{border-color:var(--brass-dim)}
-  .sc-cell.sc-sending{opacity:.65}
+  .sc-cell.sc-sending{border-style:dashed;border-color:var(--brass);opacity:.85}
+  .sc-cell.sc-sending .sc-mark{color:var(--brass)}
   .sc-cell.sc-rejected{border-color:var(--rust);background:rgba(176,112,94,.16)}
+  .sc-cell.sc-rejected .sc-mark{color:var(--rust)}
   .sc-cell.sc-conflict{border-color:var(--rust);background:rgba(176,112,94,.1)}
-  /* Review round 1 (C4): "on the sheet" had NO CSS rule at all — visually
-     indistinguishable from an empty cell save for the number itself. */
-  .sc-cell.sc-sheet{border-color:var(--brass)}
-  /* Review round 1 (C4): the ⇡/?/! state glyphs — never color-only, same
-     discipline as the existing score ▾/▴ glyph immediately below it. */
-  .sc-cell .sc-state-glyph{font-size:13px;line-height:1;font-style:normal;color:var(--sage)}
+  .sc-cell.sc-conflict .sc-score{color:var(--rust);font-size:17px;letter-spacing:.02em}
+  .sc-cell.sc-conflict .sc-mark{color:var(--rust)}
   .sc-old-round{font-size:13px;color:var(--sage);margin:0 0 10px}
   button.sc-old-round{display:block;width:100%;text-align:left;background:none;border:0;
     font:inherit;cursor:pointer;padding:0}
@@ -3022,6 +3041,18 @@ function scHolePar(hole){
   const row=(STATE.data.course||[]).find(r=>parseInt(r.hole,10)===hole);
   return row?posInt(row.par):null;
 }
+// Task 1 (rev 3, SC-UI-V) — the card's "NNN yds" sub-line needs the exact
+// same all-18-vs-per-hole degrade scHolePar already established: courseYards()
+// is all-or-nothing (one missing hole's row and the WHOLE map goes null),
+// which is right for anything that SUMS yardage but wrong for a per-cell
+// label on the other 17 holes that have perfectly good data. Mirrors
+// scHolePar's fallback exactly (same raw course row, same posInt guard).
+function scHoleYards(hole){
+  const yds=courseYards();
+  if(yds) return posInt(yds[hole]);
+  const row=(STATE.data.course||[]).find(r=>parseInt(r.hole,10)===hole);
+  return row?posInt(row.yards):null;
+}
 function scParLabel(delta){
   if(delta<=-2) return "Eagle";
   if(delta===-1) return "Birdie";
@@ -3604,58 +3635,76 @@ function scTallyHTML(){
   return `<p class="sc-tally" id="scTally" data-mode="strokes">${filled.length?strokes:"—"}`+
     `<span class="sc-tally-lab"> strokes thru ${filled.length}</span></p>`;
 }
+// Rev 3 (SC-UI-V/SC-SKIN, task 1): renders ONE horizontal row-cell inside
+// the vertical Out|In card — hole number, "Par N / NNN yds", score, mark —
+// wired to the SAME scCellState(hole) truth function rev 2 already
+// established (SC-HONEST/SC-NOCLOBBER unchanged; this is a render-shape and
+// class-name rename ONLY). C4 (review round 1, carried): every non-empty
+// state still carries a state MARK (▮/⇡/▲/!) AND a descriptive aria-label
+// phrase — never color-only. Class-name rename history: sc-sheet ->
+// sc-onsheet, the bare state glyph -> .sc-mark, ? -> ▲ (rev 3's own glyph
+// set; conflict's cell label also flips to SHEET·MINE order, matching the
+// spec's literal wording, vs. rev 2's MINE·SHEET).
 function scCellHTML(h){
   const st=scCellState(h);
   const par=scHolePar(h);
-  // C4 (review round 1): the queued/sending/conflict/rejected states were
-  // color-only (a CSS border/background tint), which (a) violates the
-  // never-color-only rule this same file already applies to over/under-par
-  // coloring, and (b) makes SC-HONEST unreadable in bright sunlight on a
-  // washed-out phone screen. Every non-empty, non-plain-"on the sheet"
-  // state now also carries a small state glyph AND a descriptive
-  // aria-label suffix (screen-reader parity with the visual glyph).
-  let label="–", extraCls="", scoreForColor=null, titleAttr="", stateGlyph="", ariaSuffix="";
+  const yds=scHoleYards(h);
+  let label=null, extraCls="", scoreForColor=null, titleAttr="", mark="", ariaState="";
   if(st.kind==="conflict"){
-    label=`${st.phoneVal}·${st.sheetVal}`;
+    label=`${st.sheetVal}·${st.phoneVal}`; // SHEET·MINE, per the spec's literal wording
     extraCls="sc-conflict";
-    stateGlyph="?";
-    ariaSuffix=", not on the sheet yet"; // I2: the conflict cell names the honest state, not just "conflict"
-    titleAttr=` title="not on the sheet yet"`;
+    mark="▲";
+    ariaState=", sheet differs — tap to resolve";
+    titleAttr=` title="sheet differs — tap to resolve"`;
   } else if(st.kind==="sheet"){
     label=String(st.value);
     scoreForColor=st.value;
-    extraCls="sc-sheet"; // no glyph needed (■ in the legend covers it) — CSS alone distinguishes it from empty
-    ariaSuffix=", on the sheet";
+    extraCls="sc-onsheet";
+    mark="▮";
+    ariaState=", on the sheet";
   } else if(st.kind==="journal"){
     label=String(st.score);
     scoreForColor=st.score;
-    if(st.state==="queued"||st.state==="sending"){
-      extraCls=st.state==="queued"?"sc-queued":"sc-sending";
-      stateGlyph="⇡";
-      ariaSuffix=", saved on phone";
+    if(st.state==="queued"){
+      extraCls="sc-queued"; mark="⇡"; ariaState=", saved on phone";
+    } else if(st.state==="sending"){
+      extraCls="sc-sending"; mark="⇡"; ariaState=", sending";
     } else if(st.state==="rejected"){
-      extraCls="sc-rejected";
-      stateGlyph="!";
-      ariaSuffix=", rejected";
+      extraCls="sc-rejected"; mark="!"; ariaState=", rejected — tap";
       titleAttr=` title="${esc(st.verdict||"")}"`;
     } else if(st.state==="ok"){
-      ariaSuffix=", saved on phone"; // transitional — the sheet hasn't caught up to this "ok" yet
+      ariaState=", saved on phone"; // transitional — the sheet hasn't caught up to this "ok" yet
     }
   }
   const scoreCls=(scoreForColor!=null&&par)?scoreClass(scoreForColor,par).trim():"";
-  // over/under is never color-only: a ▾/▴ glyph rides alongside the color class.
+  // Over/under is never color-only: a ▾/▴ glyph rides alongside the color
+  // class, as a SIBLING of .sc-score (never nested inside it) so anything
+  // reading .sc-score's textContent keeps seeing the bare score digits.
   const glyph=scoreCls==="under"?"▾":(scoreCls==="bogey"||scoreCls==="blowup")?"▴":"";
   const cls=[scoreCls,extraCls].filter(Boolean).join(" ");
-  return `<button type="button" class="sc-cell${cls?" "+cls:""}" data-hole="${h}" aria-label="Hole ${h}${ariaSuffix}"${titleAttr}>`+
-    `<b>${label}</b>`+
-    `${stateGlyph?`<i class="sc-state-glyph" aria-hidden="true">${stateGlyph}</i>`:""}`+
-    `<span>${h}</span>`+
-    `${glyph?`<i class="sc-glyph" aria-hidden="true">${glyph}</i>`:""}</button>`;
+  const scoreHTML=label!=null
+    ? `<span class="sc-score${scoreCls?" "+scoreCls:""}">${label}</span>${glyph?`<i class="sc-glyph" aria-hidden="true">${glyph}</i>`:""}`
+    : `<span class="sc-score"><span class="sc-dash">–</span></span>`;
+  const parHTML=`Par ${par||"—"}${yds?"<br>"+yds+" yds":""}`;
+  return `<button type="button" class="sc-cell${cls?" "+cls:""}" data-hole="${h}" `+
+    `aria-label="Hole ${h}, par ${par||"—"}${ariaState}"${titleAttr}>`+
+    `<span class="sc-hole-n">${h}</span>`+
+    `<span class="sc-hole-par">${parHTML}</span>`+
+    scoreHTML+
+    `<span class="sc-mark" aria-hidden="true">${mark}</span>`+
+    `</button>`;
 }
-function scNineHTML(a,b,lab){
+// Rev 3 (SC-UI-V): one Out|In column — a plain unclassed wrapper div (same
+// shape the prototype's own .card uses) holding a .sc-colhead label and a
+// .sc-col of 9 cells; .sc-cardgrid's 2-column grid places the two wrapper
+// divs side by side.
+function scColumnHTML(a,b,lab){
   const hs=HOLES.filter(h=>h>=a&&h<=b);
-  return `<div class="sc-nine"><span class="sc-lab">${lab}</span><div class="sc-row">`+
+  return `<div><div class="sc-colhead">${lab}</div><div class="sc-col">`+
     hs.map(scCellHTML).join("")+`</div></div>`;
+}
+function scCardGridHTML(){
+  return `<div class="sc-cardgrid">${scColumnHTML(1,9,"Out")}${scColumnHTML(10,18,"In")}</div>`;
 }
 function scPadHTML(){
   const hole=STATE.scPadHole;
@@ -3961,9 +4010,8 @@ function renderScCard(){
     `<div class="sc-round"><button type="button" id="scRound">Round ${esc(active)} · ${scDayAbbrev(active)}</button></div>`+
     scOldRoundSummaryHTML(active)+
     scTallyHTML()+
-    scNineHTML(1,9,"Out")+
-    scNineHTML(10,18,"In")+
-    `<div class="sc-legend">■ on the sheet · ⇡ saved on phone · ? sheet differs — tap · ! rejected — tap</div>`+
+    scCardGridHTML()+
+    `<div class="sc-legend">▮ on the sheet · ⇡ saved on phone · sending · ▲ sheet differs — tap to resolve · ! rejected — tap</div>`+
     scPadHTML();
   scWireCard();
   if(glance) glance.innerHTML=scGlanceHTML();

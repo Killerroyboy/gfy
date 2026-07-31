@@ -2344,16 +2344,31 @@ async function openScorer(dom, { noSheet = false } = {}) {
   return doc;
 }
 {
-  // X7: 18 sc-cell buttons, split 9/9 across two .sc-row containers, each aria-labeled "Hole N".
+  // X7 (rev 3, SC-UI-V): vertical Out|In card — #scCard > .sc-cardgrid holds
+  // exactly 2 .sc-col containers (9 button.sc-cell[data-hole] each, 18
+  // total); every cell carries .sc-hole-n (the hole face), .sc-hole-par
+  // (matching /Par \d/ AND /yds/ — fixtures/course.csv has real par+yards
+  // for all 18 holes), a .sc-score span, and a .sc-mark span (present on
+  // every cell, even when its text is empty under noSheet/no-journal, so a
+  // state mark always has somewhere to render). The old 9-across .sc-row
+  // assert is retired with the layout it described.
   const domX7 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
   const docX7 = await openScorer(domX7, { noSheet: true });
-  const rowsX7 = [...docX7.querySelectorAll("#scCard .sc-row")];
-  const cellsX7 = [...docX7.querySelectorAll("#scCard .sc-cell")];
-  const perRowX7 = rowsX7.map(r => r.querySelectorAll(".sc-cell").length);
-  const ariaOkX7 = cellsX7.every((b, i) => b.getAttribute("aria-label") === `Hole ${i + 1}`);
-  check("X7: 18 button.sc-cell[data-hole] split 9/9 across two .sc-row rows, aria-label='Hole N'",
-    cellsX7.length === 18 && rowsX7.length === 2 && perRowX7.every(n => n === 9) && ariaOkX7,
-    "cells=" + cellsX7.length + " rows=" + JSON.stringify(perRowX7) + " aria0=" + (cellsX7[0]?.getAttribute("aria-label")));
+  const colsX7 = [...docX7.querySelectorAll("#scCard .sc-cardgrid .sc-col")];
+  const cellsX7 = [...docX7.querySelectorAll("#scCard .sc-cardgrid .sc-cell")];
+  const perColX7 = colsX7.map(c => c.querySelectorAll(".sc-cell").length);
+  const partsOkX7 = cellsX7.every(b =>
+    !!b.querySelector(".sc-hole-n") &&
+    /Par \d/.test(b.querySelector(".sc-hole-par")?.textContent || "") &&
+    /yds/.test(b.querySelector(".sc-hole-par")?.textContent || "") &&
+    !!b.querySelector(".sc-score") &&
+    !!b.querySelector(".sc-mark"));
+  const holeNOkX7 = cellsX7.every((b, i) => b.querySelector(".sc-hole-n")?.textContent === String(i + 1));
+  const ariaOkX7 = cellsX7.every((b, i) => new RegExp("^Hole " + (i + 1) + ", par \\d").test(b.getAttribute("aria-label") || ""));
+  check("X7: SC-UI-V — #scCard > .sc-cardgrid holds 2 .sc-col x 9 button.sc-cell[data-hole] (18 total, split 9/9 Out|In); every cell has .sc-hole-n/.sc-hole-par (/Par \\d/ + /yds/)/.sc-score/.sc-mark; aria-label='Hole N, par P...'",
+    cellsX7.length === 18 && colsX7.length === 2 && perColX7.every(n => n === 9) && partsOkX7 && holeNOkX7 && ariaOkX7,
+    "cells=" + cellsX7.length + " cols=" + JSON.stringify(perColX7) + " parts=" + partsOkX7 +
+      " holeN=" + holeNOkX7 + " aria=" + ariaOkX7 + " aria0=" + (cellsX7[0]?.getAttribute("aria-label")));
   domX7.window.close();
 
   // X8: SC-PAR — pad labels derive from THAT hole's real par. fixtures/course.csv
@@ -2465,7 +2480,7 @@ async function openScorer(dom, { noSheet = false } = {}) {
   docX12.querySelector('.sc-cell[data-hole="2"]').click(); // hole 2, par 4
   await until(() => !docX12.querySelector("#scPad")?.hidden);
   [...docX12.querySelectorAll("#scPad .sc-num[data-score]")].find(b => b.dataset.score === "4").click();
-  await until(() => docX12.querySelector('.sc-cell[data-hole="2"] b')?.textContent === "4");
+  await until(() => docX12.querySelector('.sc-cell[data-hole="2"] .sc-score')?.textContent === "4");
   docX12.querySelector('.sc-cell[data-hole="2"]').click(); // re-tap the filled cell -> edit mode
   await until(() => /currently 4/.test(docX12.querySelector("#scPad")?.textContent || ""));
   const currentOkX12 = /currently 4/.test(docX12.querySelector("#scPad")?.textContent || "");
@@ -2685,7 +2700,7 @@ async function openScorer(dom, { noSheet = false } = {}) {
   const dbgTextX15 = docX15.getElementById("debugPanel")?.textContent || "";
   const cardVisibleX15 = docX15.querySelectorAll("#scCard .sc-cell").length === 18
     && docX15.querySelector("#scCard")?.hidden !== true;
-  const noSentCellX15 = [...docX15.querySelectorAll("#scCard .sc-cell b")].every(b => b.textContent === "–");
+  const noSentCellX15 = [...docX15.querySelectorAll("#scCard .sc-cell .sc-score")].every(b => b.textContent === "–");
 
   let sendErrX15;
   try {
@@ -2728,19 +2743,40 @@ const epUrl = "https://script.example/exec";
   await until(() => !docX16.querySelector("#scPad")?.hidden);
   docX16.querySelector('#scPad .sc-num[data-score="3"]').click(); // fresh cell, send-on-tap
   const cellX16 = docX16.querySelector('.sc-cell[data-hole="3"]');
-  const queuedNowX16 = !!cellX16 && cellX16.classList.contains("sc-queued") && cellX16.querySelector("b")?.textContent === "3";
+  const queuedNowX16 = !!cellX16 && cellX16.classList.contains("sc-queued") && cellX16.querySelector(".sc-score")?.textContent === "3";
   // C4 (review round 1): the queued state was color-only (the sc-queued
   // CSS class alone) — a regression that dropped the CSS class but kept
   // the cell otherwise looking identical would be invisible to a
-  // class-only assertion. Requiring the ⇡ glyph's actual TEXT (not just a
+  // class-only assertion. Requiring the ⇡ mark's actual TEXT (not just a
   // class name) closes that gap and matches the never-color-only rule.
-  const glyphShownX16 = /⇡/.test(cellX16?.textContent || "");
+  // Rev 3 (SC-UI-V/SC-SKIN): the mark lives in .sc-mark now (renamed from
+  // the bare state glyph), but the glyph itself is UNCHANGED for queued/
+  // sending (⇡ — only the conflict glyph moves, ? -> ▲, asserted in X20).
+  const glyphShownX16 = /⇡/.test(cellX16?.querySelector(".sc-mark")?.textContent || "");
   const noErrorUIX16 = !docX16.querySelector(".sc-degrade") && !docX16.querySelector(".sc-loud-config");
-  check("X16: offline-first — stub fetch rejects (network): tap score -> cell shows queued state INSTANTLY (class AND the ⇡ glyph — never color-only), no error UI",
-    queuedNowX16 && glyphShownX16 && noErrorUIX16 && domX16.pageErrors.length === 0,
-    "queuedNow=" + queuedNowX16 + " glyphShown=" + glyphShownX16 + " noErrorUI=" + noErrorUIX16 +
-      " cellClass=" + cellX16?.className + " cellText=" + cellX16?.textContent + " pageErrors=" + domX16.pageErrors.length);
   domX16.window.close();
+
+  // Rev 3 addition (same X-number, no new check() count): an on-sheet cell
+  // via the REAL SC-DERIVE merge (no noSheet stub) carries the rev-3 ▮ mark
+  // and the renamed .sc-onsheet class (was .sc-sheet pre-rev-3). Duck's
+  // round-1 sheet fixture is fully populated (18/18 holes), so
+  // scRoundDefault()'s team-state-first rule always lands on round 2 here
+  // regardless of wall-clock date — hole 1 is on the sheet at 4 either way
+  // (r1 h1=4, r2 h1=4 — fixtures/scores.csv), so no round-pinning trick is
+  // needed for this assertion to be deterministic.
+  const domX16b = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docX16b = await openScorer(domX16b);
+  const cellX16b = docX16b.querySelector('.sc-cell[data-hole="1"]');
+  const onSheetClassX16b = !!cellX16b && cellX16b.classList.contains("sc-onsheet");
+  const onSheetMarkX16b = (cellX16b?.querySelector(".sc-mark")?.textContent || "") === "▮";
+  domX16b.window.close();
+
+  check("X16: offline-first — stub fetch rejects (network): tap score -> cell shows queued state INSTANTLY (class AND the ⇡ mark — never color-only), no error UI; PLUS (rev 3) an on-sheet cell via the real derivation carries the ▮ mark + .sc-onsheet class",
+    queuedNowX16 && glyphShownX16 && noErrorUIX16 && domX16.pageErrors.length === 0 &&
+      onSheetClassX16b && onSheetMarkX16b,
+    "queuedNow=" + queuedNowX16 + " glyphShown=" + glyphShownX16 + " noErrorUI=" + noErrorUIX16 +
+      " cellClass=" + cellX16?.className + " cellText=" + cellX16?.textContent + " pageErrors=" + domX16.pageErrors.length +
+      " onSheetClass=" + onSheetClassX16b + " onSheetMark=" + onSheetMarkX16b);
 }
 
 // Shared shape for X17's three independent trigger scenarios (online,
@@ -2766,7 +2802,7 @@ async function cellSettledOk(doc, hole) {
   return until(() => {
     const c = doc.querySelector('.sc-cell[data-hole="' + hole + '"]');
     return !!c && !c.classList.contains("sc-queued") && !c.classList.contains("sc-sending") &&
-      !c.classList.contains("sc-rejected") && c.querySelector("b")?.textContent != null;
+      !c.classList.contains("sc-rejected") && c.querySelector(".sc-score")?.textContent != null;
   });
 }
 
@@ -2860,13 +2896,13 @@ async function cellSettledOk(doc, hole) {
   docX18.querySelector('.sc-cell[data-hole="6"]').click();        // hole 6, par 4
   await until(() => !docX18.querySelector("#scPad")?.hidden);
   docX18.querySelector('#scPad .sc-num[data-score="4"]').click(); // tap #1: fresh, send-on-tap -> queued 4
-  await until(() => docX18.querySelector('.sc-cell[data-hole="6"] b')?.textContent === "4");
+  await until(() => docX18.querySelector('.sc-cell[data-hole="6"] .sc-score')?.textContent === "4");
   docX18.querySelector('.sc-cell[data-hole="6"]').click();        // re-tap the filled cell -> edit mode
   await until(() => /currently 4/.test(docX18.querySelector("#scPad")?.textContent || ""));
   docX18.querySelector('#scPad .sc-num[data-score="6"]').click(); // tap #2: arms "Replace 4 with 6"
   await until(() => /Replace 4 with 6/.test(docX18.querySelector("#scPad")?.textContent || ""));
   docX18.querySelector("#scPadReplace").click();                 // confirm -> coalesces to score 6, new seq
-  await until(() => docX18.querySelector('.sc-cell[data-hole="6"] b')?.textContent === "6");
+  await until(() => docX18.querySelector('.sc-cell[data-hole="6"] .sc-score')?.textContent === "6");
   onlineX18 = true;
   domX18.window.dispatchEvent(new domX18.window.Event("online"));
   await until(() => bodiesX18.length > 0);
@@ -2897,11 +2933,11 @@ async function cellSettledOk(doc, hole) {
   docX19.querySelector('.sc-cell[data-hole="2"]').click();        // hole 2, par 4
   await until(() => !docX19.querySelector("#scPad")?.hidden);
   docX19.querySelector('#scPad .sc-num[data-score="4"]').click();
-  await until(() => docX19.querySelector('.sc-cell[data-hole="2"] b')?.textContent === "4");
+  await until(() => docX19.querySelector('.sc-cell[data-hole="2"] .sc-score')?.textContent === "4");
   docX19.querySelector('.sc-cell[data-hole="3"]').click();        // hole 3, par 3
   await until(() => !docX19.querySelector("#scPad")?.hidden);
   docX19.querySelector('#scPad .sc-num[data-score="3"]').click();
-  await until(() => docX19.querySelector('.sc-cell[data-hole="3"] b')?.textContent === "3");
+  await until(() => docX19.querySelector('.sc-cell[data-hole="3"] .sc-score')?.textContent === "3");
   onlineX19 = true;
   domX19.window.dispatchEvent(new domX19.window.Event("online"));
   await until(() => bodiesX19.length >= 2);
@@ -2991,9 +3027,14 @@ async function cellSettledOk(doc, hole) {
   await settle(300); // give the auto-drain every chance to (wrongly) fire before asserting it didn't
   const cellX20 = docX20.querySelector('.sc-cell[data-hole="14"]');
   const cellConflictClassX20 = !!cellX20 && cellX20.classList.contains("sc-conflict");
-  const cellGlyphX20 = (cellX20?.querySelector(".sc-state-glyph")?.textContent || "") === "?";
-  const scoreSpanX20 = cellX20?.querySelector("b")?.textContent || "";
-  const scoreSpanOkX20 = scoreSpanX20 === "6·4";
+  // Rev 3 (SC-UI-V/SC-SKIN): the state mark moved to .sc-mark (renamed from
+  // .sc-state-glyph) and the conflict glyph itself changed, ? -> ▲. The
+  // score span's number order also flips to the spec's literal SHEET·MINE
+  // wording (was MINE·SHEET pre-rev-3) — sheet=4 (stubbed above), mine=6
+  // (queued), so "4·6".
+  const cellGlyphX20 = (cellX20?.querySelector(".sc-mark")?.textContent || "") === "▲";
+  const scoreSpanX20 = cellX20?.querySelector(".sc-score")?.textContent || "";
+  const scoreSpanOkX20 = scoreSpanX20 === "4·6";
   const noPostYetX20 = bodiesX20.length === 0;
 
   // Read the held entry's seq directly from the journal (scKey/nkey are
@@ -3041,7 +3082,7 @@ async function cellSettledOk(doc, hole) {
   const forceSendBodyX20 = bodiesX20.find(b => b.hole === 14);
   domX20.window.close();
 
-  check("X20: SC-NOCLOBBER — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict IMMEDIATELY with no intervening tap (score span '6·4', .sc-conflict class, ? glyph); pad(14) opens in replace-confirm naming both (C3 layout: numbers + Keep-the-sheet + Force-send); Keep-the-sheet/Force-send disable mid-flight and a race-click while sending never deletes the entry; force-send (I4) carries the SAME seq the held entry already had",
+  check("X20: SC-NOCLOBBER — sheet value for h14 = duck r2 fixture value (4) -> use queued 6 (differs): NO POST for h14 on drain; cell renders conflict IMMEDIATELY with no intervening tap (score span '4·6' SHEET·MINE, .sc-conflict class, ▲ mark — rev 3: was '6·4' MINE·SHEET / ? pre-rev-3); pad(14) opens in replace-confirm naming both (C3 layout: numbers + Keep-the-sheet + Force-send); Keep-the-sheet/Force-send disable mid-flight and a race-click while sending never deletes the entry; force-send (I4) carries the SAME seq the held entry already had",
     roundOkX20 && noPostYetX20 && cellConflictClassX20 && cellGlyphX20 && scoreSpanOkX20 &&
       /6/.test(padTextX20) && /4/.test(padTextX20) && /anyway/i.test(padTextX20) &&
       padHasNumsX20 && padHasKeepSheetX20 && keepSheetEnabledBeforeX20 &&
@@ -3317,10 +3358,10 @@ async function cellSettledOk(doc, hole) {
   docX23.querySelector('.sc-cell[data-hole="12"]').click();       // hole 12, par 3
   await until(() => !docX23.querySelector("#scPad")?.hidden);
   docX23.querySelector('#scPad .sc-num[data-score="3"]').click();
-  await until(() => docX23.querySelector('.sc-cell[data-hole="12"] b')?.textContent === "3");
+  await until(() => docX23.querySelector('.sc-cell[data-hole="12"] .sc-score')?.textContent === "3");
   await settle(300); // let the deferred drain (and its own scStore attempts against dead storage) run through
   const cellX23 = docX23.querySelector('.sc-cell[data-hole="12"]');
-  const cellOkX23 = cellX23?.querySelector("b")?.textContent === "3";
+  const cellOkX23 = cellX23?.querySelector(".sc-score")?.textContent === "3";
   const headerOkX23 = /can't remember sends/i.test(docX23.querySelector("#scHeader")?.textContent || "");
   const noErrorsX23 = domX23.pageErrors.length === 0;
   check("X23: storage-dead degrade — makeDom variant where localStorage.setItem throws: tap still updates the cell in-memory and the header shows the 'can't remember sends' copy; no uncaught errors",
@@ -3364,8 +3405,8 @@ async function cellSettledOk(doc, hole) {
   const domX24 = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX24);
   const docX24 = await openScorer(domX24);
   await until(() => /Round 2/.test(docX24.querySelector("#scRound")?.textContent || ""));
-  const sheetVal = h => docX24.querySelector('.sc-cell[data-hole="' + h + '"] b')?.textContent;
-  const isSheet = h => !!docX24.querySelector('.sc-cell[data-hole="' + h + '"]')?.classList.contains("sc-sheet");
+  const sheetVal = h => docX24.querySelector('.sc-cell[data-hole="' + h + '"] .sc-score')?.textContent;
+  const isSheet = h => !!docX24.querySelector('.sc-cell[data-hole="' + h + '"]')?.classList.contains("sc-onsheet");
   const expectedX24 = ["4", "4", "3", "5", "3", "4"];
   const beforeValsX24 = [1, 2, 3, 4, 5, 6].map(sheetVal);
   const beforeClassesX24 = [1, 2, 3, 4, 5, 6].every(isSheet);
