@@ -1740,14 +1740,14 @@ function renderLeaderboard(){
   const wdKeys=wdKeySet();
   $("#lbBody").innerHTML=players.map(p=>{
     const pos=p.pos;
-    const lead=(pos===1)?" lead":"";
+    const lead=(!parsSuppressed && pos===1)?" lead":"";
     const id=esc(p.key).replace(/ /g,"-");
     const open=STATE.open===p.key;
     const thru=thruLabel(p);
     const wdMarker=wdKeys.has(p.key)?" WD":"";
     return `<button class="lb-row${lead}" type="button" data-player="${esc(p.key)}"
               aria-expanded="${open}" aria-controls="card-${id}">
-        <span class="lb-pos">${pos??"—"}</span>
+        <span class="lb-pos">${parsSuppressed ? "—" : (pos??"—")}</span>
         <span class="lb-name">${captainLabel(p.key, p.name).html}</span>
         <span class="lb-thru">${thru}${wdMarker}</span>
         <span class="lb-num lb-r1">${p.roundTotals["1"]??"—"}</span>
@@ -2439,6 +2439,10 @@ function renderCalcutta(){
   } else {
     basis=(INFO.calcutta_basis||"gross").toLowerCase()==="net"?"net":"gross";
   }
+  // §21 SC-RANK-CAL: net-basis standings derive from handicaps/totals, not
+  // pars, so they stay live regardless of course completeness — the guard
+  // is gross-basis only.
+  const rankSuppressed = basis==="gross" && !courseMap();
   const ranked=rankedPlayers(basis).filter(p=>p.total!==null);
 
   // W-WD: Field status "wd" (withdrawn) excludes a team from the Final/
@@ -2522,7 +2526,9 @@ function renderCalcutta(){
       if(!rp) wouldText="waiting on cards";
       else{
         const ro=rowsOutByKey.get(l.key);
-        wouldText=ro ? (done?"Won":"Wins if it ended now")+": "+money(ro.ownerCut) : "—";
+        // §21 SC-RANK-CAL: owned+ranked, non-wd lots make no win claim off
+        // a gross-basis fallback ordering when pars are incomplete.
+        wouldText=rankSuppressed ? "awaiting pars" : (ro ? (done?"Won":"Wins if it ended now")+": "+money(ro.ownerCut) : "—");
       }
     }
     const wdTag=wdKeys.has(l.key)?' <span class="badge">WD</span>':"";
@@ -2538,6 +2544,20 @@ function renderCalcutta(){
   if(!ranked.length){
     $("#payBody").innerHTML='<div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>';
     $("#calBasis").textContent="Bids locked. Payouts post once cards do.";
+    return;
+  }
+
+  // §21 SC-RANK-CAL: gross-basis payout PLACES rest on pars — when they're
+  // incomplete, no place claim may render. Placed after the !ranked.length
+  // guard (a genuinely cardless field is a distinct, pars-unrelated reason
+  // nothing pays yet, and that more specific honest state should survive)
+  // but before the !rowsOut.length withdrawal guard and the normal render,
+  // both of which — left unguarded — would otherwise assign places off the
+  // suppressed raw-gross fallback ordering. The auction board and money
+  // tiles above are already painted by this point, so neither is affected.
+  if(rankSuppressed){
+    $("#payBody").innerHTML='<div class="mn-empty">Payouts wait on the Course tab — standings need all 18 pars.</div>';
+    $("#calBasis").textContent="Paused · Course pars incomplete";
     return;
   }
 
