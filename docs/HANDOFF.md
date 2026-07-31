@@ -1,4 +1,4 @@
-# GFY — Session Handoff (updated 2026-07-29 evening)
+# GFY — Session Handoff (updated 2026-07-30 night)
 
 > Fresh-session bootstrap. Read this, then `.superpowers/sdd/progress.md` (authoritative
 > per-task ledger), then the spec's latest sections. Verify live state before asserting —
@@ -16,8 +16,8 @@ Event: **Aug 14–16, 2026** at MeadowCreek (New Meadows, ID). 12–15 four-play
 
 | Thing | Where | State at handoff |
 |---|---|---|
-| Site | killerroyboy.github.io/gfy (repo Killerroyboy/gfy, public) | LIVE at v2.5 + crest v3 (`49efa87`, deployed 2026-07-30, live md5 == tip) |
-| Local repo | `~/Code/gfy`, branch `v2.1-invites` | **PUSHED + DEPLOYED**: branch == origin/main == `49efa87` (v2.5 at `793e647` + crest-v3 merged); suite 159/159 at tip; next-push rollback ref = `49efa87` |
+| Site | killerroyboy.github.io/gfy (repo Killerroyboy/gfy, public) | LIVE at **v2.6 live scorer** (`6c88071`, deployed 2026-07-30 night, live md5 == tip, scorer markers verified served) |
+| Local repo | `~/Code/gfy`, branch `v2.1-invites` | origin/main == `6c88071` DEPLOYED (union suite 197/197); local tip `3327301` (+prototype ref `d73eaea`, +rev-3 plan — spec/plan commits only, undeployed is fine); next-push rollback ref = `6c88071` |
 | Google Sheet | (sheet edit link — Riley's private bookmark; removed from repo), account **goodfriendsyearly@gmail.com** | polished (light CF tints, START HERE first tab, real Course 18); Riley entering REAL data (teams Jake/Greg/Voss, real rounds) |
 | Apps Script | project `1HE704reG5WNBWSQOMhoiTzG-phbTGKlD_NP6ywipR5zWy1xV9x8bTtOW` (Code.gs = sheet-polish + `/** @OnlyCurrentDoc */`; triggers.gs = sheet-triggers) | **2 triggers INSTALLED** (onScoreFormSubmit, onDepositEdit) — verified on Triggers page |
 | Scoring form | `docs.google.com/forms/d/e/1FAIpQLSdlNWdXrrolvALR1JkT0_QtQH7mpS6cDscq-TI3UGIfD6FsdA/viewform` | PUBLISHED, linked to the sheet, URL pasted in START HERE B8; **email collection = Do not collect (verified)**; E2E proven (Jake r1 h18=5 → applied) |
@@ -99,3 +99,40 @@ subagent-driven pipeline recorded in the ledger. Riley's live sheet changes in r
 verify anything sheet-related against the live sheet before acting on it. Pushes to main
 are Riley's, via the fence hook. Honor every invariant in HANDOFF.md §invariants.
 ```
+
+## 2026-07-30 night — v2.6 DEPLOYED · rev-3 UI wave IN FLIGHT (resume here)
+
+**v2.6 live scorer is DEPLOYED and live-verified** (`6c88071` == origin/main == live md5;
+push via the ratified say-the-word grant, fence-logged). Full round record: spec §18 rev 2
+(3-review pressure test) → 8-task subagent build (7 fix rounds, mutation-evidenced) →
+whole-branch review → final fix wave → reconciliation merge absorbing the §19 ops wave
+(O-REJECT/O-REPLACED ported into shared `applyScore_`; polish blocks collapsed; J4/J10
+adapted) → reconciliation review → placeholder restore. Union suite 197/197 (J 10/10,
+X 28/28).
+
+**RILEY'S PRE-LINKS RUNWAY (blocking before captains get links — README "Live scoring"):**
+(1) re-paste BOTH .gs files onto the live sheet + redeploy (Edit → New version — the live
+script predates the merge); (2) CORS spike `tools/spike-scorer-cors.md`; (3) Info keys
+`score_endpoint` + `form_url`, re-run polish(); (4) the 25-min SC-DRILL. PARKED RILEY
+DECISION: sheet doc-id sits in public git history since `f261fd2` — recommendation
+accept-residual (sheet 401s anonymous; drill re-verifies sharing).
+
+**IN FLIGHT: §18 rev 3 UI wave** (Riley: "lets do the rev 3 UI wave").
+- Spec pins: §18 rev 3 + SC-BOARD-BTN (both ratified, in the spec file).
+- Fidelity reference OF RECORD: `tools/scorer-rev3-prototype.html` (`d73eaea`) — Riley-approved
+  prototype, artifact wrapper stripped; its demo logic (fake timer, hardcoded conflict, demo
+  copy) is spec-pinned NOT-spec.
+- Plan: `docs/superpowers/plans/2026-07-30-gfy-scorer-rev3-ui.md` (`3327301`) — 5 tasks,
+  SCREEN-ONLY mandate (zero engine changes), suite arc 197→201.
+- Worktree: `.worktrees/scorer-rev3` (branch `scorer-rev3`), baseline 197/197.
+- Ledger (RESUME POINT): `.superpowers/sdd/2026-07-30-gfy-scorer-rev3-ui/progress.md`.
+- State at handoff: **Task 1 committed (`91f03a8`, 197/197, X7/X16/X20 adapted + 7 blocks
+  selector-renamed) — task review WAS IN FLIGHT in the prior session.** If the ledger shows
+  no review verdict for Task 1, RE-DISPATCH its review (package exists:
+  `review-3327301..91f03a8.diff` in the ledger dir; brief + report files alongside).
+  Then Tasks 2–5 per plan, whole-branch review (strongest model), reconciliation-aware
+  merge to `v2.1-invites` (check `git log v2.1-invites` for concurrent movement FIRST —
+  three parallel sessions have landed on this branch this week; T8 discipline).
+- Known residuals for the wave's final review: "Par —" degrade path render-uncovered
+  (Task 5 visual pass); conflict order flipped to SHEET·MINE per prototype (cross-surface
+  consistency was under review at handoff).
