@@ -160,3 +160,14 @@ function courseYards(){
 - Placeholder scan: X34's `expectedGross` and X35's note selector are explicitly delegated grounding steps with exact file:line pointers (not silent TBDs); the first X33 splice snippet shows a rejected-then-corrected form — the plan pins `courseBlank7b` as the one to use.
 - Type consistency: `courseMap()/courseYards()` signatures unchanged; `flag(m)` exists at index.html:1383; check-name prefixes X33/X34/X35 match the tally regex; `#scTally[data-mode]`, `.lb-tot`, `#healthStrip` all verified present in the fact-sheet grounding (index.html:4026, 1709, 2845-2856).
 - Known risk carried deliberately: the empty-course-tab warning guard is a judgment point — the plan pins the decision rule (empty rows ⇒ silent, matching today's silent null) and requires the implementer to verify startup call order and report the shipped guard.
+
+### Task 1b (review-driven addendum, ratified per §20 amendment): per-hole yards fallback + X36 + X34 corrections
+
+**Files:** Modify `index.html` (`renderScoreGrid` ~1765 Yds-row cell, `renderHolePanel` ~1819 yardage suffix — these two functions are UNFROZEN for exactly this change); Test `test/smoke.mjs` (new X36 after X35; X34 name + leader assert edit)
+
+**Interfaces:**
+- Consumes: `scHolePar`-sibling `scHoleYards(hole)` (index.html:3318-3323, per-hole row fallback, posInt-guarded) — REUSE it; do not build a new mechanism.
+- Produces: grid Yds row = `scHoleYards(h) || "—"` per hole; hole panel suffix rendered only when `scHoleYards(h)` is non-null. All other frozen functions stay frozen.
+
+- [ ] **Step 1 (RED):** X36 — blank-YARDS splice (`"7,<par>,"` — par intact, yards blank): grid renders (par map valid ⇒ no note), Yds row shows the other holes' true yardages (assert ≥2 real values computed from the fixture) and "—" for hole 7; scorer card hole-7 cell has no `.sc-hole-yds` span while hole 8 keeps one. Also edit X34: name → "…(rel suppressed; ranking falls back to raw gross)" and add the leader-selection assert (first `#lbBody` row is the fixture-computed raw-gross minimum under suppression). Run: X36 RED (Yds row currently all "—" under the splice), X34 GREEN with the new assert only if the fallback ranking already holds (verify and report which).
+- [ ] **Step 2:** Implement the two call-site swaps. **Step 3:** Green — 205/205; X9/X10/X29/K1/K2 untouched-green. **Step 4:** Mutation (throwaway copy): revert the grid swap → X36 fails alone. **Step 5:** Commit `fix(course): per-hole yards fallback in grid/panel + X36; X34 ranking-name correction (§20 amendment)`

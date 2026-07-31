@@ -631,3 +631,13 @@ the implementation counts KEYS; the spec demands VALID PARS. This wave closes th
 - Tests pinned: X33 (scorer honest degrade + warning under a blank-par cell), X34 (leaderboard
   suppression, both directions), X35 (grid note under blank-par). Suite 201 → 204. Mutation bar:
   reverting the value-validation must fail X33/X34.
+
+### §20 amendment (2026-07-31, Task-1 review escalation — ratified by the wave owner)
+Value-validating `courseYards()` must not cost the 17 good labels: with one blank/invalid yards
+cell the whole-map-null degrade blanked the grid's entire Yds row and every hole panel's yardage
+suffix. `renderScoreGrid` and `renderHolePanel` switch their direct `yds[h]` reads to the EXISTING
+per-hole `scHoleYards(h)` fallback (reuse, no new mechanism) — 17 true labels survive, the bad
+hole shows "—"/no suffix, and no `0 yds` can ever render. Pinned test: X36 (blank-yards cell —
+grid row keeps 17 real yardages + "—" on the bad hole; card cell yds line absent for that hole
+only). Suite 204 → 205. X34's check name corrects "ranking unskewed" → suppressed mode ranks by
+raw gross (the shipped fallback), and X34 gains a leader-selection assert pinning that fallback.
