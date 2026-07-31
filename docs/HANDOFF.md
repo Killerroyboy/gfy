@@ -100,7 +100,7 @@ verify anything sheet-related against the live sheet before acting on it. Pushes
 are Riley's, via the fence hook. Honor every invariant in HANDOFF.md §invariants.
 ```
 
-## 2026-07-30 night — v2.6 DEPLOYED · rev-3 UI wave IN FLIGHT (resume here)
+## 2026-07-30 night — v2.6 DEPLOYED · rev-3 UI wave IN FLIGHT (superseded — see 2026-07-31 section below)
 
 **v2.6 live scorer is DEPLOYED and live-verified** (`6c88071` == origin/main == live md5;
 push via the ratified say-the-word grant, fence-logged). Full round record: spec §18 rev 2
@@ -136,3 +136,31 @@ accept-residual (sheet 401s anonymous; drill re-verifies sharing).
 - Known residuals for the wave's final review: "Par —" degrade path render-uncovered
   (Task 5 visual pass); conflict order flipped to SHEET·MINE per prototype (cross-surface
   consistency was under review at handoff).
+
+## 2026-07-31 — rev-3 UI wave COMPLETE + MERGED (local) · push = the gate
+
+**v2.1-invites at `565abf3`** (merge of scorer-rev3 `2fef74e`), union suite **201/201**, NOT pushed.
+Full trail: `.superpowers/sdd/2026-07-30-gfy-scorer-rev3-ui/progress.md` (ledger, 5 task reports,
+fix-wave report, 78+ S11 PNGs — retained deliberately as evidence).
+
+- **Review trail:** per-task adversarial reviews (2 Critical + 8 Important found and fixed across
+  fix rounds, every round re-reviewed) → whole-branch review (strongest model): screen-only mandate
+  PROVEN byte-level (26 engine function bodies md5-identical base→HEAD), verdict "with fixes" →
+  final fix wave `2fef74e` (drain-repaint picker guard; 390w row drift 26→0px; reduced-motion
+  next-hint static signal; pad digits raised per Riley ruling; X8/X31 hardening) → scoped
+  re-review: all addressed, third independent 201/201.
+- **Riley rulings this wave:** 1–19 hard rule governs the overflow formula (plan amended `95e8ce8`);
+  pad digit hierarchy raised to the prototype's intent; D3 follow-up wave QUEUED.
+- **Accepted residuals (rulings in ledger):** third-number keep-then-reopen destructive window
+  (ADD TO THE CAPTAIN DRILL), board-button ≤60s identity lag, aria-modal focus/keyboard work
+  (follow-up wave), board-button season-pin test hardening (follow-up).
+- **QUEUED NEXT — D3 follow-up wave (Riley-approved, PRE-EXISTING bug, not this wave):** a blank
+  par cell makes courseMap() carry par=0, silently skewing scorer to-par AND every team's board
+  To-par with no warning. Shape: validate VALUES in courseMap() (18 positive-int pars, else null →
+  the existing honest strokes degrade) + a health-strip warning naming the hole. Own plan/tests/
+  reviews; land before the tournament.
+- **Pre-links runway** unchanged (README "Live scoring") **plus two additions:** one real-phone
+  eyeball of the card at 390w under production Jost (the S11 harness ran the fallback font), and
+  the third-number keep-then-reopen flow added to the 25-min drill.
+- Housekeeping: scorer-rev3 branch + worktree retained; one superseded stash on the worktree (safe
+  to drop); the 07-30 dual-controller incident is documented and closed in the ledger (stand-down).
