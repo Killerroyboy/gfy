@@ -605,3 +605,29 @@ Riley reviewed a tappable refinement prototype and approved it ("that looks good
   board's year picker, styled as a quiet brass action, event-window or not (captains check
   standings year-round). Smoke coverage: button absent on a fresh dom; present after the
   persisted-identity key is planted.
+
+## §20 — D3 par-integrity wave (Riley ruled 2026-07-31; finding: rev-3 Task-5 S11 battery, D3)
+
+The defect (pre-existing since c205e32): a Course row present with a BLANK par cell still creates
+its key (`parseInt("")||0` → 0), so `courseMap()` returns a non-null map with `pars[h]===0` — the
+to-par arithmetic silently counts that hole's strokes against zero par, skewing the scorer tally
+AND the public leaderboard To-par column (and gross-basis ranking order), with no warning. This
+violates SC-PAR's own pin ("suppressed entirely (strokes only) **unless all 18 pars parse**") —
+the implementation counts KEYS; the spec demands VALID PARS. This wave closes that gap.
+
+- **SC-PAR-VALID:** `courseMap()` and `courseYards()` validate VALUES, not keys — a hole's key is
+  created only when its cell parses to a positive integer. The all-18-or-null contract stands
+  unchanged. Consequence: a blank/invalid par cell now triggers the SAME honest degrades as a
+  missing row (scorer tally → strokes mode "Thru N"; leaderboard → gross totals, `rel=null`;
+  grid → the existing "needs all 18 holes" note; per-hole labels survive via `scHolePar`'s
+  row-fallback exactly as shipped). **Single-point fix:** only the two map builders change (plus
+  SC-PAR-WARN below); every consumer — `scTallyHTML`, `buildPlayers`, `renderLeaderboard`,
+  `renderScoreGrid`, `scHolePar`, `scoreClass` — is byte-untouched.
+- **SC-PAR-WARN:** after the build pass, any hole 1–18 lacking a valid par raises a health-strip
+  flag naming the hole, verbatim copy: `Course tab: hole <N> par missing or invalid — To-par
+  suppressed (strokes only)`. Uses the existing `flag()`/`renderHealth()` idiom (per-load,
+  deduped); par only — yards validation is silent (a missing yards label is cosmetic, and a
+  yards warning would be noise).
+- Tests pinned: X33 (scorer honest degrade + warning under a blank-par cell), X34 (leaderboard
+  suppression, both directions), X35 (grid note under blank-par). Suite 201 → 204. Mutation bar:
+  reverting the value-validation must fail X33/X34.
