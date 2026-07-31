@@ -481,10 +481,24 @@
      architecture — noted in task-2-report.md, not a fight worth having
      here since nothing before this task ever kept a pad DOM node alive
      across a repaint either). */
-  .sc-veil{position:fixed;inset:0;background:rgba(6,12,9,.62);z-index:8;opacity:0;pointer-events:none;transition:opacity .18s}
+  /* Fix round 1 (review Important #1): .wrap establishes its OWN stacking
+     context (position:relative + z-index:1, line ~28) — position:fixed
+     escapes normal document FLOW but NOT an ancestor's stacking context, so
+     a sheet/veil nested inside #scCard/.wrap painted BELOW .nav (z-index
+     20) and #healthStrip (z-index 999) regardless of these rules' own
+     z-index, since the WHOLE .wrap subtree competes as one z-index:1 layer
+     against those top-level siblings. Fixed by (a) rendering #scVeil/
+     #scSheet into #scSheetHost, a plain top-level sibling of <footer> with
+     no position/z-index of its own (so it creates no stacking context to
+     trap its children in — see renderScCard(), where scPadHTML()'s output
+     now targets #scSheetHost instead of being concatenated into #scCard's
+     innerHTML), and (b) raising these z-index values above every other
+     z-index literal in the file (999, #healthStrip) so the modal is
+     genuinely topmost once it escapes .wrap, not just no-longer-trapped. */
+  .sc-veil{position:fixed;inset:0;background:rgba(6,12,9,.62);z-index:1000;opacity:0;pointer-events:none;transition:opacity .18s}
   .sc-veil.on{opacity:1;pointer-events:auto}
   .sc-veil[hidden]{display:none}
-  .sc-sheet{position:fixed;left:50%;transform:translate(-50%,105%);bottom:0;width:100%;max-width:430px;z-index:9;
+  .sc-sheet{position:fixed;left:50%;transform:translate(-50%,105%);bottom:0;width:100%;max-width:430px;z-index:1001;
     background:var(--pine);border:1px solid rgba(200,162,74,.3);border-bottom:0;border-radius:22px 22px 0 0;
     padding:14px 16px calc(18px + env(safe-area-inset-bottom));transition:transform .22s ease-out;color:var(--bone)}
   .sc-sheet.on{transform:translate(-50%,0)}
@@ -983,6 +997,15 @@
   <p class="foot-name">GFY</p>
   <p class="foot-note" id="footNote">McCall, Idaho · Est. 2019</p>
 </footer>
+
+<!-- Fix round 1 (review Important #1, SC-PAD-SHEET): a top-level sibling
+     with no position/z-index of its own — deliberately OUTSIDE every
+     .wrap/section stacking context so #scVeil/#scSheet's position:fixed +
+     high z-index (see the .sc-veil/.sc-sheet rules) actually paints above
+     .nav and #healthStrip instead of being trapped inside .wrap's own
+     z-index:1 layer. renderScCard() targets this host directly; scPadHTML()
+     itself is unchanged (still returns the same veil+sheet markup string). -->
+<div id="scSheetHost"></div>
 
 <script>
 /* ---------- the mark ----------
@@ -4090,7 +4113,12 @@ function renderScCard(){
   const card=$("#scCard");
   if(!card) return;
   const glance=$("#scGlance");
-  if(!STATE.scTeam){ card.innerHTML=""; if(glance) glance.innerHTML=""; return; }
+  const sheetHost=$("#scSheetHost");
+  if(!STATE.scTeam){
+    card.innerHTML=""; if(glance) glance.innerHTML="";
+    if(sheetHost) sheetHost.innerHTML=""; // fix round 1: no stale sheet/veil lingering once the team resets
+    return;
+  }
   $("#scHeader").innerHTML=scHeaderHTML();
   const active=scActiveRound();
   card.innerHTML=
@@ -4098,8 +4126,13 @@ function renderScCard(){
     scOldRoundSummaryHTML(active)+
     scTallyHTML()+
     scCardGridHTML()+
-    `<div class="sc-legend">▮ on the sheet · ⇡ saved on phone · sending · ▲ sheet differs — tap to resolve · ! rejected — tap</div>`+
-    scPadHTML();
+    `<div class="sc-legend">▮ on the sheet · ⇡ saved on phone · sending · ▲ sheet differs — tap to resolve · ! rejected — tap</div>`;
+  // Fix round 1 (review Important #1): #scVeil/#scSheet render into
+  // #scSheetHost — a top-level sibling with no stacking context of its own
+  // — instead of #scCard's innerHTML (nested inside .wrap, which DOES
+  // establish one). scPadHTML() itself is unchanged; only the insertion
+  // target moved.
+  if(sheetHost) sheetHost.innerHTML=scPadHTML();
   scWireCard();
   if(glance) glance.innerHTML=scGlanceHTML();
 }

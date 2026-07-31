@@ -2527,6 +2527,15 @@ async function openScorer(dom, { noSheet = false } = {}) {
   docX12.querySelector('.sc-cell[data-hole="2"]').click();
   await until(() => !docX12.querySelector("#scSheet")?.hidden);
   const openViaCellX12 = !docX12.querySelector("#scSheet")?.hidden;
+  // Fix round 1 (review Important #1, structural assert): #scSheet/#scVeil
+  // must NOT be nested inside .wrap — .wrap establishes its own stacking
+  // context (position:relative+z-index:1), which traps position:fixed
+  // descendants below OTHER top-level z-index layers (.nav z:20,
+  // #healthStrip z:999) regardless of these elements' own (now-raised)
+  // z-index. closest(".wrap") returning null proves the escape structurally
+  // (via #scSheetHost), not just "it happens to render on top" by accident.
+  const sheetEscapesWrapX12 = !docX12.querySelector("#scSheet")?.closest(".wrap") &&
+    !docX12.querySelector("#scVeil")?.closest(".wrap");
   docX12.querySelector("#scVeil").click(); // exit #1: veil tap
   await until(() => docX12.querySelector("#scSheet")?.hidden === true);
   const closedViaVeilX12 = docX12.querySelector("#scSheet")?.hidden === true;
@@ -2549,6 +2558,29 @@ async function openScorer(dom, { noSheet = false } = {}) {
   // same proof style the old input-node check used).
   docX12.querySelector('.sc-cell[data-hole="9"]').click();
   await until(() => (docX12.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 9"));
+  // Fix round 1 (review Important #2 — Riley RULED in-chat: the 1-19 hard
+  // rule governs the pinned formula): exhaustive reachability audit, not a
+  // two-value boundary spot-check — every value 1-19 must have EXACTLY ONE
+  // tappable .sc-key[data-score] across the main grid + overflow row
+  // combined. The overflow row's buttons are unconditionally in the DOM
+  // regardless of the numrow's `.on` toggle (only its CSS display class is
+  // gated by STATE.scPadOtherOpen — scPadKeysHTML always renders the
+  // buttons), so this counts correctly whether or not "Other" has been
+  // tapped open. Run across all 3 representative pars the fixture actually
+  // has (hole 9 par 5, hole 7 par 3, hole 8 par 4 — fixtures/course.csv) —
+  // proves the down-range guard (par-2>1) AND the uncapped up-range both
+  // hold across the low/mid/high-par spectrum, not just at two extremes.
+  const scKeyAuditX12 = sheetEl => {
+    const counts = {};
+    [...sheetEl.querySelectorAll(".sc-key[data-score]")].forEach(b => {
+      counts[b.dataset.score] = (counts[b.dataset.score] || 0) + 1;
+    });
+    const bad = [];
+    for (let v = 1; v <= 19; v++) { const c = counts[String(v)] || 0; if (c !== 1) bad.push(v + ":" + c); }
+    return { ok: bad.length === 0, bad };
+  };
+  const audit9X12 = scKeyAuditX12(docX12.querySelector("#scSheet")); // par 5 (fixtures h9=5): main grid bottoms at 3, overflow must add 1-2 low + 10-19 high
+
   docX12.querySelector("#scPadOtherBtn").click();
   await until(() => docX12.querySelector(".sc-numrow")?.classList.contains("on"));
   const numrowBeforeX12 = docX12.querySelector(".sc-numrow");
@@ -2560,30 +2592,13 @@ async function openScorer(dom, { noSheet = false } = {}) {
   const numrowSurvivedX12 = numrowAfterX12?.classList.contains("on") === true &&
     numrowAfterX12.querySelectorAll(".sc-key[data-score]").length > 0;
 
-  // Coordinator pre-review fix (plan defect, corrected): the overflow
-  // row's up-range now runs par+5..19 UNCAPPED (the original min(par+10,19)
-  // cap silently made scores 16-19 unreachable for every realistic par —
-  // rev-2's 1-19 clamp is a hard requirement, not an approximation). Prove
-  // BOTH extremes on REAL fixture holes rather than trusting the formula:
-  //   - hole 9 (par 5, already open above, fixtures/course.csv h9=5): its
-  //     main grid bottoms out at 3 (par-2) — the down-range fix must add 1
-  //     to the overflow, AND the uncapped up-range must reach all the way
-  //     to 19.
-  //   - hole 7 (par 3, a SECOND scPadOpen, fixtures/course.csv h7=3): its
-  //     main grid already reaches down to 1 via par-2 itself, so the
-  //     overflow must NOT duplicate it there (1 absent) — while 19 must
-  //     still be present via the same uncapped up-range.
-  const hasKeyX12 = (root, score) => !!root?.querySelector('.sc-key[data-score="' + score + '"]');
-  const par5Has1X12 = hasKeyX12(numrowBeforeX12, "1");
-  const par5Has19X12 = hasKeyX12(numrowBeforeX12, "19");
-
   docX12.querySelector('.sc-cell[data-hole="7"]').click(); // hole 7, par 3 — second scPadOpen
   await until(() => (docX12.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 7"));
-  docX12.querySelector("#scPadOtherBtn").click();
-  await until(() => docX12.querySelector(".sc-numrow")?.classList.contains("on"));
-  const numrowPar3X12 = docX12.querySelector(".sc-numrow");
-  const par3No1X12 = !hasKeyX12(numrowPar3X12, "1"); // already on the main grid (par-2=1) — overflow must not duplicate it
-  const par3Has19X12 = hasKeyX12(numrowPar3X12, "19");
+  const audit7X12 = scKeyAuditX12(docX12.querySelector("#scSheet")); // par 3 (h7=3): main grid already reaches 1 via par-2 — overflow must NOT duplicate it
+
+  docX12.querySelector('.sc-cell[data-hole="8"]').click(); // hole 8, par 4 — third scPadOpen
+  await until(() => (docX12.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 8"));
+  const audit8X12 = scKeyAuditX12(docX12.querySelector("#scSheet")); // par 4 (h8=4): main grid bottoms at 2, overflow adds 1 low + 9-19 high
 
   domX12.window.close();
 
@@ -2622,18 +2637,18 @@ async function openScorer(dom, { noSheet = false } = {}) {
   const overrideSentX12b = bodiesX12b.length === 1 && bodiesX12b[0].hole === 7 && bodiesX12b[0].score === 5;
   domX12b.window.close();
 
-  check("X12: edit mode — re-tapping a filled cell shows the rev-3 replace-line naming the current value; a SINGLE number tap fires exactly one scJournalSave with the new value and closes the sheet (no second confirm element anywhere, #scPadReplace retired); the full open->close->reopen cycle works via BOTH the veil tap and the sheet-head's Close button (S14); the 'Other' overflow row survives a forced renderScCard() rebuild (periodic-refresh regression, rev-3 mechanism via STATE.scPadOtherOpen); the overflow row reaches BOTH extremes of the 1-19 range on real fixture holes (par 5 hole 9: 1 present via down-range, 19 present via the uncapped up-range; par 3 hole 7: 1 correctly ABSENT — already on the main grid — 19 still present); replace-confirming an ALREADY-KNOWN differing sheet value (I2) sends via that SAME single number tap, no second tap anywhere",
+  check("X12: edit mode — re-tapping a filled cell shows the rev-3 replace-line naming the current value; a SINGLE number tap fires exactly one scJournalSave with the new value and closes the sheet (no second confirm element anywhere, #scPadReplace retired); the sheet/veil structurally escape .wrap's stacking context (fix round 1, review Important #1 — closest('.wrap') is null, not just 'renders on top by accident'); the full open->close->reopen cycle works via BOTH the veil tap and the sheet-head's Close button (S14); the 'Other' overflow row survives a forced renderScCard() rebuild (periodic-refresh regression, rev-3 mechanism via STATE.scPadOtherOpen); every value 1-19 has EXACTLY ONE tappable key across main grid + overflow row on 3 representative real-fixture pars (fix round 1, review Important #2, RULED — hole 7=par3, hole 8=par4, hole 9=par5); replace-confirming an ALREADY-KNOWN differing sheet value (I2) sends via that SAME single number tap, no second tap anywhere",
     closedAfterFreshX12 && replaceLineOkX12 && noReplaceBtnX12 && oneSaveOnReplaceX12 && closedAfterReplaceX12 &&
-      openViaCellX12 && closedViaVeilX12 && reopenedX12 && closedViaCloseBtnX12 &&
+      openViaCellX12 && sheetEscapesWrapX12 && closedViaVeilX12 && reopenedX12 && closedViaCloseBtnX12 &&
       numrowRebuiltX12 && numrowSurvivedX12 &&
-      par5Has1X12 && par5Has19X12 && par3No1X12 && par3Has19X12 &&
+      audit9X12.ok && audit7X12.ok && audit8X12.ok &&
       editModeFromSheetX12b && overrideSentX12b,
     "closedAfterFresh=" + closedAfterFreshX12 + " replaceLineOk=" + replaceLineOkX12 + " noReplaceBtn=" + noReplaceBtnX12 +
       " oneSaveOnReplace=" + oneSaveOnReplaceX12 + " (calls=" + saveCallsX12 + ") closedAfterReplace=" + closedAfterReplaceX12 +
-      " openViaCell=" + openViaCellX12 + " closedViaVeil=" + closedViaVeilX12 + " reopened=" + reopenedX12 +
+      " openViaCell=" + openViaCellX12 + " sheetEscapesWrap=" + sheetEscapesWrapX12 + " closedViaVeil=" + closedViaVeilX12 + " reopened=" + reopenedX12 +
       " closedViaCloseBtn=" + closedViaCloseBtnX12 +
       " numrowRebuilt=" + numrowRebuiltX12 + " numrowSurvived=" + numrowSurvivedX12 +
-      " par5Has1=" + par5Has1X12 + " par5Has19=" + par5Has19X12 + " par3No1=" + par3No1X12 + " par3Has19=" + par3Has19X12 +
+      " audit9(par5).bad=" + JSON.stringify(audit9X12.bad) + " audit7(par3).bad=" + JSON.stringify(audit7X12.bad) + " audit8(par4).bad=" + JSON.stringify(audit8X12.bad) +
       " editModeFromSheet=" + editModeFromSheetX12b + " overrideSent=" + overrideSentX12b +
       " bodiesX12b=" + JSON.stringify(bodiesX12b));
 }
