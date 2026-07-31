@@ -2600,6 +2600,36 @@ async function openScorer(dom, { noSheet = false } = {}) {
   await until(() => (docX12.querySelector("#scSheet .sc-sheet-head")?.textContent || "").includes("Hole 8"));
   const audit8X12 = scKeyAuditX12(docX12.querySelector("#scSheet")); // par 4 (h8=4): main grid bottoms at 2, overflow adds 1 low + 9-19 high
 
+  // Fix round 2 (review Important — regression introduced by fix round 1's
+  // OWN #scSheetHost escape): #scSheetHost is now a body-level sibling of
+  // <footer>, OUTSIDE <section id="score" class="view">, so the
+  // .view[hidden] cascade that used to hide a stray-open sheet "for free"
+  // whenever #score itself hid no longer reaches it — showView() (a
+  // separate hash-router script) only ever toggles `.hidden` on `.view`
+  // elements, never #scSheetHost. Open the sheet on hole 3 (untouched
+  // elsewhere in this dom), navigate away via hashchange to #board (same
+  // pattern X24/X25 use) — this specifically bypasses the veil's own
+  // click-to-close, since no click ever happens (back button/typed
+  // URL/nav tap are indistinguishable from this dom's perspective) —
+  // assert the sheet+veil are gone (not just visually hidden: #scSheetHost
+  // genuinely cleared, matching the SAME reset renderScCard's own
+  // `!STATE.scTeam` branch already performs). Then navigate BACK to
+  // #score and assert the sheet stays closed (S14-style full cycle — "it
+  // got cleared once" isn't proof it doesn't come back unbidden on the
+  // very next repaint).
+  docX12.querySelector('.sc-cell[data-hole="3"]').click(); // hole 3, par 3 — untouched elsewhere in this dom
+  await until(() => !docX12.querySelector("#scSheet")?.hidden);
+  const openBeforeNavX12 = !docX12.querySelector("#scSheet")?.hidden;
+  domX12.window.location.hash = "#board";
+  domX12.window.dispatchEvent(new domX12.window.Event("hashchange"));
+  const sheetGoneAfterNavX12 = !docX12.querySelector("#scSheet");
+  const veilGoneAfterNavX12 = !docX12.querySelector("#scVeil");
+  const sheetHostClearedX12 = (docX12.querySelector("#scSheetHost")?.innerHTML || "") === "";
+  domX12.window.location.hash = "#score?team=" + encodeURIComponent("Duck");
+  domX12.window.dispatchEvent(new domX12.window.Event("hashchange"));
+  await until(() => docX12.querySelectorAll("#scCard .sc-cell").length > 0);
+  const noResurrectX12 = docX12.querySelector("#scSheet")?.hidden === true;
+
   domX12.window.close();
 
   // Review round 2 (finding #3, CONFIRMED GAP): I2's auto-override-through-
@@ -2637,11 +2667,12 @@ async function openScorer(dom, { noSheet = false } = {}) {
   const overrideSentX12b = bodiesX12b.length === 1 && bodiesX12b[0].hole === 7 && bodiesX12b[0].score === 5;
   domX12b.window.close();
 
-  check("X12: edit mode — re-tapping a filled cell shows the rev-3 replace-line naming the current value; a SINGLE number tap fires exactly one scJournalSave with the new value and closes the sheet (no second confirm element anywhere, #scPadReplace retired); the sheet/veil structurally escape .wrap's stacking context (fix round 1, review Important #1 — closest('.wrap') is null, not just 'renders on top by accident'); the full open->close->reopen cycle works via BOTH the veil tap and the sheet-head's Close button (S14); the 'Other' overflow row survives a forced renderScCard() rebuild (periodic-refresh regression, rev-3 mechanism via STATE.scPadOtherOpen); every value 1-19 has EXACTLY ONE tappable key across main grid + overflow row on 3 representative real-fixture pars (fix round 1, review Important #2, RULED — hole 7=par3, hole 8=par4, hole 9=par5); replace-confirming an ALREADY-KNOWN differing sheet value (I2) sends via that SAME single number tap, no second tap anywhere",
+  check("X12: edit mode — re-tapping a filled cell shows the rev-3 replace-line naming the current value; a SINGLE number tap fires exactly one scJournalSave with the new value and closes the sheet (no second confirm element anywhere, #scPadReplace retired); the sheet/veil structurally escape .wrap's stacking context (fix round 1, review Important #1 — closest('.wrap') is null, not just 'renders on top by accident'); the full open->close->reopen cycle works via BOTH the veil tap and the sheet-head's Close button (S14); the 'Other' overflow row survives a forced renderScCard() rebuild (periodic-refresh regression, rev-3 mechanism via STATE.scPadOtherOpen); every value 1-19 has EXACTLY ONE tappable key across main grid + overflow row on 3 representative real-fixture pars (fix round 1, review Important #2, RULED — hole 7=par3, hole 8=par4, hole 9=par5); navigating away from #score via hashchange while the sheet is open clears it (not just visually hidden — #scSheetHost genuinely emptied) instead of lingering over the next view, and it does NOT resurrect on navigating back (fix round 2, review Important — regression from fix round 1's OWN #scSheetHost escape); replace-confirming an ALREADY-KNOWN differing sheet value (I2) sends via that SAME single number tap, no second tap anywhere",
     closedAfterFreshX12 && replaceLineOkX12 && noReplaceBtnX12 && oneSaveOnReplaceX12 && closedAfterReplaceX12 &&
       openViaCellX12 && sheetEscapesWrapX12 && closedViaVeilX12 && reopenedX12 && closedViaCloseBtnX12 &&
       numrowRebuiltX12 && numrowSurvivedX12 &&
       audit9X12.ok && audit7X12.ok && audit8X12.ok &&
+      openBeforeNavX12 && sheetGoneAfterNavX12 && veilGoneAfterNavX12 && sheetHostClearedX12 && noResurrectX12 &&
       editModeFromSheetX12b && overrideSentX12b,
     "closedAfterFresh=" + closedAfterFreshX12 + " replaceLineOk=" + replaceLineOkX12 + " noReplaceBtn=" + noReplaceBtnX12 +
       " oneSaveOnReplace=" + oneSaveOnReplaceX12 + " (calls=" + saveCallsX12 + ") closedAfterReplace=" + closedAfterReplaceX12 +
@@ -2649,6 +2680,8 @@ async function openScorer(dom, { noSheet = false } = {}) {
       " closedViaCloseBtn=" + closedViaCloseBtnX12 +
       " numrowRebuilt=" + numrowRebuiltX12 + " numrowSurvived=" + numrowSurvivedX12 +
       " audit9(par5).bad=" + JSON.stringify(audit9X12.bad) + " audit7(par3).bad=" + JSON.stringify(audit7X12.bad) + " audit8(par4).bad=" + JSON.stringify(audit8X12.bad) +
+      " openBeforeNav=" + openBeforeNavX12 + " sheetGoneAfterNav=" + sheetGoneAfterNavX12 + " veilGoneAfterNav=" + veilGoneAfterNavX12 +
+      " sheetHostCleared=" + sheetHostClearedX12 + " noResurrect=" + noResurrectX12 +
       " editModeFromSheet=" + editModeFromSheetX12b + " overrideSent=" + overrideSentX12b +
       " bodiesX12b=" + JSON.stringify(bodiesX12b));
 }

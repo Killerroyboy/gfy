@@ -4141,7 +4141,31 @@ function renderScorer(){
   // SC-QUEUE drain-timer lifecycle: the 20s poll runs only while the
   // #score view is the active hash view (started here; stopped the moment
   // that stops being true — no background request profile change).
-  if(!scScoreViewActive()){ scStopDrainTimer(); return; }
+  if(!scScoreViewActive()){
+    scStopDrainTimer();
+    // Fix round 2 (review Important — regression introduced by fix round
+    // 1's own #scSheetHost escape): #scSheetHost is a body-level sibling of
+    // <footer>, deliberately OUTSIDE <section id="score" class="view">, so
+    // it no longer falls under the `.view[hidden]{display:none}` cascade
+    // that used to hide a stray-open sheet "for free" the instant #score
+    // itself hid (showView(), a separate hash-router script, only ever
+    // toggles `.hidden` on `.view` elements — it never touches
+    // #scSheetHost, by design, since that's what let the sheet escape
+    // .wrap's stacking context in the first place). Navigating away with
+    // the sheet open — back button, a nav tap, a typed URL — never fires a
+    // click on the veil, so nothing else would ever close it. Clear it
+    // here, on every path that reaches this early return (hashchange AND
+    // the periodic paint() cycle both call renderScorer()) — same STATE
+    // reset every other close path already performs (scPadOpen's own
+    // re-open, scSubmitScore, the veil/Close-button handlers, and
+    // renderScCard's `!STATE.scTeam` branch). Unconditional (no
+    // `STATE.scPadHole!=null` guard) so a no-op case just re-clears
+    // already-empty state — one fewer branch to get wrong.
+    STATE.scPadHole=null; STATE.scPadOtherOpen=false;
+    const sheetHost=$("#scSheetHost");
+    if(sheetHost) sheetHost.innerHTML="";
+    return;
+  }
   scStartDrainTimer();
   const seasonY=scorerSeason();
   const hashTeam=scorerTeamFromHash();
