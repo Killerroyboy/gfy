@@ -699,7 +699,7 @@ reads "unsold" and the stays-in-pot disclosure note fires only for lot-LESS rows
   share stays in the pot (lot-less OR unsold). The would-text `unsold` arm is already correct.
   Money reconciliation: `payable × coveredShares` math unchanged in form — only the covered set
   narrows. Test X41: fixture with an unsold lot on a placing team — no cut booked, note fires,
-  auction board still reads unsold, sold lots' cuts unchanged from their no-unsold values.
+  auction board still reads unsold, sold lots' cuts equal the largest-remainder allocation over the NARROWED covered set (they may legitimately shift by the reallocated remainder — re-pinned 2026-07-31 after the Task-1 review proved the original "unchanged" wording false by counterexample).
 - **SC-PAR-FLAG-2 (copy re-pin, supersedes the §20 flag line):** the health flag becomes, verbatim:
   `Course tab: hole <N> par missing or invalid — To-par and standings suppressed (strokes only)`.
   X33's copy assert updates to the new pin (meaning preserved: still byte-asserted).
