@@ -625,6 +625,11 @@ year's sheet by hand.
 
 ## Would-pay, on the Calcutta board
 
+Payouts figure on **gross** score by default — set the Info tab's
+`calcutta_basis` key to `net` to figure them on net instead, though a
+scramble roster (the normal case here, with a captain and no per-player
+handicap to net against) always forces gross regardless of that key.
+
 Next to each lot on the Calcutta board, a small second line answers "if the
 tournament ended this second, what would the owner collect?" — the exact
 same math as the Payout table further down the same page, just surfaced

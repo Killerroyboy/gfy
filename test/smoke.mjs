@@ -4167,10 +4167,13 @@ async function cellSettledOk(doc, hole) {
   const cell7DashX33 = cell7X33 && /Par —/.test(cell7X33.textContent);
   const cell8RealX33 = cell8X33 && /Par \d/.test(cell8X33.textContent);
   const stripX33 = docX33.querySelector("#healthStrip");
+  // §22 SC-PAR-FLAG-2 (copy re-pin, supersedes the §20 flag line): the
+  // health flag's text widens to name standings, not just to-par, as
+  // suppressed — byte-exact assert, meaning preserved from the prior pin.
   const warnedX33 = stripX33 && !stripX33.hidden &&
-    /Course tab: hole 7 par missing or invalid — To-par suppressed \(strokes only\)/.test(stripX33.textContent);
+    /Course tab: hole 7 par missing or invalid — To-par and standings suppressed \(strokes only\)/.test(stripX33.textContent);
   domX33.window.close();
-  check("X33: SC-PAR-VALID — blank par cell (hole 7 row present, par empty) => tally data-mode=strokes (not topar w/ silent 0), hole-7 cell 'Par —', hole-8 still labeled, healthStrip names hole 7 with the pinned copy",
+  check("X33: SC-PAR-VALID — blank par cell (hole 7 row present, par empty) => tally data-mode=strokes (not topar w/ silent 0), hole-7 cell 'Par —', hole-8 still labeled, healthStrip names hole 7 with the pinned copy (§22 SC-PAR-FLAG-2 re-pin)",
     modeStrokesX33 && cell7DashX33 && cell8RealX33 && warnedX33,
     `mode=${tallyX33 && tallyX33.getAttribute("data-mode")} cell7=${cell7X33 && cell7X33.textContent} cell8=${cell8X33 && cell8X33.textContent} warned=${warnedX33}`);
 }
@@ -4542,6 +4545,10 @@ async function cellSettledOk(doc, hole) {
   const okPosFirstX39 = docOKX39.querySelector("#lbBody .lb-row .lb-pos");
   const okPos1X39 = okPosFirstX39 && okPosFirstX39.textContent.trim() === "1";
   const okLeadX39 = !!docOKX39.querySelector("#lbBody .lb-row.lead");
+  // Captured before the control dom closes, so the blank-par dom's row
+  // count can be checked for PARITY against it below (replaces a hardcoded
+  // >=5 floor with a same-fixture same-field-size same-run comparison).
+  const okRowCountX39 = docOKX39.querySelectorAll("#lbBody .lb-row").length;
   domOKX39.window.close();
 
   const courseBlank7X39 = FIXTURES.course.split("\n")
@@ -4553,14 +4560,16 @@ async function cellSettledOk(doc, hole) {
   await until(() => domBX39.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   const docBX39 = domBX39.window.document;
   const posCellsBX39 = [...docBX39.querySelectorAll("#lbBody .lb-pos")].map(e => e.textContent.trim());
-  const rowsExistBX39 = posCellsBX39.length >= 5;
-  const allDashBX39 = rowsExistBX39 && posCellsBX39.every(t => t === "—");
+  // PARITY, not a floor: blanking one hole's par must not drop or duplicate
+  // a single team row — every team from the control dom is still listed.
+  const rowsParityBX39 = posCellsBX39.length === okRowCountX39;
+  const allDashBX39 = rowsParityBX39 && posCellsBX39.every(t => t === "—");
   const noLeadBX39 = !docBX39.querySelector("#lbBody .lb-row.lead");
   domBX39.window.close();
 
-  check("X39: SC-RANK-POS — complete course: first Pos '1' + a .lead row present; blank-par: all Pos cells '—', zero .lead rows, all teams still listed (no standing claims off the raw-gross fallback)",
-    okPos1X39 && okLeadX39 && rowsExistBX39 && allDashBX39 && noLeadBX39,
-    `okPos1=${okPos1X39} okLead=${okLeadX39} rows=${posCellsBX39.length} allDash=${allDashBX39} noLead=${noLeadBX39}`);
+  check("X39: SC-RANK-POS — complete course: first Pos '1' + a .lead row present; blank-par: all Pos cells '—', zero .lead rows, row count at PARITY with the control dom (no team gained or lost, no standing claims off the raw-gross fallback)",
+    okPos1X39 && okLeadX39 && rowsParityBX39 && allDashBX39 && noLeadBX39,
+    `okPos1=${okPos1X39} okLead=${okLeadX39} okRows=${okRowCountX39} blankRows=${posCellsBX39.length} rowsParity=${rowsParityBX39} allDash=${allDashBX39} noLead=${noLeadBX39}`);
 }
 
 {
@@ -4663,6 +4672,14 @@ async function cellSettledOk(doc, hole) {
   await until(() => domOKX41.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   const docOKX41 = domOKX41.window.document;
 
+  // Duck stays `collected:TRUE` here (only the OWNER cell is blanked) —
+  // this intentionally suppresses calcuttaModel's own separate "lot has no
+  // owner — counted under Unassigned" flag, which only fires for
+  // NOT-YET-collected lots (`lots.filter(l=>!l.collected)`, index.html
+  // ~2111). That flag is a distinct, pre-existing signal for an outstanding
+  // unassigned balance; this fixture deliberately keeps it silent so the
+  // test isolates the payout-table/auction-board behavior under review
+  // (C-UNSOLD) from that unrelated collection-side flag.
   const calcuttaDuckUnsold = FIXTURES.calcutta.replace("2026,Duck,Tex,120,TRUE", "2026,Duck,,121,TRUE");
   const duckUnsoldFetch = withOverride({
     calcutta: () => Promise.resolve({ ok: true, status: 200, text: async () => calcuttaDuckUnsold }),
@@ -4678,6 +4695,12 @@ async function cellSettledOk(doc, hole) {
   const duckRowX41 = payRowsX41.find(r => /Duck/.test(r.team));
   const sullyRowX41 = payRowsX41.find(r => /Sully/.test(r.team));
   const texRowX41 = payRowsX41.find(r => /Tex/.test(r.team));
+
+  // Negative control: the all-sold control dom (Duck's own price bumped but
+  // its OWNER left intact, so every placing lot is sold) must NOT carry the
+  // stays-in-pot disclosure — that note is specific to a lot-less/unsold
+  // placing row, and this fixture has none.
+  const noteAbsentControlX41 = !/unsold lots' shares stay in the pot/.test(docOKX41.querySelector("#calBasis")?.textContent || "");
 
   // (a) the unsold placing team's own row books no cut.
   const noCutX41 = duckRowX41?.cutText === "—";
@@ -4716,9 +4739,113 @@ async function cellSettledOk(doc, hole) {
   domOKX41.window.close();
   domX41.window.close();
 
-  check("X41: §22 C-UNSOLD — a placing team's UNSOLD lot (owner '—', lot present) books no owner cut ('—' not a dollar figure), the auction board still reads 'unsold', the stays-in-pot disclosure note fires for this unsold-but-owned row, the remaining SOLD placing lots' cuts equal the largest-remainder allocation re-derived over the narrowed covered set (a genuine reallocation vs. the control dom, not a coincidental no-op), and #calPot/#calPayable stay byte-identical",
-    noCutX41 && stillUnsoldX41 && noteX41 && soldMatchesDerivationX41 && shiftedFromControlX41 && potPayableSameX41,
-    `noCut=${noCutX41} duckCut=${duckRowX41?.cutText} stillUnsold=${stillUnsoldX41} note=${noteX41} soldMatchesDerivation=${soldMatchesDerivationX41} shiftedFromControl=${shiftedFromControlX41} sullyX41=${sullyCutX41}(exp${sullyExpectedX41},controlOrig${sullyCutOrig}) texX41=${texCutX41}(exp${texExpectedX41}) potPayableSame=${potPayableSameX41}`);
+  check("X41: §22 C-UNSOLD — a placing team's UNSOLD lot (owner '—', lot present) books no owner cut ('—' not a dollar figure), the auction board still reads 'unsold', the stays-in-pot disclosure note fires for this unsold-but-owned row (and is ABSENT from the all-sold control dom), the remaining SOLD placing lots' cuts equal the largest-remainder allocation re-derived over the narrowed covered set (a genuine reallocation vs. the control dom, not a coincidental no-op), and #calPot/#calPayable stay byte-identical",
+    noCutX41 && stillUnsoldX41 && noteX41 && noteAbsentControlX41 && soldMatchesDerivationX41 && shiftedFromControlX41 && potPayableSameX41,
+    `noCut=${noCutX41} duckCut=${duckRowX41?.cutText} stillUnsold=${stillUnsoldX41} note=${noteX41} noteAbsentControl=${noteAbsentControlX41} soldMatchesDerivation=${soldMatchesDerivationX41} shiftedFromControl=${shiftedFromControlX41} sullyX41=${sullyCutX41}(exp${sullyExpectedX41},controlOrig${sullyCutOrig}) texX41=${texCutX41}(exp${texExpectedX41}) potPayableSame=${potPayableSameX41}`);
+}
+
+/* ---------------------------------------------------------------------
+   X42 (§22, SC-PAR-CORNER's sibling coverage — SC-RANK-CAL net guard):
+   `rankSuppressed = basis==="gross" && !courseMap()` (index.html:2445) is
+   gross-basis ONLY — net-basis standings derive from handicaps/totals, not
+   pars, so a net-basis calcutta must stay fully live (places + win claims)
+   even while the Course tab's pars are incomplete. The repo's stock
+   fixtures always carry a Field roster, and `renderCalcutta` forces
+   basis="gross" whenever a roster exists (`if(roster.size){...} else
+   {basis=...}` — a scramble roster has no per-player handicap to net
+   against), regardless of `calcutta_basis`. Reaching a genuine net-basis
+   render therefore requires a synthetic fixture that empties the Field
+   roster the way `rosterMap()` reads it (year+player+team all present) —
+   documented as a deliberately skipped/unrenderable visual state in the
+   §21 suppression-rank wave's own task-2 report (roster deletion perturbs
+   too much for a *screenshot* to prove the guard in isolation) but exactly
+   right for an in-DOM assertion, which only reads the three calcutta
+   surfaces under test and ignores the rest of the page.
+
+   Fixture: field truncated to its header row only (zero data rows ->
+   `rosterMap().size===0` for every season) + `calcutta_basis` flipped
+   gross->net on the Info tab (already present as a real row in
+   fixtures/info.csv, so this is a single-line substitution, not an
+   addition) + the same blank-hole-7 course splice X39/X40 use. Scores and
+   Calcutta tabs are untouched — with the roster empty, `buildPlayers`'s
+   `roster.size&&!roster.has(k)` guard short-circuits, so every scored team
+   still gets counted (falling back to its raw team-column name).
+   --------------------------------------------------------------------- */
+{
+  const fieldHeaderOnlyX42 = FIXTURES.field.split(/\r?\n/)[0] + "\r\n";
+  const infoNetX42 = FIXTURES.info.replace("calcutta_basis,gross", "calcutta_basis,net");
+  const courseBlank7X42 = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+  const domX42 = makeDom("", withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldHeaderOnlyX42 }),
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoNetX42 }),
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7X42 }),
+  }));
+  await until(() => domX42.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docX42 = domX42.window.document;
+
+  const payRowX42 = !!docX42.querySelector("#payBody .pay-row");
+  const aucTextX42 = docX42.querySelector("#aucBody")?.textContent || "";
+  const winClaimX42 = /Wins if it ended now: \$\d+/.test(aucTextX42);
+  const paidOnNetX42 = /paid on net/.test(docX42.querySelector("#calBasis")?.textContent || "");
+  // Both-direction honesty (X37/X40 idiom): the suppressed-arm text and the
+  // pars-incomplete empty-state copy must be ABSENT — net truly stays live,
+  // this isn't the gross-suppression path rendering by coincidence.
+  const noAwaitingParsX42 = !/awaiting pars/.test(aucTextX42);
+  const noParsEmptyStateX42 = !/Payouts wait on the Course tab/.test(docX42.querySelector("#payBody")?.textContent || "");
+  domX42.window.close();
+
+  check("X42: §22 SC-RANK-CAL net guard — roster-less + calcutta_basis=net + blank par 7: the calcutta payout table stays fully LIVE (a real .pay-row renders, a 'Wins if it ended now: $N' claim is present, basis line reads 'paid on net'), with no 'awaiting pars' text and no pars-incomplete empty state — net-basis standings never key off courseMap()",
+    payRowX42 && winClaimX42 && paidOnNetX42 && noAwaitingParsX42 && noParsEmptyStateX42,
+    `payRow=${payRowX42} winClaim=${winClaimX42} paidOnNet=${paidOnNetX42} noAwaitingPars=${noAwaitingParsX42} noParsEmptyState=${noParsEmptyStateX42}`);
+}
+
+/* ---------------------------------------------------------------------
+   X43 (§22, SC-RANK-CAL arm priority under suppression): each of the
+   auction board's would-text branches (`withdrawn` / `unsold` / `waiting
+   on cards`) is checked, in that order, BEFORE the `rankSuppressed`
+   ("awaiting pars") branch is ever reached (index.html ~2520-2532) — a
+   suppressed course must never overwrite a more specific, already-known
+   state with the generic "pars are the reason" text. A normal owned+
+   ranked lot, with nothing else going on, DOES read "awaiting pars" under
+   suppression (that's the X40 control case) — this test's point is that
+   the other three arms outrank it on their own lots.
+
+   Fixture (gross basis — the stock Field roster is untouched, so basis
+   stays forced-gross regardless of Info; only pars are blanked): Tex's
+   Field status flipped to `wd` (W-WD's own fixture idiom) so its lot
+   reads "withdrawn"; Moose's calcutta owner blanked (V4's idiom) so its
+   lot reads "unsold"; Bear's scores rows removed entirely (V3's idiom) so
+   its lot — still owned, still a lot, never posted a card — reads
+   "waiting on cards"; Duck (untouched) is the normal owned+ranked control
+   arm and reads "awaiting pars". Course: the same blank-hole-7 splice.
+   --------------------------------------------------------------------- */
+{
+  const fieldTexWdX43 = FIXTURES.field.replace("2026,Tex,Tex,2019,18,In,TRUE,", "2026,Tex,Tex,2019,18,wd,TRUE,");
+  const calcuttaMooseUnsoldX43 = FIXTURES.calcutta.replace("2026,Moose,Sock,80,", "2026,Moose,,80,");
+  const scoresNoBearX43 = FIXTURES.scores.split(/\r?\n/).filter(l => !l.startsWith("2026,Bear,")).join("\n");
+  const courseBlank7X43 = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+  const domX43 = makeDom("", withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldTexWdX43 }),
+    calcutta: () => Promise.resolve({ ok: true, status: 200, text: async () => calcuttaMooseUnsoldX43 }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresNoBearX43 }),
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7X43 }),
+  }));
+  await until(() => domX43.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docX43 = domX43.window.document;
+
+  const duckWouldX43 = wouldTextFor(docX43, "Duck");
+  const mooseWouldX43 = wouldTextFor(docX43, "Moose");
+  const texWouldX43 = wouldTextFor(docX43, "Tex");
+  const bearWouldX43 = wouldTextFor(docX43, "Bear");
+  domX43.window.close();
+
+  check("X43: §22 SC-RANK-CAL arm priority under suppression — withdrawn/unsold/waiting-on-cards each win over the generic 'awaiting pars' text on their own lot (Tex wd -> 'withdrawn', Moose no-owner -> 'unsold', Bear no-scores -> 'waiting on cards'), while an untouched owned+ranked lot (Duck) reads 'awaiting pars' as normal",
+    texWouldX43 === "withdrawn" && mooseWouldX43 === "unsold" && bearWouldX43 === "waiting on cards" && duckWouldX43 === "awaiting pars",
+    `duck=${duckWouldX43} moose=${mooseWouldX43} tex=${texWouldX43} bear=${bearWouldX43}`);
 }
 
 /* ---------------------------------------------------------------------
