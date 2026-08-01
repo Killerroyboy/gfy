@@ -4599,7 +4599,7 @@ async function cellSettledOk(doc, hole) {
   const payBodyBX40 = docBX40.querySelector("#payBody");
   const noPlacesBX40 = payBodyBX40 && !payBodyBX40.querySelector(".pay-row") &&
     /Payouts wait on the Course tab — standings need all 18 pars\./.test(payBodyBX40.textContent);
-  const basisBX40 = /Paused · Course pars incomplete/.test(docBX40.querySelector("#calBasis").textContent);
+  const basisBX40 = docBX40.querySelector("#calBasis").textContent === "Paused · Course pars incomplete";
   const aucTextBX40 = docBX40.querySelector("#aucBody").textContent;
   const awaitingBX40 = /awaiting pars/.test(aucTextBX40) && !/Wins if it ended now|Won: \$/.test(aucTextBX40);
   const moneyBX40 = ["#calPot", "#calRake", "#calPayable", "#calTop"].map(s => docBX40.querySelector(s).textContent);
@@ -4891,6 +4891,129 @@ async function cellSettledOk(doc, hole) {
     calBasisAX44 === "Bids locked. Payouts post once cards and Course pars are in." &&
     calBasisBX44 === "Bids locked. Payouts post once cards do.",
     `corner=${JSON.stringify(calBasisAX44)} single=${JSON.stringify(calBasisBX44)}`);
+}
+
+/* ---------------------------------------------------------------------
+   X45 (§23 C-EMPTY-SPLIT): the shared #payBody empty-state splits per
+   branch. No-LOTS (the `!lots.length` early-out, index.html ~2412) keeps
+   the bids line — bids are genuinely absent, so that copy stays true. No-
+   CARDS (lots exist, `!ranked.length`, index.html ~2549 — the SAME branch
+   X44 exercises) reads a DIFFERENT line naming cards instead of bids,
+   since bids clearly ARE in (the lots exist) — the old shared copy there
+   was a last-panel self-contradiction sitting above a "Bids locked."
+   basis line. Direction (a) is GREEN today (the no-lots line is
+   unchanged); direction (b) is RED today (the no-cards branch still
+   renders the bids-line copy pre-fix). One combined byte-exact check, X44's
+   idiom.
+   --------------------------------------------------------------------- */
+{
+  // (a) no-LOTS: header-only calcutta fixture (zero data rows) -> lots=[]
+  // -> the `!lots.length` early-out. Scores stay the normal fixture so the
+  // leaderboard renders as usual; only the Calcutta tab's own data is empty.
+  const calcuttaHeaderOnlyX45 = FIXTURES.calcutta.split(/\r\n|\n/)[0] + "\r\n";
+  const domAX45 = makeDom("", withOverride({
+    calcutta: () => Promise.resolve({ ok: true, status: 200, text: async () => calcuttaHeaderOnlyX45 }),
+  }));
+  await until(() => domAX45.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const payBodyAX45 = domAX45.window.document.querySelector("#payBody")?.textContent || "";
+  domAX45.window.close();
+
+  // (b) no-CARDS: lots present (default calcutta fixture untouched), header-
+  // only scores -> ranked.length===0, the `!ranked.length` branch. Course
+  // stays complete (rankSuppressed false) so this isolates the plain no-
+  // cards line from the §22 corner widening, which X44 already covers.
+  const scoresHeaderOnlyX45 = FIXTURES.scores.split(/\r\n|\n/)[0] + "\r\n";
+  const domBX45 = makeDom("", withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresHeaderOnlyX45 }),
+  }));
+  await settle();
+  const payBodyBX45 = domBX45.window.document.querySelector("#payBody")?.textContent || "";
+  domBX45.window.close();
+
+  check("X45: §23 C-EMPTY-SPLIT — no-LOTS #payBody reads 'Payouts calculate off the live leaderboard once bids are in.' byte-exact; no-CARDS (lots present, no scores yet) #payBody reads 'Payouts calculate off the live leaderboard once cards are in.' byte-exact",
+    payBodyAX45 === "Payouts calculate off the live leaderboard once bids are in." &&
+    payBodyBX45 === "Payouts calculate off the live leaderboard once cards are in.",
+    `noLots=${JSON.stringify(payBodyAX45)} noCards=${JSON.stringify(payBodyBX45)}`);
+}
+
+/* ---------------------------------------------------------------------
+   X46 (§23 C-OWNERLESS-COLLECTED): a lot with NO owner but marked
+   collected=TRUE is a sheet-data contradiction (money marked collected
+   from nobody) rendered faithfully today with no signal — calcuttaModel
+   gains ONE flag line beside the existing unassigned-lot gate (index.html
+   ~2116, which only fires for UNCOLLECTED ownerless lots via its
+   `lots.filter(l=>!l.collected)` guard) — zero math change, flag only.
+   Fixture: X41's own shape (blank the OWNER cell on the already-
+   collected:TRUE "Duck" row). Three negative doms prove the new flag is
+   specific, not a broad "any collected lot" or "any ownerless lot" net:
+   normal (all-owned, mixed collected states) never fires it; unsold-
+   uncollected (ownerless but NOT collected — the EXISTING flag's own
+   territory) fires the EXISTING flag but must not ALSO fire the new one;
+   all-sold (every lot owned, every lot collected:TRUE) proves universal
+   collection alone, with no ownerless lot anywhere, never fires it either.
+   Per the shared-#healthStrip note (X33 and X45/X46 all read it), negative
+   doms assert the NEW string specifically absent rather than the strip
+   empty — other flags may legitimately be present (e.g. the existing
+   unassigned-lot flag in the unsold-uncollected dom). The three negative
+   doms' contradiction candidate is NOT always Duck (dom (c) blanks MOOSE's
+   owner cell) — so their absence check uses a TEAM-AGNOSTIC regex (no team
+   name pinned) to actually catch a regressed guard regardless of which lot
+   it would fire for; only the positive dom (a) — which controls its own
+   fixture team — asserts the Duck-specific string (§23 review round 1
+   fix: a Duck-only regex on dom (c) would have been vacuous against a
+   guard that dropped the `l.collected` check, since Moose's flag text
+   never matches a Duck-pinned pattern).
+   --------------------------------------------------------------------- */
+{
+  const flagReDuckX46 = /lot "Duck" marked collected but has no owner — check the Calcutta tab/;
+  const flagReAnyX46 = /marked collected but has no owner — check the Calcutta tab/;
+
+  // (a) positive: ownerless + collected:TRUE (X41's fixture shape).
+  const calcuttaOwnerlessCollectedX46 = FIXTURES.calcutta.replace("2026,Duck,Tex,120,TRUE", "2026,Duck,,120,TRUE");
+  const domAX46 = makeDom("", withOverride({
+    calcutta: () => Promise.resolve({ ok: true, status: 200, text: async () => calcuttaOwnerlessCollectedX46 }),
+  }));
+  await until(() => domAX46.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const stripAX46 = domAX46.window.document.querySelector("#healthStrip");
+  const firesX46 = !!stripAX46 && !stripAX46.hidden && flagReDuckX46.test(stripAX46.textContent);
+  domAX46.window.close();
+
+  // (b) negative: normal (default fixture — all lots owned, mixed collected
+  // states, no data contradiction anywhere).
+  const domBX46 = makeDom("");
+  await until(() => domBX46.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const absentNormalX46 = !flagReAnyX46.test(domBX46.window.document.querySelector("#healthStrip")?.textContent || "");
+  domBX46.window.close();
+
+  // (c) negative: unsold-uncollected (ownerless, NOT collected — V4's own
+  // fixture shape, on MOOSE) fires the EXISTING unassigned-lot flag but
+  // must not ALSO fire the new one.
+  const calcuttaUnsoldUncollectedX46 = FIXTURES.calcutta.replace("2026,Moose,Sock,80,", "2026,Moose,,80,");
+  const domCX46 = makeDom("", withOverride({
+    calcutta: () => Promise.resolve({ ok: true, status: 200, text: async () => calcuttaUnsoldUncollectedX46 }),
+  }));
+  await until(() => domCX46.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const stripCX46 = domCX46.window.document.querySelector("#healthStrip");
+  const existingFlagFiresX46 = !!stripCX46 && !stripCX46.hidden && /has no owner — counted under Unassigned/.test(stripCX46.textContent);
+  const absentUnsoldUncollectedX46 = !flagReAnyX46.test(stripCX46?.textContent || "");
+  domCX46.window.close();
+
+  // (d) negative: all-sold (every lot owned, every lot ALSO collected:TRUE)
+  // — proves universal collection alone, with zero ownerless lots in the
+  // mix, never fires the new flag.
+  const calcuttaAllSoldX46 = FIXTURES.calcutta
+    .replace("2026,Sully,Tex,100,", "2026,Sully,Tex,100,TRUE")
+    .replace("2026,Moose,Sock,80,", "2026,Moose,Sock,80,TRUE");
+  const domDX46 = makeDom("", withOverride({
+    calcutta: () => Promise.resolve({ ok: true, status: 200, text: async () => calcuttaAllSoldX46 }),
+  }));
+  await until(() => domDX46.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const absentAllSoldX46 = !flagReAnyX46.test(domDX46.window.document.querySelector("#healthStrip")?.textContent || "");
+  domDX46.window.close();
+
+  check("X46: §23 C-OWNERLESS-COLLECTED — ownerless+collected:TRUE lot (Duck, X41's shape) fires 'lot \"Duck\" marked collected but has no owner — check the Calcutta tab' in #healthStrip; absent on the normal default dom; absent on an unsold-uncollected dom (which fires only the EXISTING unassigned-lot flag); absent on an all-sold+all-collected dom",
+    firesX46 && absentNormalX46 && existingFlagFiresX46 && absentUnsoldUncollectedX46 && absentAllSoldX46,
+    `fires=${firesX46} absentNormal=${absentNormalX46} existingFlagFires=${existingFlagFiresX46} absentUnsoldUncollected=${absentUnsoldUncollectedX46} absentAllSold=${absentAllSoldX46}`);
 }
 
 /* ---------------------------------------------------------------------

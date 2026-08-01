@@ -635,29 +635,37 @@ tournament ended this second, what would the owner collect?" — the exact
 same math as the Payout table further down the same page, just surfaced
 earlier (never a separate calculation that could quietly disagree with it).
 It reads **"Wins if it ended now"** while the tournament's still going, and
-flips to **"Won"** once every card is in. Four situations get their own
-plain-language text instead of a dollar figure: no owner at all reads
-**"unsold"**; a team that hasn't posted a single hole yet reads **"waiting
-on cards"**; a team that's posted but landed outside the paying spots reads
-**"—"**; and, while the Course tab's pars are incomplete, every owned,
-scored lot reads **"awaiting pars"** instead (see below). None of this
-changes what an owner owes for the lot itself — the board says so
-directly: *"You owe the price regardless."*
+flips to **"Won"** once every card is in. Five situations get their own
+plain-language text instead of a dollar figure: a team marked **withdrawn**
+reads **"withdrawn"** (wins over every other state — a withdrawn team can't
+collect no matter where its raw standing would otherwise land it); no owner
+at all reads **"unsold"**; a team that hasn't posted a single hole yet reads
+**"waiting on cards"**; a team that's posted but landed outside the paying
+spots reads **"—"**; and, while the Course tab's pars are incomplete, every
+remaining owned, scored lot reads **"awaiting pars"** instead (see below).
+None of this changes what an owner owes for the lot itself — the board says
+so directly: *"You owe the price regardless."* And if an unsold lot's team
+places anyway, that lot's cut in the Payout table below reads **"—"** too —
+there's no owner to pay, so its share stays in the pot, and the basis line
+notes it: *"unsold lots' shares stay in the pot"*.
 
 **While the Course tab's pars are incomplete**, nothing on the site makes a
 rank claim off the raw stroke count — there's no fair way to compare an
 18-hole total against a still-short one, so standings pause instead of
-quietly ranking off it. You'll see it in three places: the leaderboard's
+quietly ranking off it. You'll see it in five places: the leaderboard's
 Pos column shows **"—"** for every team (its To-par column also relabels
-itself **"Total"**, since it can't back a to-par figure either); the
-Calcutta payout panel replaces the payout table with *"Payouts wait on the
-Course tab — standings need all 18 pars."* and its basis line reads
-*"Paused · Course pars incomplete"*; and each owned, scored lot's would-pay
-line reads **"awaiting pars"** as above. Money already collected or owed —
-the pot, rake, payable total, top bid, outstanding balances — is
-unaffected; only rank claims pause. The fix is the same everywhere: fill in
-the missing or invalid par cells on the Course tab — the health strip names
-the exact hole.
+itself **"Total"**, since it can't back a to-par figure either); each
+scorer's own tally tile drops its to-par figure for a plain **"Thru
+N"** count; the personal glance drops any rank claim ("You're leading,"
+"3rd of N reporting") down to its neutral facts alone — thru N, plus who's
+still pending on their phone; the Calcutta payout panel replaces the
+payout table with *"Payouts wait on the Course tab — standings need all
+18 pars."* and its basis line reads *"Paused · Course pars incomplete"*;
+and each owned, scored lot's would-pay line reads **"awaiting pars"** as
+above. Money already collected or owed — the pot, rake, payable total, top
+bid, outstanding balances — is unaffected; only rank claims pause. The fix
+is the same everywhere: fill in the missing or invalid par cells on the
+Course tab — the health strip names the exact hole.
 
 If a team has to withdraw mid-tournament, set that player's **current-
 season** Field `status` to `wd`. The board excludes them from the
