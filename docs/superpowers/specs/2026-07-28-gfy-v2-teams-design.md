@@ -720,3 +720,12 @@ reads "unsold" and the stays-in-pot disclosure note fires only for lot-LESS rows
   X41 alone; reverting the net guard fails X42 alone; hoisting the suppressed arm fails X43 alone.
 - Frozen: everything §21 froze except `renderCalcutta` (C-UNSOLD/SC-PAR-CORNER arms only),
   `renderHolePanel` (HP-PAR only), and `courseMap` (the flag STRING only — logic untouched).
+
+### §22 amendment (2026-07-31, Task-2 review — ratified by the wave owner)
+SC-PAR-CORNER gains its byte-assert (the one §22 production string without one): **X44** — both
+directions in one check per the house idiom: header-only scores × blank-par-7 course ⇒ the corner
+string `Bids locked. Payouts post once cards and Course pars are in.`; same scores × complete
+course ⇒ the preserved single-state string `Bids locked. Payouts post once cards do.` Suite arc
+re-pins 212 → **213**. Also authorized within renderHolePanel's existing HP-PAR unfreeze: drop the
+now-dead `const pars=courseMap()` local (behavior-neutral — scHolePar's own courseMap() call
+preserves the flag side effect, per the review's analysis).
