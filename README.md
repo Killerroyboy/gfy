@@ -647,7 +647,7 @@ None of this changes what an owner owes for the lot itself — the board says
 so directly: *"You owe the price regardless."* And if an unsold lot's team
 places anyway, that lot's cut in the Payout table below reads **"—"** too —
 there's no owner to pay, so its share stays in the pot, and the basis line
-notes it: *"unsold lots' shares stay in the pot."*
+notes it: *"unsold lots' shares stay in the pot"*.
 
 **While the Course tab's pars are incomplete**, nothing on the site makes a
 rank claim off the raw stroke count — there's no fair way to compare an

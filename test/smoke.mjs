@@ -4954,10 +4954,19 @@ async function cellSettledOk(doc, hole) {
    Per the shared-#healthStrip note (X33 and X45/X46 all read it), negative
    doms assert the NEW string specifically absent rather than the strip
    empty — other flags may legitimately be present (e.g. the existing
-   unassigned-lot flag in the unsold-uncollected dom).
+   unassigned-lot flag in the unsold-uncollected dom). The three negative
+   doms' contradiction candidate is NOT always Duck (dom (c) blanks MOOSE's
+   owner cell) — so their absence check uses a TEAM-AGNOSTIC regex (no team
+   name pinned) to actually catch a regressed guard regardless of which lot
+   it would fire for; only the positive dom (a) — which controls its own
+   fixture team — asserts the Duck-specific string (§23 review round 1
+   fix: a Duck-only regex on dom (c) would have been vacuous against a
+   guard that dropped the `l.collected` check, since Moose's flag text
+   never matches a Duck-pinned pattern).
    --------------------------------------------------------------------- */
 {
-  const flagReX46 = /lot "Duck" marked collected but has no owner — check the Calcutta tab/;
+  const flagReDuckX46 = /lot "Duck" marked collected but has no owner — check the Calcutta tab/;
+  const flagReAnyX46 = /marked collected but has no owner — check the Calcutta tab/;
 
   // (a) positive: ownerless + collected:TRUE (X41's fixture shape).
   const calcuttaOwnerlessCollectedX46 = FIXTURES.calcutta.replace("2026,Duck,Tex,120,TRUE", "2026,Duck,,120,TRUE");
@@ -4966,19 +4975,19 @@ async function cellSettledOk(doc, hole) {
   }));
   await until(() => domAX46.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   const stripAX46 = domAX46.window.document.querySelector("#healthStrip");
-  const firesX46 = !!stripAX46 && !stripAX46.hidden && flagReX46.test(stripAX46.textContent);
+  const firesX46 = !!stripAX46 && !stripAX46.hidden && flagReDuckX46.test(stripAX46.textContent);
   domAX46.window.close();
 
   // (b) negative: normal (default fixture — all lots owned, mixed collected
   // states, no data contradiction anywhere).
   const domBX46 = makeDom("");
   await until(() => domBX46.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
-  const absentNormalX46 = !flagReX46.test(domBX46.window.document.querySelector("#healthStrip")?.textContent || "");
+  const absentNormalX46 = !flagReAnyX46.test(domBX46.window.document.querySelector("#healthStrip")?.textContent || "");
   domBX46.window.close();
 
   // (c) negative: unsold-uncollected (ownerless, NOT collected — V4's own
-  // fixture shape) fires the EXISTING unassigned-lot flag but must not ALSO
-  // fire the new one.
+  // fixture shape, on MOOSE) fires the EXISTING unassigned-lot flag but
+  // must not ALSO fire the new one.
   const calcuttaUnsoldUncollectedX46 = FIXTURES.calcutta.replace("2026,Moose,Sock,80,", "2026,Moose,,80,");
   const domCX46 = makeDom("", withOverride({
     calcutta: () => Promise.resolve({ ok: true, status: 200, text: async () => calcuttaUnsoldUncollectedX46 }),
@@ -4986,7 +4995,7 @@ async function cellSettledOk(doc, hole) {
   await until(() => domCX46.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   const stripCX46 = domCX46.window.document.querySelector("#healthStrip");
   const existingFlagFiresX46 = !!stripCX46 && !stripCX46.hidden && /has no owner — counted under Unassigned/.test(stripCX46.textContent);
-  const absentUnsoldUncollectedX46 = !flagReX46.test(stripCX46?.textContent || "");
+  const absentUnsoldUncollectedX46 = !flagReAnyX46.test(stripCX46?.textContent || "");
   domCX46.window.close();
 
   // (d) negative: all-sold (every lot owned, every lot ALSO collected:TRUE)
@@ -4999,7 +5008,7 @@ async function cellSettledOk(doc, hole) {
     calcutta: () => Promise.resolve({ ok: true, status: 200, text: async () => calcuttaAllSoldX46 }),
   }));
   await until(() => domDX46.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
-  const absentAllSoldX46 = !flagReX46.test(domDX46.window.document.querySelector("#healthStrip")?.textContent || "");
+  const absentAllSoldX46 = !flagReAnyX46.test(domDX46.window.document.querySelector("#healthStrip")?.textContent || "");
   domDX46.window.close();
 
   check("X46: §23 C-OWNERLESS-COLLECTED — ownerless+collected:TRUE lot (Duck, X41's shape) fires 'lot \"Duck\" marked collected but has no owner — check the Calcutta tab' in #healthStrip; absent on the normal default dom; absent on an unsold-uncollected dom (which fires only the EXISTING unassigned-lot flag); absent on an all-sold+all-collected dom",
