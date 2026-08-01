@@ -2120,6 +2120,11 @@ function calcuttaModel(year=STATE.year){
     if(!owed[k]) owed[k]={owner:owner,total:0,lots:0};
     owed[k].total+=l.price; owed[k].lots++;
   });
+  // §23 C-OWNERLESS-COLLECTED: a lot marked collected with no owner is a
+  // sheet-data contradiction (money collected from nobody) — flag only,
+  // beside the unassigned gate above (which is scoped to !l.collected and
+  // never sees these rows). Zero math change.
+  lots.filter(l=>l.collected&&l.owner==="—").forEach(l=>flag('lot "'+l.team+'" marked collected but has no owner — check the Calcutta tab'));
   return { lots, pot, rakePct, rake, payable,
            outstanding:Object.values(owed).sort((a,b)=>b.total-a.total) };
 }
@@ -2547,7 +2552,11 @@ function renderCalcutta(){
   }).join("");
 
   if(!ranked.length){
-    $("#payBody").innerHTML='<div class="mn-empty">Payouts calculate off the live leaderboard once bids are in.</div>';
+    // §23 C-EMPTY-SPLIT: lots exist here (the !lots.length branch above
+    // already returned if not) — bids are genuinely in, so the shared
+    // "once bids are in" copy would self-contradict the "Bids locked."
+    // basis line just below. Name cards, not bids.
+    $("#payBody").innerHTML='<div class="mn-empty">Payouts calculate off the live leaderboard once cards are in.</div>';
     // SC-PAR-CORNER (§22): no cards AND (gross-basis) suppressed pars both
     // hold at once — widen the copy to name both reasons instead of only
     // the cards one. Each single state keeps its own existing line.

@@ -625,9 +625,9 @@ the implementation counts KEYS; the spec demands VALID PARS. This wave closes th
   `renderScoreGrid`, `scHolePar`, `scoreClass` — is byte-untouched.
 - **SC-PAR-WARN:** after the build pass, any hole 1–18 lacking a valid par raises a health-strip
   flag naming the hole, verbatim copy: `Course tab: hole <N> par missing or invalid — To-par
-  suppressed (strokes only)`. Uses the existing `flag()`/`renderHealth()` idiom (per-load,
-  deduped); par only — yards validation is silent (a missing yards label is cosmetic, and a
-  yards warning would be noise).
+  suppressed (strokes only)` (superseded by §22 SC-PAR-FLAG-2). Uses the existing
+  `flag()`/`renderHealth()` idiom (per-load, deduped); par only — yards validation is silent (a
+  missing yards label is cosmetic, and a yards warning would be noise).
 - Tests pinned: X33 (scorer honest degrade + warning under a blank-par cell), X34 (leaderboard
   suppression, both directions), X35 (grid note under blank-par). Suite 201 → 204. Mutation bar:
   reverting the value-validation must fail X33/X34.
