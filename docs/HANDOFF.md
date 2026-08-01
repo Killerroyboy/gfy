@@ -204,3 +204,7 @@ Trail: `.superpowers/sdd/2026-07-31-gfy-d3-par-validation/progress.md` + task re
 - **RILEY:** push word ships §22 (rollback ref f6e2ce7). FOLLOW-UP BUNDLE (small, optional, next copy wave): corner empty-state copy split (pre-existing panel self-contradiction), §20 superseded-by annotation, README arm-count + stays-in-pot sentence, collected-but-ownerless warning, X40 byte-assert. Standing pre-tournament items: pre-links runway (README "Live scoring"), real-phone 390w eyeball, drill += third-number flow.
 
 **§22 PUSHED + LIVE 2026-08-01:** main = `5e13557`, live md5 == tip, §22 markers served. Next-push rollback ref = `5e13557`.
+
+## 2026-08-01 — §23 copy bundle COMPLETE + MERGED (local)
+
+**v2.1-invites merged with copy-bundle (98e4a15)**, union 215/215, NOT pushed (rollback ref 5e13557). Ships: payBody empty-state split (last panel self-contradiction gone, render-proven), ownerless-collected flag, §20 supersession note, README trio + X45/X46. Whole-branch: 33-function hash proof, state machine proven exclusive+total, "Yes". Banked one-sentence README items: net-basis carve-out, stays-in-pot attribution, Won-flip nuance. Also this session: GFY on mc-ground (needs-you live in the session digest); cockpit tile BANKED pending oldmac power-on (tools/mc-registration/APPLY-NOTES.md).
