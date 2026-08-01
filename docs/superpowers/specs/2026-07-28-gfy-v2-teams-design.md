@@ -729,3 +729,32 @@ course ⇒ the preserved single-state string `Bids locked. Payouts post once car
 re-pins 212 → **213**. Also authorized within renderHolePanel's existing HP-PAR unfreeze: drop the
 now-dead `const pars=courseMap()` local (behavior-neutral — scHolePar's own courseMap() call
 preserves the flag side effect, per the review's analysis).
+
+## §23 — copy-integrity bundle (Riley: "run the copy bundle" 2026-08-01; items banked by the §21/§22 reviews)
+
+Five small pins, all pre-existing copy/coverage debts:
+- **C-EMPTY-SPLIT:** the shared `#payBody` empty-state splits per branch. No-LOTS branch keeps
+  `Payouts calculate off the live leaderboard once bids are in.` (bids genuinely absent). No-CARDS
+  branch (lots exist, `!ranked.length`) reads, verbatim: `Payouts calculate off the live
+  leaderboard once cards are in.` — removes the "once bids are in" line rendering above a
+  "Bids locked." basis line (the last panel self-contradiction). The corner state (no-cards +
+  no-pars) shows the no-cards line + the §22 corner basis string (which carries the pars half).
+  Test X45: both branches byte-asserted.
+- **C-OWNERLESS-COLLECTED:** a lot with no owner but `collected=TRUE` (a sheet-data
+  contradiction rendered faithfully today) raises a flag, verbatim: `lot "<team>" marked
+  collected but has no owner — check the Calcutta tab`. Flag-only addition beside the existing
+  unassigned-lot gate (calcuttaModel unfrozen for the flag line ONLY — zero math change).
+  Test X46: fires for the synthetic shape; absent for normal sold, unsold-uncollected (existing
+  flag covers that), and fully-normal fixtures.
+- **SPEC-SUPERSEDE:** the §20 flag pin (spec ~line 627) gains the inline annotation
+  `(superseded by §22 SC-PAR-FLAG-2)` so a grep-first reader lands on the truth.
+- **README-3:** (a) the would-pay arm count corrects to five with `withdrawn` named; (b) one
+  sentence documenting stays-in-pot (unsold placing lot → cut `—`, note fires); (c) the
+  "You'll see it in three places" suppression list adds the scorer surfaces (tally strokes
+  mode, glance) — count word updated to match.
+- **X40-BYTE:** X40's `Paused · Course pars incomplete` regex upgrades to strict `===` (the X44
+  idiom). Edit in place.
+- Suite arc: 213 → **215** (X45/X46). Unfrozen: `renderCalcutta` (empty-state branch only),
+  `calcuttaModel` (one flag line only), spec/README/tests. Everything else stays frozen.
+  Mutation bar: reverting the empty-state split fails X45 alone; removing the new flag fails
+  X46 alone.
