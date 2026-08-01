@@ -202,3 +202,5 @@ Trail: `.superpowers/sdd/2026-07-31-gfy-d3-par-validation/progress.md` + task re
 
 **v2.1-invites at `bc7aa5e`** (FF), union 213/213, NOT pushed. Ships: C-UNSOLD (Riley-ratified stays-in-pot — unsold placing lot excluded from covered math, cut "—", disclosure fires; the last money-contradiction closed), SC-PAR-FLAG-2 (flag names standings), SC-PAR-CORNER, README-BASIS, HP-PAR + X41-X44 coverage. Trail: `.superpowers/sdd/2026-07-31-gfy-unsold-and-polish/` (ledger, 3 task reports, 84+ PNGs). Whole-branch: 134-function hash proof, money reconciles to the penny, "Yes".
 - **RILEY:** push word ships §22 (rollback ref f6e2ce7). FOLLOW-UP BUNDLE (small, optional, next copy wave): corner empty-state copy split (pre-existing panel self-contradiction), §20 superseded-by annotation, README arm-count + stays-in-pot sentence, collected-but-ownerless warning, X40 byte-assert. Standing pre-tournament items: pre-links runway (README "Live scoring"), real-phone 390w eyeball, drill += third-number flow.
+
+**§22 PUSHED + LIVE 2026-08-01:** main = `5e13557`, live md5 == tip, §22 markers served. Next-push rollback ref = `5e13557`.
