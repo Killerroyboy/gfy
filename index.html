@@ -1852,7 +1852,7 @@ function renderHolePanel(h){
   const panel=$("#sgPanel");
   if(STATE.gridHole===h){ STATE.gridHole=null; panel.hidden=true; panel.innerHTML=""; return; }
   STATE.gridHole=h;
-  const pars=courseMap(), players=rankedPlayers("gross");
+  const players=rankedPlayers("gross");
   const rd=$("#sgTable").dataset.round;
   const scores=players.map(p=>{const r=p.rounds[rd];return {name:teamLabel(p.key,p.name).html,v:r&&r.holes?r.holes[h]:undefined};});
   const played=scores.filter(s=>s.v!==undefined).map(s=>s.v);

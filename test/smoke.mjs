@@ -4676,7 +4676,7 @@ async function cellSettledOk(doc, hole) {
   // this intentionally suppresses calcuttaModel's own separate "lot has no
   // owner — counted under Unassigned" flag, which only fires for
   // NOT-YET-collected lots (`lots.filter(l=>!l.collected)`, index.html
-  // ~2111). That flag is a distinct, pre-existing signal for an outstanding
+  // 2116). That flag is a distinct, pre-existing signal for an outstanding
   // unassigned balance; this fixture deliberately keeps it silent so the
   // test isolates the payout-table/auction-board behavior under review
   // (C-UNSOLD) from that unrelated collection-side flag.
@@ -4846,6 +4846,51 @@ async function cellSettledOk(doc, hole) {
   check("X43: §22 SC-RANK-CAL arm priority under suppression — withdrawn/unsold/waiting-on-cards each win over the generic 'awaiting pars' text on their own lot (Tex wd -> 'withdrawn', Moose no-owner -> 'unsold', Bear no-scores -> 'waiting on cards'), while an untouched owned+ranked lot (Duck) reads 'awaiting pars' as normal",
     texWouldX43 === "withdrawn" && mooseWouldX43 === "unsold" && bearWouldX43 === "waiting on cards" && duckWouldX43 === "awaiting pars",
     `duck=${duckWouldX43} moose=${mooseWouldX43} tex=${texWouldX43} bear=${bearWouldX43}`);
+}
+
+/* ---------------------------------------------------------------------
+   X44 (§22 amendment, 2026-07-31 — Task-2 review): SC-PAR-CORNER's own
+   byte-assert, both directions in one check. The corner arm only fires
+   inside the `!ranked.length` branch (index.html ~2548-2555), so BOTH
+   variants here start from a header-only Scores fixture (zero score rows
+   -> buildPlayers produces nothing -> ranked.length===0, same idiom as
+   B2/scoresHeaderOnly). Direction (a) additionally blanks hole 7's par
+   (the standard X39/X40/X42/X43 splice) so `rankSuppressed` is ALSO true
+   -> the widened corner copy. Direction (b) leaves the course fixture
+   untouched (complete pars) so `rankSuppressed` is false -> the original,
+   preserved single-state copy — proving the widening is conditional, not
+   a blanket rewrite. No leaderboard rows exist in either variant, so
+   `settle()` (B2's own idiom) stands in for the usual
+   `until(...#lbBody .lb-row...)` wait, which would never resolve here.
+   --------------------------------------------------------------------- */
+{
+  const scoresHeaderOnlyX44 = FIXTURES.scores.split(/\r\n|\n/)[0] + "\r\n";
+  const courseBlank7X44 = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+
+  // (a) no cards AND suppressed pars together -> widened corner string.
+  const domAX44 = makeDom("", withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresHeaderOnlyX44 }),
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7X44 }),
+  }));
+  await settle();
+  const calBasisAX44 = domAX44.window.document.querySelector("#calBasis")?.textContent || "";
+  domAX44.window.close();
+
+  // (b) no cards, pars complete -> the ORIGINAL single-state string, byte-
+  // exact and unwidened (proves the ternary's false branch is untouched).
+  const domBX44 = makeDom("", withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresHeaderOnlyX44 }),
+  }));
+  await settle();
+  const calBasisBX44 = domBX44.window.document.querySelector("#calBasis")?.textContent || "";
+  domBX44.window.close();
+
+  check("X44: §22 SC-PAR-CORNER byte-assert — no cards + suppressed pars => calBasis reads 'Bids locked. Payouts post once cards and Course pars are in.' byte-exact; no cards + complete pars => calBasis reads the preserved 'Bids locked. Payouts post once cards do.' byte-exact",
+    calBasisAX44 === "Bids locked. Payouts post once cards and Course pars are in." &&
+    calBasisBX44 === "Bids locked. Payouts post once cards do.",
+    `corner=${JSON.stringify(calBasisAX44)} single=${JSON.stringify(calBasisBX44)}`);
 }
 
 /* ---------------------------------------------------------------------
