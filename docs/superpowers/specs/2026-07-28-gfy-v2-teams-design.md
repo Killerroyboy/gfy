@@ -759,7 +759,7 @@ Five small pins, all pre-existing copy/coverage debts:
   Mutation bar: reverting the empty-state split fails X45 alone; removing the new flag fails
   X46 alone.
 
-## §24 — player-information wave: announcements, day-of Home, event-ready preflight (Riley brainstormed + section-approved 2026-08-15)
+## §24 — player-information wave: announcements, day-of Home, event-ready preflight (Riley brainstormed + section-approved 2026-08-15; **rev 2** after 4-lens pressure test same day)
 
 **Origin:** Riley: "make the site even better for the tournament and getting all the players the
 correct information." Grounding audit (2026-08-15, live sheet) found the exact failure class this
@@ -770,80 +770,179 @@ Riley's four requirement rulings (2026-08-15): failure modes = findability + tim
 (NOT adoption); push channel = none — site loud on open; NO personal/per-player view; stale guard
 = preflight tool + on-site honesty. Change surface = announcements tab (not diff detection).
 
+**Rev 2 (pressure test, 2026-08-15):** 4 independent reviewers (consistency / day-of ops /
+honesty-robustness / improvement scout) + controller code-grounding. Material corrections:
+rev 1's H-REFRESH spec'd a NEW ~3-min event-day poller — the site ALREADY refreshes every tab
+every 60s unconditionally (`index.html:4678`, `REFRESH_MS:60000`; README says so twice); rev 1
+would have been a slower duplicate. rev 1's `when` semantics assumed timestamp granularity but
+`parseDate` (index.html:1371) is DATE-ONLY — same-day announcements were indistinguishable.
+Both rewritten below. New: C-FALLBACK (year-stale hardcoded fallbacks — the empty-schedule
+render at index.html:2836-2855 is a full fake weekend), TABS/FPRINT registration, watermark
+future-guard, cross-tab referential preflight check, static jump chips (matching logic cut).
+
 ### A — Announcements
 
-- **A-TAB:** 14th sheet tab `announce`, columns `year,when,message`. `when` parses with the
-  site's existing parseDate (v2.2 idiom). `config.js` gains `GID.announce`;
-  `tools/make_template.py` regenerates the template with the tab (sample rows use the template's
-  sample vocabulary and a clearly-sample message); `gid-check.mjs` + `check_template.py` grow
+- **A-TAB:** 14th sheet tab `announce`, columns `year,when,message`. **Registration is
+  fourfold and all four are required** (missing any = feature silently dead): `config.js`
+  `GID.announce`; `index.html` `TABS` grows 13→14 (index.html:1263 — `Promise.all(TABS.map(pull))`
+  only fetches listed tabs); `FPRINT` gains `announce:["message"]` (index.html:1299 idiom);
+  `tools/make_template.py` regenerates the template with the tab (sample rows use template
+  sample vocabulary and clearly-sample messages). `gid-check.mjs` + `check_template.py` grow
   13→14 tabs. Template xlsx is NOT byte-reproducible — never md5-gate it (v2.5 lesson).
-- **A-BANNER:** current-year announcements render newest-first. UNSEEN announcements render as a
-  loud banner at the top of every tab (site tokens; no new palette); a dismiss control collapses
-  them. All announcements for the current year also render as a compact "Updates" list on Home
-  (seen or not). Messages pass through `esc()` — the v2.5 renderField XSS class applies verbatim.
-- **A-SEEN:** unseen = `when` newer than a localStorage watermark (site's existing storage
-  idiom); dismiss advances the watermark to the newest RENDERED parseable `when`. A row with
-  malformed `when` renders in sheet order in the Updates list but NEVER claims unseen status and
-  NEVER advances the watermark (no fabricated recency — S12 at the announcement layer). Missing/
-  empty tab → no banner, no Updates list, no error; `?debug=1` reports the tab like any other.
+- **A-WHEN:** `when` is parsed by a NEW announce-only `parseWhen`: strict `YYYY-MM-DD HH:MM`
+  (24-hour) or bare `YYYY-MM-DD` (= 00:00 that day). It does NOT touch `parseDate`
+  (index.html:1371 stays frozen — it is date-only and other consumers depend on that).
+  README + template header note pin the format and say WHY the time matters: two same-day
+  announcements are ordered by it. **Future-guard:** a `when` more than 24h ahead of the
+  device clock is treated as malformed-recency (renders, never unseen, never advances the
+  watermark) — a typo'd year can therefore never poison the watermark. Residual (accepted):
+  device clocks wrong by >24h see wrong unseen status; no network-time dependency is added.
+- **A-BANNER:** current-year announcements render newest-first. UNSEEN announcements render as
+  ONE loud banner region injected above the nav (rendered by a new `renderAnnouncements()`
+  called from the paint path — not per-tab DOM), site tokens, no new palette. The banner is
+  suppressed while the `#score` scorer surface is active (never interrupt a captain
+  mid-entry; it shows on exit). A dismiss control collapses it. All current-year announcements
+  (seen or not) also render as a compact "Updates" list on Home. EVERY sheet-sourced string
+  §24 renders passes through `esc()` (index.html:1355) — announce `message` AND `when`-as-text
+  AND every schedule field the Now/Next strip shows (label/time/event/location); the v2.5
+  renderField XSS class applies to all of them.
+- **A-SEEN:** unseen = parseWhen(`when`) newer than a localStorage watermark. Dismiss: collapse
+  in-memory for the session, then best-effort persist the watermark = newest RENDERED
+  parseable non-future `when` (try/catch, readCache idiom). If storage is unavailable
+  (private mode), the dismiss still collapses this session and the banner simply returns next
+  visit — unseen-when-unknowable errs loud (info reaches the player); no false "saved" claim
+  is ever made. Malformed-`when` rows render in sheet order in the Updates list but NEVER
+  claim unseen and NEVER advance the watermark; `?debug=1` reports their count. Missing/empty
+  tab → no banner, no Updates list, no error.
 
-### H — Day-of Home (event phase only; pre/post phases unchanged)
+### H — Day-of Home
 
-- **H-NOWNEXT:** during `seasonPhase()==="event"`, the Home status strip grows a Now/Next
-  surface driven by the Schedule tab: the current row (started, not superseded by a later
-  started row that day) and the next upcoming row, each with label/time/location and inline
-  jumps (`#pairings` / `#board` / `#rooms` where the row names a round, standings, or lodging).
-  Day/time resolution anchors on the first_tee date and the schedule `day` labels; a row whose
-  day/time cannot resolve renders textually in tab order but is NEVER claimed as "Now" or
-  "Next" (no fabricated now). The `#countdown` element contract (pre-event) is untouched.
-- **H-REFRESH:** on event days, while the page is visible (`document.hidden === false`), the
-  site re-fetches the published CSVs every ~3 minutes and re-renders only when fetched content
-  changed (in-memory compare — this is NOT the rejected cross-visit diff feature). Hidden tab →
-  timer paused. Non-event phases: no timer at all.
-- **H-FRESH:** a freshness stamp renders on event-phase Home and the board, labeled for what it
-  measures (fetch time, not sheet-edit time): `Checked ‹h:mm› · the sheet publishes a few
-  minutes behind edits`. A failed re-fetch flips it to `Couldn't refresh — showing data from
-  ‹h:mm›` and never silently swaps in cache as fresh (existing cache-honesty rules unchanged).
+- **H-NOWNEXT:** during `seasonPhase()==="event"` (existing definition: first_tee ±3 days —
+  index.html:2964; the strip may therefore be live on travel days with no schedule rows:
+  Now empty + Next = first upcoming row is the correct honest render), the Home status strip
+  grows a Now/Next surface driven by the Schedule tab. **Time anchoring (the truth rule):**
+  all comparisons happen between absolute instants. A schedule row's instant is built from its
+  resolved date + its `time` cell interpreted in the UTC OFFSET carried by the effective
+  first_tee string (INFO.first_tee || CONFIG.FIRST_TEE — e.g. `-06:00`); the device clock is
+  only ever compared as an instant, NEVER as wall-clock — a phone in any timezone gets true
+  Now/Next claims. Times display as the sheet's own text ("5:30 pm"), never re-rendered into
+  device-local wall time. (Offset is constant across an August weekend; DST is a non-issue by
+  construction and the offset has ONE owner: the first_tee string.)
+  **Date resolution:** the schedule `label` column carries the weekday name (template ships
+  `day="Day One", label="Friday"` — make_template.py:82-86); a row's date = the unique day in
+  the 7-day window centered on first_tee whose weekday matches `label` (case-insensitive,
+  full English weekday). The `day` ordinal is display-only, never resolved. A row whose
+  label or time cannot resolve renders textually in tab order and is NEVER claimed as Now or
+  Next (no fabricated now).
+  **Now/Next selection:** Now = the latest row whose instant ≤ now; it expires at the next
+  row's instant or at McCall midnight (first_tee-offset midnight) of its own day, whichever
+  first. Next = the earliest row whose instant > now, across day boundaries (Saturday 9pm
+  correctly shows Sunday's tee time). **Jumps are three STATIC chips** — Pairings · Board ·
+  Rooms — always shown with the strip; rev 1's "where the row names a round" matching is CUT
+  (undefined matching = two implementers build different sites; static chips are unambiguous
+  and one tap from everything). The `#countdown` element contract (pre-event) is untouched.
+- **H-REFRESH (rev 2 — reuse, don't duplicate):** the existing unconditional 60s `load()`
+  loop (index.html:4678) is RETAINED at its cadence, all phases — no new poller, no slower
+  event-day cadence. §24 adds exactly two behaviors at that call site: (a) skip the fetch
+  while `document.hidden` (through a named, mockable visibility seam), and (b) on
+  `visibilitychange` → visible, fire `load()` immediately (phone unlocked at the tee =
+  instant freshness, no 60s wait).
+- **H-FRESH:** a freshness stamp renders on event-phase Home and the board. **The stamp's
+  time = the last SUCCESSFUL live fetch, device-local h:mm** (it describes the reader's own
+  fetch event, so the reader's clock is the honest frame — NOT McCall time). A poll served
+  from BACKOFF/cacheTab (index.html:1312-1332) is NOT a successful check and must not
+  advance the stamp. Verbatim: `Checked ‹h:mm› · the sheet publishes a few minutes behind
+  edits`; while fetches are failing: `Couldn't refresh — showing data from ‹h:mm›` (the last
+  SUCCESS time); the moment a retry succeeds, the stamp returns to the fresh form with the
+  new time. Existing cache-honesty rules unchanged.
+
+### C — Fallback truth (new in rev 2: no year-stale hardcoded facts, ever)
+
+- **C-FALLBACK:** three surfaces currently render PLAUSIBLE-BUT-LAST-YEAR content when the
+  sheet is unreachable and no cache exists; §24 makes every one honest:
+  (1) the empty-schedule render (index.html:2836-2855) is a fully hardcoded sample weekend
+  (times, venues, "Steaks on the lodge grill") — it becomes an honest empty state
+  (`Schedule not loaded yet — it lives in the sheet's Schedule tab`), verbatim pinned at
+  plan time; (2) the Home facts `<dd>` fallbacks (index.html:889-892 "Aug 14–16" etc.)
+  become `—` (renderInfo overwrites them when data arrives — index.html:1607-1613 — so the
+  dash shows ONLY when Info truly failed); (3) the hero subtitle (index.html:879) and the
+  .ics SUMMARY/LOCATION/DESCRIPTION (index.html:3008-3013) compose from the existing Info
+  keys (`course`, `lodging`) with the current strings retained ONLY as the compose template
+  ("Two rounds at ‹course›. Two nights at ‹lodging›. …"), falling back to the neutral form
+  when the keys are absent. A hardcoded fact that can outlive its year is the same S12 class
+  as a mislabeled number.
 
 ### R — Event-ready preflight
 
 - **R-READY:** `tools/event-ready.mjs` — read-only, stdout-only, per-check PASS/FAIL/WARN
-  lines; exit 0 iff no check FAILs (WARN never changes the exit code — it is advisory by
-  definition; presend-check idiom; reuses its exported `readConfig`). Year under test defaults
-  to the first_tee year; `--year` overrides. Checks:
-  (a) **sample-residue** — fingerprints of exact template sample rows sourced from
-  `make_template.py`'s seed data (field names, the future-year sample paid-date row, sample
-  scorecards, sample calcutta lots); ANY verbatim match = FAIL naming the tab+row. Stated
-  limit, printed in the tool's own header: fingerprints catch VERBATIM residue only — a
-  sample row edited in place (the 2026-08-15 live sheet had exactly this: the sample card
-  with h18 and the team name edited) is out of reach; the morning eyeball stays part of the
-  runbook, and the tool must never claim the sheet "is clean", only "no verbatim residue";
-  (b) **schedule coverage** — every event day (window derived from first_tee + Info dates) has
-  ≥1 schedule row, else FAIL naming the day; (c) **pairings** — ≥1 row per round for the
-  target year, each with a time, else FAIL; (d) **pars** — 18/18 positive-int pars = FAIL
-  otherwise (mirrors courseMap validation semantics); missing/non-int yards = WARN only
-  (yards are optional per-hole — §20 am.1b); (e) **scorer armed** — Info `score_endpoint` +
-  `form_url` present, each an https `script.google.com` / Google Forms URL respectively,
-  else FAIL; (f) **field sanity** — ≥1 target-year row (FAIL) and handicaps present for
-  target-year rows the net path needs (WARN, since gross-basis years don't need them).
-  Non-target-year rows are LEGITIMATE (the Next Year collections board reads them) — never
-  flagged here; sample ones are (a)'s job; (g) **announce** — tab fetchable (FAIL if the gid
-  is configured but unfetchable); during the event window, WARN if the newest announcement is
-  older than the current event day. README runbook: run before captain links go out and each
-  tournament morning.
+  lines; exit 0 iff no check FAILs (WARN never changes the exit code — advisory by
+  definition; presend-check idiom; reuses its exported `readConfig`). **Check 0 (runs first,
+  everything else aborts on its FAIL):** the effective first_tee parses as ISO-with-offset;
+  unparseable/missing = FAIL printing the raw value; first_tee more than 7 days in the past =
+  WARN "looks like last year's date — year rollover?". A network/fetch error on any tab =
+  FAIL for that check, NEVER silent PASS. Year under test defaults to the first_tee year;
+  `--year` overrides. Checks:
+  (a) **sample-residue** — verbatim template sample rows. Single-authority fingerprints:
+  `make_template.py` EMITS `tools/sample-fingerprints.json` (trimmed cell-sequence per sample
+  row) whenever the template regenerates — checker and template can't drift (S8);
+  `check_template.py` verifies the pair is in sync. Match = FAIL naming tab+row. Stated
+  limit, printed in the tool's own header: VERBATIM residue only — an edited-in-place sample
+  row (the 2026-08-15 live sheet had exactly this) is out of reach; the morning eyeball stays
+  in the runbook, and the tool must never claim the sheet "is clean", only "no verbatim
+  residue";
+  (b) **schedule coverage** — every event day (window from first_tee + Info dates) has ≥1
+  row, else FAIL naming the day; every row's `label` resolves as a weekday in the window and
+  its `time` parses, else FAIL naming the row (these rows would be Now/Next-invisible);
+  (c) **pairings** — ≥1 row per round for the target year, each with a time, else FAIL;
+  (d) **pars** — 18/18 positive-int pars = FAIL otherwise (mirrors courseMap validation);
+  missing/non-int yards = WARN only (yards optional per-hole — §20 am.1b);
+  (e) **scorer armed** — Info `score_endpoint` present as https script.google.com URL, else
+  FAIL. `form_url` is OPTIONAL by existing design (README:314 renders its button only when
+  pasted): absent = INFO line; present-but-not-https-Google-Forms = FAIL;
+  (f) **field sanity** — ≥1 target-year row (FAIL); handicaps present for target-year rows
+  the net path needs (WARN — gross-basis years don't need them). Non-target-year rows are
+  LEGITIMATE (Next Year collections reads them) — never flagged here; sample ones are (a)'s;
+  (g) **announce** — tab fetchable (FAIL if gid configured but unfetchable); rows with
+  unparseable or >24h-future `when` = WARN naming the row; during the event window, if ≥1
+  announcement exists and the newest is older than the current event day = WARN; zero
+  announcements = INFO line only (first morning must not cry wolf);
+  (h) **cross-tab integrity (new in rev 2)** — every scores.team and calcutta.team for the
+  target year appears as a Field `team` value that year, else FAIL (this check alone catches
+  the 2026-08-15 live state: calcutta lots Duck/Sully/Tex vs teams Jake/Greg/Voss);
+  rooms.player not in Field players and not `guest:`-prefixed = WARN;
+  (i) **fallback parity (new in rev 2)** — config `FIRST_TEE` equals Info `first_tee`
+  (WARN if drifted; the Info override wins at runtime but drift means the countdown lies
+  whenever Info fails), and the repo's C-FALLBACK surfaces contain no year-specific
+  hardcoded facts (a repo-side grep-style assertion, also pinned by a suite test).
+  README runbook: run before captain links go out and each tournament morning; after any
+  mid-weekend Schedule/Pairings edit, post an announcement (template copy provided in
+  README, including a draft-night "Draft complete — see Draft" line); on-course urgent
+  matters (pace, hazards) go by voice/marshal — announcements are for logistics (stated
+  trade-off of the no-push ruling).
 
 ### Frozen surface, tests, rollout
 
-- Unfrozen: the new announce renderer/model, the Home status-strip/event-phase block,
-  the refresh scheduler (new), `config.js` GID map, templates/checkers named in A-TAB,
-  README, spec, tests. EVERYTHING else stays byte-frozen per the whole-branch review idiom.
-- Suite extends from 215 in kind (X-numbers from X47; exact allocation at plan time): banner
-  render/unseen/dismiss/escape; malformed-`when` never-unseen + watermark honesty; Now/Next
-  selection incl. unresolvable-row degrade; refresh timer phase-gating + hidden-pause (fake
-  timers); H-FRESH both verbatim states; event-ready fixtures — sample-residue positive,
-  missing-day, missing-round-time, unarmed-scorer, clean-pass. Mutation bar: each new
-  behavior's test fails alone when that behavior reverts (§22/§23 discipline).
+- Unfrozen: the new announce renderer/model + parseWhen, the Home status-strip/event-phase
+  block, the two behaviors at the existing `load()` call site, the C-FALLBACK surfaces
+  (renderSchedule empty branch, facts fallbacks, hero/.ics compose), `config.js` GID map,
+  `TABS`/`FPRINT` constants, templates/checkers named in A-TAB, README, spec, tests.
+  EVERYTHING else stays byte-frozen per the whole-branch review idiom — `parseDate`
+  explicitly frozen.
+- Suite extends from 215 in kind (X-numbers from X47; allocation at plan time): banner
+  render/unseen/dismiss/escape (incl. schedule-field escape and scorer-suppression); parseWhen
+  format matrix + future-guard + same-day ordering; watermark honesty (malformed never
+  advances; storage-unavailable path); Now/Next selection — timezone correctness with a
+  non-McCall device TZ fixture, day-boundary Next, McCall-midnight expiry, unresolvable-row
+  degrade; visibility seam (fake timers + mocked seam: hidden = no fetch, visible-transition
+  = immediate fetch); H-FRESH three states incl. backoff-served-poll-does-not-advance-stamp;
+  C-FALLBACK honest empty states + compose-from-Info; event-ready fixtures — sample-residue
+  positive, edited-residue negative (documents the stated limit), missing-day,
+  unresolvable-label, missing-round-time, unarmed-scorer, cross-tab-mismatch (the live
+  2026-08-15 shape), fingerprint-sync-broken, clean-pass. Mutation bar: each new behavior's
+  test fails alone when that behavior reverts (§22/§23 discipline).
 - Rollout: build on the v2.1-invites preview lane in a worktree; render close (PNG battery)
   per convention; Riley push gate unchanged. Out of scope: §23 push word, scorer ARMING
-  (BACKLOG #1 — R-READY check (e) verifies, never arms), any push/notification channel,
-  per-player views (both explicitly rejected 2026-08-15).
+  (BACKLOG #1 — check (e) verifies, never arms), any push/notification channel, per-player
+  views (both explicitly rejected 2026-08-15), printable/QR lodge poster and post-event
+  results export (offered separately, Riley to rule), course-map pin portability (cut —
+  YAGNI until the venue changes).
