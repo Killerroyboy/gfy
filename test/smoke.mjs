@@ -48,8 +48,11 @@ const testConfig = buildTestConfig();
 // Z group: empty config for unconfigured deploy (empty PUB_ID/GID)
 const emptyGids = {};
 TABS.forEach(t => emptyGids[t] = "");
+// Z2 asserts a RUNNING countdown off the config fallback, so this FIRST_TEE must be
+// far-future (E2's idiom) — a real-calendar date here is a time bomb: the suite went
+// 214/215 the day after 2026-08-15 passed, with zero code changes.
 const emptyConfig = `window.CONFIG = { PUB_ID:"", GID:${JSON.stringify(emptyGids)},
-  SHEET_EDIT_URL:"", DRIVE_FOLDER_ID:"", FIRST_TEE:"2026-08-15T09:00:00-06:00",
+  SHEET_EDIT_URL:"", DRIVE_FOLDER_ID:"", FIRST_TEE:"2099-08-15T09:00:00-06:00",
   CURRENCY:"$", REFRESH_MS:3600000 };`;
 
 function fakeFetch(url) {
