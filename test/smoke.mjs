@@ -27,7 +27,7 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const html = readFileSync(path.join(ROOT, "index.html"), "utf8");
 
 const TABS = ["info","course","field","scores","schedule","pairings",
-              "calcutta","payout","ledger","champions","shame","invites","rooms"];
+              "calcutta","payout","ledger","champions","shame","invites","rooms","announce"];
 const GIDS = {};
 TABS.forEach((t, i) => GIDS[t] = String(101 + i));
 const FIXTURES = {};
@@ -356,8 +356,8 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
   const okCount = (dbgText.match(/\bOK\b/g) || []).length;
   const hasFailed = /FAILED/i.test(dbgText);
   domD5.window.close();
-  check("D5: debug happy path — 13 tabs OK",
-    okCount === 13 && !hasFailed,
+  check("D5: debug happy path — 14 tabs OK",
+    okCount === 14 && !hasFailed,
     "okCount=" + okCount + " hasFailed=" + hasFailed + " | " + dbgText.slice(0, 300));
 }
 
@@ -5017,6 +5017,23 @@ async function cellSettledOk(doc, hole) {
   check("X46: §23 C-OWNERLESS-COLLECTED — ownerless+collected:TRUE lot (Duck, X41's shape) fires 'lot \"Duck\" marked collected but has no owner — check the Calcutta tab' in #healthStrip; absent on the normal default dom; absent on an unsold-uncollected dom (which fires only the EXISTING unassigned-lot flag); absent on an all-sold+all-collected dom",
     firesX46 && absentNormalX46 && existingFlagFiresX46 && absentUnsoldUncollectedX46 && absentAllSoldX46,
     `fires=${firesX46} absentNormal=${absentNormalX46} existingFlagFires=${existingFlagFiresX46} absentUnsoldUncollected=${absentUnsoldUncollectedX46} absentAllSold=${absentAllSoldX46}`);
+}
+
+// X47: parseWhen — format matrix (§24 A-WHEN). parseDate stays date-only and frozen.
+{
+  const dom=makeDom("", fakeFetch); await settle(); const w=dom.window;
+  const ok=(s)=>w.parseWhen(s), no=(s)=>w.parseWhen(s)===null;
+  const at=ok("2099-08-15 14:30");
+  check("X47: parseWhen — 'YYYY-MM-DD HH:MM' parses; bare date = 00:00 same day; garbage/invalid-calendar/out-of-range all null; same-day ordering by time",
+    at!==null
+    && ok("2099-08-15")===new w.Date(2099,7,15,0,0).getTime()
+    && at===new w.Date(2099,7,15,14,30).getTime()
+    && ok("2099-08-15 09:00") < at                      // same-day ordering
+    && no("2099-02-30 10:00") && no("2099-08-15 24:00") // fake calendar / bad clock
+    && no("08/15/2099") && no("tomorrow") && no("") && no("2099-8-15 9:00") // strict widths
+    && no("1999-08-15") && no("2101-08-15"),            // year range, parseDate idiom
+    "at="+at);
+  dom.window.close();
 }
 
 /* ---------------------------------------------------------------------

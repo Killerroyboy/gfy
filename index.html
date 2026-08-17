@@ -1261,7 +1261,7 @@ if (typeof CONFIG === "undefined") {
 const $ = s => document.querySelector(s);
 const CACHE_KEY = "gfy-cache-v2";
 const TABS = ["info","course","field","scores","schedule","pairings",
-              "calcutta","payout","ledger","champions","shame","invites","rooms"];
+              "calcutta","payout","ledger","champions","shame","invites","rooms","announce"];
 let INFO = {};
 const HOLES = Array.from({length:18},(_,i)=>i+1);
 /* Hole-number pin positions on assets/course-map.png, percent of image
@@ -1298,7 +1298,7 @@ function toObjects(rows){
 const FPRINT={info:["key"],course:["hole"],field:["player"],scores:["h1","r1"],
   schedule:["event"],pairings:["players"],calcutta:["price"],payout:["share"],
   ledger:["buyin"],champions:["champion"],shame:["award"],invites:["invited"],
-  rooms:["property"]};
+  rooms:["property"],announce:["message"]};
 const BACKOFF={};      // tab -> next-allowed epoch ms
 const BACKOFF_N={};    // tab -> consecutive-failure count (drives the curve)
 const LAST_ERR={};     // tab -> last REAL error message (never the backoff sentinel)
@@ -1389,6 +1389,21 @@ function parseDate(v){
     return valid(new Date(Date.UTC(yr,mo-1,day)),yr,mo,day);
   }
   return null;
+}
+
+/* §24 A-WHEN: announce-only timestamp parser. parseDate above is DATE-ONLY and
+   frozen (paid-order etc. depend on that); announcements need same-day ordering,
+   so they get their own strict format: "YYYY-MM-DD HH:MM" (24h) or a bare date
+   (= 00:00). Device-local interpretation — only ORDER matters for the unseen
+   watermark, and the >24h future-guard (renderAnnouncements) bounds clock abuse. */
+function parseWhen(v){
+  const m=String(v==null?"":v).trim().match(/^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/);
+  if(!m) return null;
+  const y=+m[1],mo=+m[2],d=+m[3],hh=m[4]?+m[4]:0,mi=m[5]?+m[5]:0;
+  if(y<2000||y>2100||hh>23||mi>59) return null;
+  const dt=new Date(y,mo-1,d,hh,mi);
+  if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d) return null;
+  return dt.getTime();
 }
 
 /* C3 disclosure: a slash date where BOTH components are <=12 is genuinely

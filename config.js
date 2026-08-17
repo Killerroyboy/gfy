@@ -31,7 +31,9 @@ window.CONFIG = {
     champions: "595874277",
     shame: "559876960",
     invites: "1201085989",
-    rooms: "85901482"
+    rooms: "85901482",
+    // announce — §24 Updates tab; gid from the live sheet once the tab exists
+    announce: ""
   },
 
   // RETIRED (v2.6): the public "Enter scores" button that used to open this
