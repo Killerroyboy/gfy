@@ -92,11 +92,23 @@
   .health-strip summary{cursor:pointer;color:var(--rust)}
   .health-strip div{padding:4px 0 0}
 
-  #announceBar{position:sticky;top:0;z-index:60;background:var(--brass,#8a6d3b);color:#fff;
+  #announceBar{position:relative;background:var(--brass,#8a6d3b);color:var(--pine);
     padding:10px 14px;font-size:.95rem;display:flex;gap:12px;align-items:baseline}
+  /* review round 1: was position:sticky;top:0;z-index:60 — that painted over
+     .nav (also sticky top:0) once the page scrolled, hiding the nav whenever
+     an unseen announcement was up. Loud-at-top-of-page is the requirement,
+     not loud-forever; it may scroll away like any other in-flow content. */
   #announceBar[hidden]{display:none}
   body[data-view="score"] #announceBar{display:none} /* §24 A-BANNER: never interrupt a captain mid-entry */
   #announceBar .ann-msg{flex:1}
+  /* pine-on-brass per repo convention (.year-btn[aria-pressed="true"]) —
+     #fff on --brass was ~2.2:1; pine on brass is ~7.5:1. #annDismiss gets its
+     own rule so it never falls back to default UA button chrome (white text
+     on brass, browser-native border) on this surface. */
+  #announceBar #annDismiss{font-family:var(--ui);font-size:.62rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--pine);background:none;border:1px solid var(--pine);
+    padding:6px 12px;cursor:pointer;flex:none}
+  #announceBar #annDismiss:hover,#announceBar #annDismiss:focus-visible{background:rgba(14,32,25,.12)}
   #annUpdates{margin:26px 0 0}
   #annUpdates .ann-row{display:flex;gap:10px;padding:4px 0;font-size:.9rem}
   #annUpdates .ann-when{opacity:.6;white-space:nowrap}
