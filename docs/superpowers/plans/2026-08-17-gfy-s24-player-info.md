@@ -164,8 +164,11 @@ X50: Updates list on Home shows ALL current-season rows (seen + unseen); with `l
 CSS (beside `.health-strip` rules):
 
 ```css
-#announceBar{position:sticky;top:0;z-index:60;background:var(--brass,#8a6d3b);color:#fff;
+#announceBar{position:relative;background:var(--brass,#8a6d3b);color:var(--pine);
   padding:10px 14px;font-size:.95rem;display:flex;gap:12px;align-items:baseline}
+/* CORRECTED at Task-2 review round 1: the original sticky;top:0;z-index:60 occluded the
+   sticky nav on scroll, and #fff on brass measured ≈2.2:1 — pine-on-brass is the repo
+   convention (.year-btn[aria-pressed]). Loud-at-top-of-page is the requirement. */
 #announceBar[hidden]{display:none}
 body[data-view="score"] #announceBar{display:none} /* §24 A-BANNER: never interrupt a captain mid-entry */
 #announceBar .ann-msg{flex:1}
