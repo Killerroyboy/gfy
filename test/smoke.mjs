@@ -146,6 +146,21 @@ const iso = (ms) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
+// §24 test rule: no real-calendar dates. Event fixtures are built RELATIVE to now.
+// dynInfo(daysFromNow) → an info CSV whose first_tee is now+days at 09:00 in a
+// FIXED -06:00 offset regardless of the machine's TZ (offset math is the thing
+// under test — the resolver must be TZ-independent by construction).
+function dynFirstTee(daysFromNow){
+  const d=new Date(Date.now()+daysFromNow*86400000);
+  // format the McCall wall-date of that instant using -06:00
+  const mc=new Date(d.getTime()-6*3600000);
+  const p=n=>String(n).padStart(2,"0");
+  return `${mc.getUTCFullYear()}-${p(mc.getUTCMonth()+1)}-${p(mc.getUTCDate())}T09:00:00-06:00`;
+}
+function dynInfo(daysFromNow){
+  return FIXTURES.info.replace("2026-08-15T09:00:00-06:00", dynFirstTee(daysFromNow));
+}
+
 /* =====================================================================
    Main dom — default fixtures, 2026 selected by default (activeSeason).
    ===================================================================== */
@@ -5244,6 +5259,157 @@ const nowW = Date.now();
     "bothInUpdates="+bothInUpdatesX50+" onlyUnseenInBar="+onlyUnseenInBarX50+" wrongYearExcluded="+wrongYearExcludedX50+
       " displayScore="+displayScoreX50+" displayBoard="+displayBoardX50);
   domX50.window.close();
+}
+
+/* ---------------------------------------------------------------------
+   GROUP X (cont'd) — §24 H-NOWNEXT: Now/Next strip resolver, selection,
+   render honesty (Task 3)
+   --------------------------------------------------------------------- */
+
+// X51: scheduleInstants resolver truth — offset-anchored, TZ-independent.
+// first_tee is a fixed FAR-FUTURE calendar date (2099-08-15, a confirmed
+// Saturday) so expected epochs can be hand-computed from ISO strings,
+// independent of the resolver under test (same far-future idiom as
+// E2/X5, not a "real calendar date" in the time-bomb sense — it is never
+// asserted to be "now"). A second dom swaps the offset to +09:00 (same
+// calendar date, different UTC offset) to prove the offset CARRIED BY
+// first_tee — not the test machine's TZ — is what drives every instant.
+{
+  const infoX51 = FIXTURES.info.replace("first_tee,2026-08-15T09:00:00-06:00", "first_tee,2099-08-15T09:00:00-06:00");
+  const domX51 = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX51 }),
+  }));
+  await until(() => domX51.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wX51 = domX51.window;
+
+  const rowsX51 = [
+    { label: "Friday", time: "3:00 pm" },
+    { label: "Saturday", time: "9:00 am" },
+    { label: "Sunday", time: "8:30 am" },
+    { label: "Satruday", time: "9:00 am" },  // typo'd label — never in the byDay map
+    { label: "Saturday", time: "noon" },      // unparseable time
+  ];
+  const outX51 = wX51.scheduleInstants(rowsX51);
+
+  const expFriX51 = new Date("2099-08-14T15:00:00-06:00").getTime();
+  const expSatX51 = new Date("2099-08-15T09:00:00-06:00").getTime();
+  const expSunX51 = new Date("2099-08-16T08:30:00-06:00").getTime();
+
+  const baseOkX51 = outX51[0].at === expFriX51 && outX51[1].at === expSatX51 && outX51[2].at === expSunX51;
+  const nullsOkX51 = outX51[3].at === null && outX51[4].at === null;
+
+  const infoX51b = FIXTURES.info.replace("first_tee,2026-08-15T09:00:00-06:00", "first_tee,2099-08-15T09:00:00+09:00");
+  const domX51b = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX51b }),
+  }));
+  await until(() => domX51b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const outX51b = domX51b.window.scheduleInstants(rowsX51.slice(0, 3));
+  const shiftOkX51 = [0, 1, 2].every(i => outX51[i].at - outX51b[i].at === 15 * 3600000);
+
+  check("X51: §24 H-NOWNEXT — scheduleInstants resolves Friday/Saturday/Sunday rows to the exact offset-anchored instant (independently computed from ISO strings), a typo'd label and an unparseable time both come back at:null, and swapping first_tee's offset from -06:00 to +09:00 shifts every instant by exactly 15h (the offset carried by first_tee — not host TZ — is the single owner of the day/time mapping)",
+    baseOkX51 && nullsOkX51 && shiftOkX51,
+    "base=" + JSON.stringify(outX51.map(x => x.at)) + " nulls=" + nullsOkX51 +
+      " plus09=" + JSON.stringify(outX51b.map(x => x.at)) + " shiftOk=" + shiftOkX51);
+  domX51.window.close();
+  domX51b.window.close();
+}
+
+// X52: nowNextModel selection — pure calls, rows resolving off the same
+// 2099/-06:00 fixture as X51 so expected instants stay independently
+// hand-computed. Exercises: mid-day now/next with a day boundary
+// crossed; McCall-midnight expiry (dayEnd, not the next row's start,
+// ends "now"); before-all and after-all edges, including the "last row
+// stays now until ITS OWN dayEnd" rule (not cleared the instant its own
+// clock time has passed).
+{
+  const infoX52 = FIXTURES.info.replace("first_tee,2026-08-15T09:00:00-06:00", "first_tee,2099-08-15T09:00:00-06:00");
+  const domX52 = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX52 }),
+  }));
+  await until(() => domX52.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wX52 = domX52.window;
+  const rowsX52 = [
+    { label: "Friday", time: "3:00 pm" },
+    { label: "Saturday", time: "9:00 am" },
+    { label: "Sunday", time: "8:30 am" },
+  ];
+
+  const friAtX52 = new Date("2099-08-14T15:00:00-06:00").getTime();
+  const satAtX52 = new Date("2099-08-15T09:00:00-06:00").getTime();
+  const satDayEndX52 = new Date("2099-08-16T00:00:00-06:00").getTime();  // McCall midnight ending Saturday
+  const sunAtX52 = new Date("2099-08-16T08:30:00-06:00").getTime();
+
+  const midSatX52 = wX52.nowNextModel(rowsX52, satAtX52 + 3600000); // Saturday 10am
+  const midSatOkX52 = !!midSatX52.now && midSatX52.now.r.label === "Saturday" &&
+    !!midSatX52.next && midSatX52.next.r.label === "Sunday";
+
+  const pastMidnightX52 = wX52.nowNextModel(rowsX52, satDayEndX52 + 60000); // Saturday 23:59 McCall +1min past dayEnd
+  const pastMidnightOkX52 = pastMidnightX52.now === null &&
+    !!pastMidnightX52.next && pastMidnightX52.next.r.label === "Sunday";
+
+  const beforeAllX52 = wX52.nowNextModel(rowsX52, friAtX52 - 3600000);
+  const beforeAllOkX52 = beforeAllX52.now === null &&
+    !!beforeAllX52.next && beforeAllX52.next.r.label === "Friday";
+
+  const afterAllX52 = wX52.nowNextModel(rowsX52, sunAtX52 + 3600000); // Sunday 9:30am — still Sunday's calendar day
+  const afterAllOkX52 = !!afterAllX52.now && afterAllX52.now.r.label === "Sunday" && afterAllX52.next === null;
+
+  check("X52: §24 H-NOWNEXT — nowNextModel selection: mid-Saturday returns now=Saturday/next=Sunday (day boundary crossed); 1 minute past Saturday's McCall-midnight dayEnd expires 'now' to null while 'next' still resolves to Sunday; before all rows now=null/next=first (Friday); after the last row's own instant but still inside ITS dayEnd, now stays the last row (Sunday, not cleared) and next is null",
+    midSatOkX52 && pastMidnightOkX52 && beforeAllOkX52 && afterAllOkX52,
+    "midSat=" + JSON.stringify(midSatX52) + " pastMidnight=" + JSON.stringify(pastMidnightX52) +
+      " beforeAll=" + JSON.stringify(beforeAllX52) + " afterAll=" + JSON.stringify(afterAllX52));
+  domX52.window.close();
+}
+
+// X53: render honesty — #nowNext only ever claims a row it could
+// actually resolve, and clears entirely off-phase. dynInfo(+1) keeps
+// first_tee inside the ±3d event window (seasonPhase()==="event"); the
+// resolvable row's day is the TEE DAY itself (k=0 in the resolver's
+// byDay window) — since daysFromNow=+1, that calendar day (in the fixed
+// -06:00 reference the fixture carries) is ALWAYS strictly later than
+// "now"'s -06:00 calendar day, so the row deterministically lands as
+// `next` (never `now`) no matter what wall-clock hour the suite runs at
+// — no flakiness from real-time proximity. The unresolvable "Someday"
+// label must still render on the Schedule tab (renderSchedule has no
+// resolvability filter — only an `event` filter) but must never reach
+// #nowNext's Now/Next claims. A second dom at dynInfo(+10) (off phase)
+// proves the strip goes fully empty outside the event window.
+{
+  const WD_X53 = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const teeDateX53 = dynFirstTee(1).slice(0, 10);
+  const teeWeekdayX53 = WD_X53[new Date(teeDateX53 + "T00:00:00Z").getUTCDay()];
+  const scheduleX53 = "year,day,label,time,event,location\n" +
+    `2026,Day One,${teeWeekdayX53},9:00 am,Round One,Meadow Creek\n` +
+    `2026,Day Two,Someday,10:00 am,Mystery Session,Clubhouse\n`;
+
+  const domX53a = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => dynInfo(1) }),
+    schedule: () => Promise.resolve({ ok: true, status: 200, text: async () => scheduleX53 }),
+  }));
+  await until(() => domX53a.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docX53a = domX53a.window.document;
+  const nnHtmlX53a = docX53a.querySelector("#nowNext")?.innerHTML || "";
+  const chipsX53a = docX53a.querySelectorAll('#nowNext a[href="#pairings"],#nowNext a[href="#board"],#nowNext a[href="#rooms"]').length;
+  const claimsResolvableX53a = /Round One/.test(nnHtmlX53a) && /Meadow Creek/.test(nnHtmlX53a);
+  const neverClaimsSomedayX53a = !/Someday/.test(nnHtmlX53a) && !/Mystery Session/.test(nnHtmlX53a);
+  const scheduleTabTextX53a = docX53a.querySelector("#scheduleBody")?.textContent || "";
+  const somedayInScheduleTabX53a = /Mystery Session/.test(scheduleTabTextX53a);
+  domX53a.window.close();
+
+  const domX53b = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => dynInfo(10) }),
+    schedule: () => Promise.resolve({ ok: true, status: 200, text: async () => scheduleX53 }),
+  }));
+  await until(() => domX53b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const nnHtmlX53b = domX53b.window.document.querySelector("#nowNext")?.innerHTML || "";
+  const offPhaseEmptyX53b = nnHtmlX53b.trim() === "";
+  domX53b.window.close();
+
+  check("X53: §24 H-NOWNEXT — render honesty: inside the event window (dynInfo(+1)) #nowNext claims the resolvable row (event+location text) and shows exactly 3 static chips (#pairings/#board/#rooms), never claims the unresolvable 'Someday'/'Mystery Session' row even though that row still renders on the Schedule tab; off phase (dynInfo(+10)) #nowNext is entirely empty",
+    claimsResolvableX53a && neverClaimsSomedayX53a && chipsX53a === 3 && somedayInScheduleTabX53a && offPhaseEmptyX53b,
+    "claimsResolvable=" + claimsResolvableX53a + " neverClaimsSomeday=" + neverClaimsSomedayX53a +
+      " chips=" + chipsX53a + " somedayInScheduleTab=" + somedayInScheduleTabX53a +
+      " offPhaseEmpty=" + offPhaseEmptyX53b + " nn=" + JSON.stringify(nnHtmlX53a).slice(0, 300));
 }
 
 /* ---------------------------------------------------------------------

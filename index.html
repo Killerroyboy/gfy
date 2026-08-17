@@ -59,6 +59,13 @@
           font-variant-numeric:tabular-nums}
   .cd-lab{font-size:.56rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage);margin-top:7px}
   .cd-msg{font-family:var(--display);font-size:1.5rem;color:var(--brass);margin:30px 0 0}
+  /* §24 H-NOWNEXT strip — site tokens only, no new palette. */
+  .nn-row{font-size:.92rem;color:var(--bone);margin:8px 0 0}
+  .nn-row strong{color:var(--brass);font-weight:600}
+  .nn-chips{margin:14px 0 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .nn-chips a{color:var(--brass);text-decoration:none;font-size:.62rem;letter-spacing:.2em;
+    text-transform:uppercase;border:1px solid rgba(200,162,74,.45);padding:6px 14px}
+  .nn-chips a:hover,.nn-chips a:focus-visible{background:rgba(200,162,74,.12)}
   .hero-rule{width:60px;height:1px;background:var(--brass-dim);margin:26px auto;border:0}
   .hero-sub{max-width:34ch;margin:0 auto;color:var(--sage);font-size:1.02rem}
   .hero-actions{margin:30px 0 0;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
@@ -904,6 +911,7 @@
       <button class="btn" id="installBtn" type="button" hidden>Install app</button>
     </div>
 
+    <div id="nowNext"></div>
     <div id="homeStatus"></div>
 
     <dl class="facts rise d4">
@@ -3045,6 +3053,53 @@ function seasonPhase(){
   const win=3*86400000, t=tee.getTime(), now=Date.now();
   return (now>=t-win && now<=t+win) ? "event" : "off";
 }
+
+/* §24 H-NOWNEXT. Truth rule: compare INSTANTS only. A schedule row's instant is
+   its resolved event-window date + its time cell, interpreted in the UTC OFFSET
+   carried by the effective first_tee string — the offset has ONE owner. Times are
+   DISPLAYED as the sheet's own text; nothing is re-rendered into device wall time.
+   Unresolvable label/time ⇒ at:null ⇒ the row can never be claimed Now/Next. */
+const WEEKDAYS=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+function teeOffsetMs(){
+  const m=String(INFO.first_tee||CONFIG.FIRST_TEE||"").match(/([+-])(\d{2}):(\d{2})\s*$/);
+  return m ? (m[1]==="-"?-1:1)*((+m[2])*60+(+m[3]))*60000 : null;
+}
+function parseClock(t){
+  const m=String(t||"").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if(!m) return null;
+  let h=+m[1]; const mi=m[2]?+m[2]:0, ap=m[3]&&m[3].toLowerCase();
+  if(mi>59) return null;
+  if(ap){ if(h<1||h>12) return null; if(ap==="pm"&&h<12)h+=12; if(ap==="am"&&h===12)h=0; }
+  else if(h>23) return null;
+  return (h*60+mi)*60000;
+}
+function scheduleInstants(rows){
+  const eff=String(INFO.first_tee||CONFIG.FIRST_TEE||"");
+  const dm=eff.match(/^(\d{4}-\d{2}-\d{2})T.*([+-]\d{2}:\d{2})$/), off=teeOffsetMs();
+  if(!dm||off===null) return (rows||[]).map(r=>({r,at:null,dayEnd:null}));
+  const base=new Date(dm[1]+"T00:00:00"+dm[2]).getTime();  // McCall midnight of first-tee day
+  const byDay={};
+  for(let k=-3;k<=3;k++){                                   // 7-day window ⇒ weekdays unique
+    const mid=base+k*86400000;
+    const wd=WEEKDAYS[new Date(mid+off).getUTCDay()];
+    if(!(wd in byDay)) byDay[wd]=mid;
+  }
+  return (rows||[]).map(r=>{
+    const mid=byDay[String(r.label||"").trim().toLowerCase()];
+    const clk=parseClock(r.time);
+    return (mid===undefined||clk===null) ? {r,at:null,dayEnd:null}
+      : {r,at:mid+clk,dayEnd:mid+86400000};
+  });
+}
+function nowNextModel(rows,now){
+  const xs=scheduleInstants(rows).filter(x=>x.at!==null).sort((a,b)=>a.at-b.at);
+  let cur=null;
+  for(const x of xs){ if(x.at<=now) cur=x; else break; }
+  if(cur&&now>=cur.dayEnd) cur=null;                        // McCall-midnight expiry
+  const nxt=xs.find(x=>x.at>now)||null;                     // crosses day boundaries
+  return {now:cur,next:nxt};
+}
+
 function applyNavOrder(){
   const nav=document.querySelector(".nav-links");
   if(!nav) return;
@@ -3361,6 +3416,17 @@ function stampFor(tab,results){
 function paintHome(){
   const statusEl=$("#homeStatus");
   if(!statusEl) return;
+  const nn=$("#nowNext");
+  if(nn){
+    if(seasonPhase()!=="event"){ nn.innerHTML=""; }
+    else{
+      const model=nowNextModel(forYear(STATE.data.schedule,activeSeason()),Date.now());
+      const line=(tag,x)=>x?`<div class="nn-row"><strong>${tag}:</strong> ${esc(x.r.event||"")}`
+        +` · ${esc(x.r.time||"")}${x.r.location?" · "+esc(x.r.location):""}</div>`:"";
+      nn.innerHTML=(line("Now",model.now)+line("Next",model.next)
+        +`<div class="nn-chips"><a href="#pairings">Pairings</a><a href="#board">Board</a><a href="#rooms">Rooms</a></div>`);
+    }
+  }
   const tee=new Date(INFO.first_tee||CONFIG.FIRST_TEE);
   const post=!isNaN(tee)&&Date.now()>tee.getTime()+3*86400000;
   if(!post){ statusEl.innerHTML=""; return; }
