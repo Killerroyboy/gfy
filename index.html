@@ -91,6 +91,15 @@
   .health-strip[hidden]{display:none}
   .health-strip summary{cursor:pointer;color:var(--rust)}
   .health-strip div{padding:4px 0 0}
+
+  #announceBar{position:sticky;top:0;z-index:60;background:var(--brass,#8a6d3b);color:#fff;
+    padding:10px 14px;font-size:.95rem;display:flex;gap:12px;align-items:baseline}
+  #announceBar[hidden]{display:none}
+  body[data-view="score"] #announceBar{display:none} /* §24 A-BANNER: never interrupt a captain mid-entry */
+  #announceBar .ann-msg{flex:1}
+  #annUpdates{margin:26px 0 0}
+  #annUpdates .ann-row{display:flex;gap:10px;padding:4px 0;font-size:.9rem}
+  #annUpdates .ann-when{opacity:.6;white-space:nowrap}
   .subhead{font-family:var(--display);font-size:1.4rem;margin:44px 0 16px;font-weight:400}
 
   .years{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 26px}
@@ -892,6 +901,8 @@
       <div class="fact"><dt>Format</dt><dd data-info="format">2-day scramble</dd></div>
     </dl>
 
+    <section id="annUpdates"></section>
+
     <div class="holder" id="homeBird">
       <svg aria-hidden="true"><use href="#mark"/></svg>
       <p><strong>The Bird</strong>Held for one year. Displayed somewhere visible. Returned to the first tee, cleaned, or the holder plays from the back tees.</p>
@@ -1240,6 +1251,7 @@ function showView(name){
   const bare=(name||"").split("?")[0];              // §18 SC-LINK router pin
   const aliased=VIEW_ALIASES[bare]||bare;
   const v=VIEWS.includes(aliased)?aliased:"home";
+  document.body.dataset.view=v;
   document.querySelectorAll(".view").forEach(s=>{ s.hidden=s.dataset.view!==v; });
   document.querySelectorAll(".nav a").forEach(a=>a.classList.toggle("active",a.hash==="#"+v));
 }
@@ -2966,6 +2978,45 @@ function renderHealth(){
     HEALTH.map(h=>`<div>${esc(h)}</div>`).join("")+`</details>`;
 }
 
+/* §24 A-BANNER/A-SEEN. Unseen = parseWhen(when) newer than the persisted watermark
+   AND not >24h future (future-guard: a typo'd year must never poison the watermark).
+   Dismiss collapses in-memory for the session, then best-effort persists — if
+   storage is unavailable the banner simply returns next visit (errs loud; no false
+   "saved" claim). Malformed when: renders in sheet order after parseables, never
+   unseen, never advances the watermark. Missing/empty tab: no DOM, no error. */
+const ANN_KEY="gfyAnnSeen";
+let ANN_DISMISSED=false;
+function annWatermark(){ try{ const v=+localStorage.getItem(ANN_KEY); return isFinite(v)&&v>0?v:0; }catch(e){ return 0; } }
+function renderAnnouncements(){
+  let bar=document.getElementById("announceBar");
+  const host=document.getElementById("annUpdates");
+  const rows=(STATE.data.announce||[]).filter(r=>String(r.year||"").trim()===String(activeSeason()));
+  if(!rows.length){ if(bar) bar.hidden=true; if(host) host.innerHTML=""; return; }
+  const lim=Date.now()+24*3600000;
+  const parsed=rows.map(r=>({r,at:parseWhen(r.when)}));
+  const ordered=parsed.filter(x=>x.at!==null).sort((a,b)=>b.at-a.at)
+    .concat(parsed.filter(x=>x.at===null));
+  const wm=annWatermark();
+  const unseen=ordered.filter(x=>x.at!==null&&x.at>wm&&x.at<=lim);
+  if(!bar){
+    bar=document.createElement("div"); bar.id="announceBar"; bar.hidden=true;
+    const nav=document.querySelector(".nav");
+    nav.parentNode.insertBefore(bar,nav);
+  }
+  if(unseen.length&&!ANN_DISMISSED){
+    bar.hidden=false;
+    bar.innerHTML=unseen.map(x=>`<span class="ann-msg">${esc(x.r.message)}</span>`).join("")
+      +`<button id="annDismiss" type="button">Got it</button>`;
+    bar.querySelector("#annDismiss").addEventListener("click",()=>{
+      ANN_DISMISSED=true; bar.hidden=true;
+      const top=unseen[0].at;
+      try{ localStorage.setItem(ANN_KEY,String(top)); }catch(e){ /* session-only; returns next visit */ }
+    });
+  } else bar.hidden=true;
+  if(host) host.innerHTML=`<h3>Updates</h3>`+ordered.map(x=>
+    `<div class="ann-row"><span class="ann-when">${esc(x.r.when||"")}</span><span>${esc(x.r.message||"")}</span></div>`).join("");
+}
+
 /* ---------- N-ORDER (§17): canonical seasonal nav ----------
    One canonical, story-shaped order year-round — who's in → draft → play →
    bets → settle → next season's collections → logistics → lore → rules.
@@ -4679,6 +4730,7 @@ function paint(data,results){
   paintHome();
   applyNavOrder();
   renderHealth();
+  renderAnnouncements();
   renderScorer();
 }
 async function load(){

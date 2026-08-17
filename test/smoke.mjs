@@ -135,6 +135,17 @@ function nearestTextAncestor(el, needle, maxDepth = 6) {
   return false;
 }
 
+// §24 announce-tab helpers (hoisted to file scope so Task 3+ can reuse
+// `iso`, not just X48-X50). `annCsv` builds an announce-tab CSV fixture from
+// [year, when, message] rows; `iso` formats an epoch ms as the
+// "YYYY-MM-DD HH:MM" string `parseWhen` accepts, in local time (relative-to-
+// now — never a real-calendar literal, per the no-time-bomb rule).
+const annCsv = (rows) => "year,when,message\n" + rows.map(r => r.join(",")).join("\n");
+const iso = (ms) => {
+  const d = new Date(ms); const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
 /* =====================================================================
    Main dom — default fixtures, 2026 selected by default (activeSeason).
    ===================================================================== */
@@ -5034,6 +5045,178 @@ async function cellSettledOk(doc, hole) {
     && no("1999-08-15") && no("2101-08-15"),            // year range, parseDate idiom
     "at="+at);
   dom.window.close();
+}
+
+/* ---------------------------------------------------------------------
+   X48-X50 (§24 A-BANNER/A-SEEN): announcements banner, watermark, dismiss,
+   Updates list, scorer suppression. Uses the hoisted `annCsv`/`iso`
+   helpers (defined near nearestTextAncestor above) and an announce-tab
+   `withOverride` per dom, same idiom as the D-block. All timestamps are
+   relative to `nowW` (or 2099) — never a real-calendar literal (Z2's
+   time-bomb lesson: a hardcoded date one day stale silently flips truthy).
+   --------------------------------------------------------------------- */
+const nowW = Date.now();
+
+// X48: two parseable, current-season, past (already-unseen) rows. Bar shows
+// both, newest first; message text present; esc proof on the HTML-bearing
+// message; dismiss hides the bar and persists the watermark at the NEWEST
+// unseen row's parsed instant; a repeat renderAnnouncements() call (no
+// reload) stays hidden — both the in-session ANN_DISMISSED flag and the
+// now-covering watermark independently keep it down.
+{
+  const rowsX48 = annCsv([
+    [2026, iso(nowW - 3600000), "R2 tee times posted"],
+    [2026, iso(nowW - 7200000), "<b>x</b> & y"],
+  ]);
+  const domX48 = makeDom("", withOverride({
+    announce: () => Promise.resolve({ ok: true, status: 200, text: async () => rowsX48 }),
+  }));
+  await until(() => domX48.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wX48 = domX48.window;
+  const barX48 = wX48.document.getElementById("announceBar");
+  const visibleX48 = !!barX48 && !barX48.hidden;
+  const htmlX48 = barX48 ? barX48.innerHTML : "";
+  const hasNewestX48 = htmlX48.includes("R2 tee times posted");
+  const escProofX48 = htmlX48.includes("&lt;b&gt;x&lt;/b&gt;") && !htmlX48.includes("<b>x</b>");
+  const newestFirstX48 = hasNewestX48 && escProofX48 &&
+    htmlX48.indexOf("R2 tee times posted") < htmlX48.indexOf("&lt;b&gt;");
+
+  const expectTopX48 = wX48.parseWhen(iso(nowW - 3600000));
+  barX48.querySelector("#annDismiss").click();
+  const hiddenAfterDismissX48 = barX48.hidden === true;
+  const storedX48 = wX48.localStorage.getItem("gfyAnnSeen");
+  const watermarkOkX48 = storedX48 === String(expectTopX48);
+
+  wX48.renderAnnouncements();
+  const staysHiddenX48 = barX48.hidden === true;
+
+  check("X48: §24 A-BANNER/A-SEEN — #announceBar visible with two unseen rows (newest first), message text present, esc proof (innerHTML carries &lt;b&gt;, never raw <b>x</b>); dismiss hides the bar and sets localStorage.gfyAnnSeen to the newest row's parsed instant; a repeat renderAnnouncements() stays hidden (session + watermark)",
+    visibleX48 && newestFirstX48 && hiddenAfterDismissX48 && watermarkOkX48 && staysHiddenX48,
+    "visible="+visibleX48+" newestFirst="+newestFirstX48+" hiddenAfterDismiss="+hiddenAfterDismissX48+
+      " watermarkOk="+watermarkOkX48+" (got="+storedX48+" want="+expectTopX48+")"+" staysHidden="+staysHiddenX48+
+      " html="+JSON.stringify(htmlX48).slice(0,220));
+  domX48.window.close();
+}
+
+// X49: watermark honesty (future-guard), malformed-`when` ordering, and
+// storage-dead degrade. Three sub-doms (a/b/c), one combined assertion.
+{
+  // (a) future-guard: a row >24h out never counts as "unseen" (bar), but it
+  // still shows in Updates; dismissing the OTHER (real, past) row advances
+  // the watermark only to that row's instant — strictly below the
+  // future-guarded row's instant, proving the guard, not just absence.
+  const pastAtX49a = nowW - 3600000;
+  const futureAtRawX49a = nowW + 3*86400000;
+  const rowsX49a = annCsv([
+    [2026, iso(pastAtX49a), "Past update"],
+    [2026, iso(futureAtRawX49a), "Future typo update"],
+  ]);
+  const domX49a = makeDom("", withOverride({
+    announce: () => Promise.resolve({ ok: true, status: 200, text: async () => rowsX49a }),
+  }));
+  await until(() => domX49a.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wA49 = domX49a.window;
+  const updatesHtmlA49 = wA49.document.getElementById("annUpdates")?.innerHTML || "";
+  const futureInUpdatesA49 = updatesHtmlA49.includes("Future typo update");
+  const barA49 = wA49.document.getElementById("announceBar");
+  const barTextA49 = barA49 ? barA49.textContent : "";
+  const futureNotUnseenA49 = !barTextA49.includes("Future typo update") && barTextA49.includes("Past update");
+  const futureAtA49 = wA49.parseWhen(iso(futureAtRawX49a));
+  barA49.querySelector("#annDismiss").click();
+  const wmStoredA49 = +wA49.localStorage.getItem("gfyAnnSeen");
+  const wmBelowFutureA49 = wmStoredA49 === wA49.parseWhen(iso(pastAtX49a)) && wmStoredA49 < futureAtA49;
+  domX49a.window.close();
+
+  // (b) malformed `when` renders last in Updates (sheet order after
+  // parseables) and never counts as unseen.
+  const rowsX49b = annCsv([
+    [2026, iso(nowW - 3600000), "Real update"],
+    [2026, "soon", "Malformed update"],
+  ]);
+  const domX49b = makeDom("", withOverride({
+    announce: () => Promise.resolve({ ok: true, status: 200, text: async () => rowsX49b }),
+  }));
+  await until(() => domX49b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wB49 = domX49b.window;
+  const annRowsB49 = [...wB49.document.querySelectorAll("#annUpdates .ann-row")];
+  const malformedLastB49 = annRowsB49.length === 2 &&
+    annRowsB49[0].textContent.includes("Real update") &&
+    annRowsB49[1].textContent.includes("Malformed update");
+  const malformedNeverUnseenB49 = !(wB49.document.getElementById("announceBar")?.textContent || "")
+    .includes("Malformed update");
+  domX49b.window.close();
+
+  // (c) storage-dead degrade: window.localStorage THROWS on access (getter
+  // override, per the controller's idiom — distinct from X23's throwing-
+  // setItem stub, because both reads (annWatermark) and writes (dismiss)
+  // must be exercised here). Override BEFORE the render call under test,
+  // then re-render explicitly so the throwing path is actually hit.
+  const rowsX49c = annCsv([[2026, iso(nowW - 3600000), "Blocked storage update"]]);
+  const domX49c = makeDom("", withOverride({
+    announce: () => Promise.resolve({ ok: true, status: 200, text: async () => rowsX49c }),
+  }));
+  await until(() => domX49c.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wC49 = domX49c.window;
+  Object.defineProperty(wC49, "localStorage", { get(){ throw new Error("blocked"); } });
+  wC49.renderAnnouncements();
+  const barC49 = wC49.document.getElementById("announceBar");
+  const rendersUnderBlockC49 = !!barC49 && !barC49.hidden && barC49.textContent.includes("Blocked storage update");
+  barC49.querySelector("#annDismiss").click();
+  const dismissHidesC49 = barC49.hidden === true;
+  const noPageErrorsC49 = domX49c.pageErrors.length === 0;
+  domX49c.window.close();
+
+  check("X49: §24 A-SEEN watermark honesty — a >24h-future row renders in Updates but never shows as unseen in the bar, and dismissing the real row leaves the watermark strictly below the future row's instant; a malformed `when` renders last in Updates and never counts as unseen; with window.localStorage throwing on every access, the bar still renders and dismiss still hides it for the session, with zero page errors",
+    futureInUpdatesA49 && futureNotUnseenA49 && wmBelowFutureA49 &&
+    malformedLastB49 && malformedNeverUnseenB49 &&
+    rendersUnderBlockC49 && dismissHidesC49 && noPageErrorsC49,
+    "futureInUpdates="+futureInUpdatesA49+" futureNotUnseen="+futureNotUnseenA49+" wmBelowFuture="+wmBelowFutureA49+
+      " (wm="+wmStoredA49+" futureAt="+futureAtA49+")"+
+      " malformedLast="+malformedLastB49+" malformedNeverUnseen="+malformedNeverUnseenB49+
+      " rendersUnderBlock="+rendersUnderBlockC49+" dismissHides="+dismissHidesC49+" pageErrors="+noPageErrorsC49);
+}
+
+// X50: Home's #annUpdates lists ALL current-season rows (seen + unseen
+// alike — a seeded watermark that "sees" one of them must not drop it from
+// the list); scorer suppression via body[data-view="score"] hides
+// #announceBar (computed style, not just the [hidden] attribute) and #board
+// restores it.
+{
+  const atUnseenX50 = nowW - 3600000;
+  const atSeenX50 = nowW - 7200000;
+  const rowsX50 = annCsv([
+    [2026, iso(atUnseenX50), "Unseen headline"],
+    [2026, iso(atSeenX50), "Seen headline"],
+  ]);
+  const domX50 = makeDom("", withOverride({
+    announce: () => Promise.resolve({ ok: true, status: 200, text: async () => rowsX50 }),
+  }));
+  await until(() => domX50.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const w50 = domX50.window;
+
+  // Seed the watermark strictly between the two rows so "Seen headline" is
+  // already seen and "Unseen headline" is not, then re-render.
+  w50.localStorage.setItem("gfyAnnSeen", String(w50.parseWhen(iso(atSeenX50))));
+  w50.renderAnnouncements();
+
+  const updatesTextX50 = w50.document.getElementById("annUpdates")?.textContent || "";
+  const bothInUpdatesX50 = updatesTextX50.includes("Unseen headline") && updatesTextX50.includes("Seen headline");
+  const barTextX50 = w50.document.getElementById("announceBar")?.textContent || "";
+  const onlyUnseenInBarX50 = barTextX50.includes("Unseen headline") && !barTextX50.includes("Seen headline");
+
+  w50.location.hash = "#score";
+  w50.dispatchEvent(new w50.Event("hashchange"));
+  const displayScoreX50 = w50.getComputedStyle(w50.document.getElementById("announceBar")).display;
+
+  w50.location.hash = "#board";
+  w50.dispatchEvent(new w50.Event("hashchange"));
+  const displayBoardX50 = w50.getComputedStyle(w50.document.getElementById("announceBar")).display;
+
+  check("X50: §24 A-BANNER — Home's #annUpdates lists ALL current-season rows regardless of seen/unseen (a seeded watermark makes one seen, one unseen; both still listed; the bar itself only carries the unseen one); navigating to #score computes #announceBar to display:none (suppression), and #board restores a non-none display",
+    bothInUpdatesX50 && onlyUnseenInBarX50 && displayScoreX50 === "none" && displayBoardX50 !== "none",
+    "bothInUpdates="+bothInUpdatesX50+" onlyUnseenInBar="+onlyUnseenInBarX50+
+      " displayScore="+displayScoreX50+" displayBoard="+displayBoardX50);
+  domX50.window.close();
 }
 
 /* ---------------------------------------------------------------------
