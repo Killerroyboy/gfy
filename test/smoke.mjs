@@ -21,13 +21,17 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import jsdom from "jsdom";
+import {
+  checkFirstTee, checkResidue, checkSchedule, checkPairings, checkPars,
+  checkScorer, checkField, checkAnnounce, checkCrossTab, checkFallbackParity,
+} from "../tools/event-ready.mjs";
 
 const { JSDOM, VirtualConsole, requestInterceptor } = jsdom;
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const html = readFileSync(path.join(ROOT, "index.html"), "utf8");
 
 const TABS = ["info","course","field","scores","schedule","pairings",
-              "calcutta","payout","ledger","champions","shame","invites","rooms"];
+              "calcutta","payout","ledger","champions","shame","invites","rooms","announce"];
 const GIDS = {};
 TABS.forEach((t, i) => GIDS[t] = String(101 + i));
 const FIXTURES = {};
@@ -133,6 +137,32 @@ function nearestTextAncestor(el, needle, maxDepth = 6) {
     cur = cur.parentElement;
   }
   return false;
+}
+
+// §24 announce-tab helpers (hoisted to file scope so Task 3+ can reuse
+// `iso`, not just X48-X50). `annCsv` builds an announce-tab CSV fixture from
+// [year, when, message] rows; `iso` formats an epoch ms as the
+// "YYYY-MM-DD HH:MM" string `parseWhen` accepts, in local time (relative-to-
+// now — never a real-calendar literal, per the no-time-bomb rule).
+const annCsv = (rows) => "year,when,message\n" + rows.map(r => r.join(",")).join("\n");
+const iso = (ms) => {
+  const d = new Date(ms); const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+// §24 test rule: no real-calendar dates. Event fixtures are built RELATIVE to now.
+// dynInfo(daysFromNow) → an info CSV whose first_tee is now+days at 09:00 in a
+// FIXED -06:00 offset regardless of the machine's TZ (offset math is the thing
+// under test — the resolver must be TZ-independent by construction).
+function dynFirstTee(daysFromNow){
+  const d=new Date(Date.now()+daysFromNow*86400000);
+  // format the McCall wall-date of that instant using -06:00
+  const mc=new Date(d.getTime()-6*3600000);
+  const p=n=>String(n).padStart(2,"0");
+  return `${mc.getUTCFullYear()}-${p(mc.getUTCMonth()+1)}-${p(mc.getUTCDate())}T09:00:00-06:00`;
+}
+function dynInfo(daysFromNow){
+  return FIXTURES.info.replace("2026-08-15T09:00:00-06:00", dynFirstTee(daysFromNow));
 }
 
 /* =====================================================================
@@ -356,8 +386,8 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
   const okCount = (dbgText.match(/\bOK\b/g) || []).length;
   const hasFailed = /FAILED/i.test(dbgText);
   domD5.window.close();
-  check("D5: debug happy path — 13 tabs OK",
-    okCount === 13 && !hasFailed,
+  check("D5: debug happy path — 14 tabs OK",
+    okCount === 14 && !hasFailed,
     "okCount=" + okCount + " hasFailed=" + hasFailed + " | " + dbgText.slice(0, 300));
 }
 
@@ -1554,6 +1584,20 @@ dom.window.close();
   const stampsZ = stampIdsZ.map(id => (zdoc.querySelector("#" + id)?.textContent || "").trim());
   check("Z4: unconfigured deploy — all four freshness stamps are empty (no fabricated Offline text)",
     stampsZ.every(s => s === ""), JSON.stringify(stampsZ));
+
+  // X56: §24 C-FALLBACK — the old renderSchedule() empty branch printed a
+  // hardcoded sample weekend (LAST YEAR's actual times) whenever the sheet
+  // was unreachable, same S12 class as a mislabeled number. Unconfigured
+  // deploy (this Z harness — empty PUB_ID/GID, every fetch rejecting) is the
+  // sharpest proof: nothing was ever fetched, so any fact on screen is fake.
+  const schedBodyTextZ = (zdoc.querySelector("#scheduleBody")?.textContent || "").trim();
+  const factsDdZ = Array.from(zdoc.querySelectorAll("dl.facts dd[data-info]"))
+    .map(d => (d.textContent || "").trim());
+  check("X56: §24 C-FALLBACK — unconfigured deploy: #scheduleBody shows the honest empty-state message verbatim (no hardcoded fake weekend, no 'Steaks'/'9:00 am' relic), and every facts <dd> reads '—' (no stale year-baked fact)",
+    schedBodyTextZ === "Schedule not loaded yet — it lives in the sheet's Schedule tab."
+      && !schedBodyTextZ.includes("Steaks") && !schedBodyTextZ.includes("9:00 am")
+      && factsDdZ.length === 4 && factsDdZ.every(t => t === "—"),
+    "sched=" + JSON.stringify(schedBodyTextZ) + " dds=" + JSON.stringify(factsDdZ));
 
   domZ.window.close();
 }
@@ -5017,6 +5061,805 @@ async function cellSettledOk(doc, hole) {
   check("X46: §23 C-OWNERLESS-COLLECTED — ownerless+collected:TRUE lot (Duck, X41's shape) fires 'lot \"Duck\" marked collected but has no owner — check the Calcutta tab' in #healthStrip; absent on the normal default dom; absent on an unsold-uncollected dom (which fires only the EXISTING unassigned-lot flag); absent on an all-sold+all-collected dom",
     firesX46 && absentNormalX46 && existingFlagFiresX46 && absentUnsoldUncollectedX46 && absentAllSoldX46,
     `fires=${firesX46} absentNormal=${absentNormalX46} existingFlagFires=${existingFlagFiresX46} absentUnsoldUncollected=${absentUnsoldUncollectedX46} absentAllSold=${absentAllSoldX46}`);
+}
+
+// X47: parseWhen — format matrix (§24 A-WHEN). parseDate stays date-only and frozen.
+{
+  const dom=makeDom("", fakeFetch); await settle(); const w=dom.window;
+  const ok=(s)=>w.parseWhen(s), no=(s)=>w.parseWhen(s)===null;
+  const at=ok("2099-08-15 14:30");
+  check("X47: parseWhen — 'YYYY-MM-DD HH:MM' parses; bare date = 00:00 same day; garbage/invalid-calendar/out-of-range all null; same-day ordering by time",
+    at!==null
+    && ok("2099-08-15")===new w.Date(2099,7,15,0,0).getTime()
+    && at===new w.Date(2099,7,15,14,30).getTime()
+    && ok("2099-08-15 09:00") < at                      // same-day ordering
+    && no("2099-02-30 10:00") && no("2099-08-15 24:00") // fake calendar / bad clock
+    && no("08/15/2099") && no("tomorrow") && no("") && no("2099-8-15 9:00") // strict widths
+    && no("1999-08-15") && no("2101-08-15"),            // year range, parseDate idiom
+    "at="+at);
+  dom.window.close();
+}
+
+/* ---------------------------------------------------------------------
+   X48-X50 (§24 A-BANNER/A-SEEN): announcements banner, watermark, dismiss,
+   Updates list, scorer suppression. Uses the hoisted `annCsv`/`iso`
+   helpers (defined near nearestTextAncestor above) and an announce-tab
+   `withOverride` per dom, same idiom as the D-block. All timestamps are
+   relative to `nowW` (or 2099) — never a real-calendar literal (Z2's
+   time-bomb lesson: a hardcoded date one day stale silently flips truthy).
+   --------------------------------------------------------------------- */
+const nowW = Date.now();
+
+// X48: two parseable, current-season, past (already-unseen) rows. Bar shows
+// both, newest first; message text present; esc proof on the HTML-bearing
+// message; dismiss hides the bar and persists the watermark at the NEWEST
+// unseen row's parsed instant; a repeat renderAnnouncements() call (no
+// reload) stays hidden — both the in-session ANN_DISMISSED flag and the
+// now-covering watermark independently keep it down.
+{
+  const rowsX48 = annCsv([
+    [2026, iso(nowW - 3600000), "R2 tee times posted"],
+    [2026, iso(nowW - 7200000), "<b>x</b> & y"],
+    [2026, "<i>bad</i>", "Third update"],
+  ]);
+  const domX48 = makeDom("", withOverride({
+    announce: () => Promise.resolve({ ok: true, status: 200, text: async () => rowsX48 }),
+  }));
+  await until(() => domX48.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wX48 = domX48.window;
+  const barX48 = wX48.document.getElementById("announceBar");
+  const visibleX48 = !!barX48 && !barX48.hidden;
+  const htmlX48 = barX48 ? barX48.innerHTML : "";
+  const hasNewestX48 = htmlX48.includes("R2 tee times posted");
+  const escProofX48 = htmlX48.includes("&lt;b&gt;x&lt;/b&gt;") && !htmlX48.includes("<b>x</b>");
+  const newestFirstX48 = hasNewestX48 && escProofX48 &&
+    htmlX48.indexOf("R2 tee times posted") < htmlX48.indexOf("&lt;b&gt;");
+
+  // review round 1 finding 3: esc() on the Updates list was unheld (a mutant
+  // dropping esc() from either field there survived the whole suite). The
+  // third row above has markup in `when` (malformed — never reaches the bar);
+  // row 2's `<b>x</b> & y` message covers the message field. Assert BOTH
+  // escape in #annUpdates specifically, not just in the bar.
+  const updatesHtmlX48 = wX48.document.getElementById("annUpdates")?.innerHTML || "";
+  const escProofMsgUpdatesX48 = updatesHtmlX48.includes("&lt;b&gt;x&lt;/b&gt;") && !updatesHtmlX48.includes("<b>x</b>");
+  const escProofWhenUpdatesX48 = updatesHtmlX48.includes("&lt;i&gt;bad&lt;/i&gt;") && !updatesHtmlX48.includes("<i>bad</i>");
+
+  const expectTopX48 = wX48.parseWhen(iso(nowW - 3600000));
+  barX48.querySelector("#annDismiss").click();
+  const hiddenAfterDismissX48 = barX48.hidden === true;
+  const storedX48 = wX48.localStorage.getItem("gfyAnnSeen");
+  const watermarkOkX48 = storedX48 === String(expectTopX48);
+
+  wX48.renderAnnouncements();
+  const staysHiddenX48 = barX48.hidden === true;
+
+  check("X48: §24 A-BANNER/A-SEEN — #announceBar visible with two unseen rows (newest first), message text present, esc proof (innerHTML carries &lt;b&gt;, never raw <b>x</b>) in BOTH the bar and #annUpdates (message field), and #annUpdates also escapes a markup-bearing `when` field; dismiss hides the bar and sets localStorage.gfyAnnSeen to the newest row's parsed instant; a repeat renderAnnouncements() stays hidden (session + watermark)",
+    visibleX48 && newestFirstX48 && escProofMsgUpdatesX48 && escProofWhenUpdatesX48 &&
+      hiddenAfterDismissX48 && watermarkOkX48 && staysHiddenX48,
+    "visible="+visibleX48+" newestFirst="+newestFirstX48+
+      " escProofMsgUpdates="+escProofMsgUpdatesX48+" escProofWhenUpdates="+escProofWhenUpdatesX48+
+      " hiddenAfterDismiss="+hiddenAfterDismissX48+
+      " watermarkOk="+watermarkOkX48+" (got="+storedX48+" want="+expectTopX48+")"+" staysHidden="+staysHiddenX48+
+      " html="+JSON.stringify(htmlX48).slice(0,220)+" updatesHtml="+JSON.stringify(updatesHtmlX48).slice(0,260));
+  domX48.window.close();
+}
+
+// X49: watermark honesty (future-guard), malformed-`when` ordering, and
+// storage-dead degrade. Three sub-doms (a/b/c), one combined assertion.
+{
+  // (a) future-guard: a row >24h out never counts as "unseen" (bar), but it
+  // still shows in Updates; dismissing the OTHER (real, past) row advances
+  // the watermark only to that row's instant — strictly below the
+  // future-guarded row's instant, proving the guard, not just absence.
+  const pastAtX49a = nowW - 3600000;
+  const futureAtRawX49a = nowW + 3*86400000;
+  const rowsX49a = annCsv([
+    [2026, iso(pastAtX49a), "Past update"],
+    [2026, iso(futureAtRawX49a), "Future typo update"],
+  ]);
+  const domX49a = makeDom("", withOverride({
+    announce: () => Promise.resolve({ ok: true, status: 200, text: async () => rowsX49a }),
+  }));
+  await until(() => domX49a.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wA49 = domX49a.window;
+  const updatesHtmlA49 = wA49.document.getElementById("annUpdates")?.innerHTML || "";
+  const futureInUpdatesA49 = updatesHtmlA49.includes("Future typo update");
+  const barA49 = wA49.document.getElementById("announceBar");
+  const barTextA49 = barA49 ? barA49.textContent : "";
+  const futureNotUnseenA49 = !barTextA49.includes("Future typo update") && barTextA49.includes("Past update");
+  const futureAtA49 = wA49.parseWhen(iso(futureAtRawX49a));
+  barA49.querySelector("#annDismiss").click();
+  const wmStoredA49 = +wA49.localStorage.getItem("gfyAnnSeen");
+  const wmBelowFutureA49 = wmStoredA49 === wA49.parseWhen(iso(pastAtX49a)) && wmStoredA49 < futureAtA49;
+  domX49a.window.close();
+
+  // (b) malformed `when` renders last in Updates (sheet order after
+  // parseables) and never counts as unseen.
+  const rowsX49b = annCsv([
+    [2026, iso(nowW - 3600000), "Real update"],
+    [2026, "soon", "Malformed update"],
+  ]);
+  const domX49b = makeDom("", withOverride({
+    announce: () => Promise.resolve({ ok: true, status: 200, text: async () => rowsX49b }),
+  }));
+  await until(() => domX49b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wB49 = domX49b.window;
+  const annRowsB49 = [...wB49.document.querySelectorAll("#annUpdates .ann-row")];
+  const malformedLastB49 = annRowsB49.length === 2 &&
+    annRowsB49[0].textContent.includes("Real update") &&
+    annRowsB49[1].textContent.includes("Malformed update");
+  const malformedNeverUnseenB49 = !(wB49.document.getElementById("announceBar")?.textContent || "")
+    .includes("Malformed update");
+  domX49b.window.close();
+
+  // (c) storage-dead degrade: window.localStorage THROWS on access (getter
+  // override, per the controller's idiom — distinct from X23's throwing-
+  // setItem stub, because both reads (annWatermark) and writes (dismiss)
+  // must be exercised here). Override BEFORE the render call under test,
+  // then re-render explicitly so the throwing path is actually hit.
+  const rowsX49c = annCsv([[2026, iso(nowW - 3600000), "Blocked storage update"]]);
+  const domX49c = makeDom("", withOverride({
+    announce: () => Promise.resolve({ ok: true, status: 200, text: async () => rowsX49c }),
+  }));
+  await until(() => domX49c.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wC49 = domX49c.window;
+  Object.defineProperty(wC49, "localStorage", { get(){ throw new Error("blocked"); } });
+  wC49.renderAnnouncements();
+  const barC49 = wC49.document.getElementById("announceBar");
+  const rendersUnderBlockC49 = !!barC49 && !barC49.hidden && barC49.textContent.includes("Blocked storage update");
+  barC49.querySelector("#annDismiss").click();
+  const dismissHidesC49 = barC49.hidden === true;
+  // review round 1 finding 4: the session-dismiss flag (ANN_DISMISSED) was
+  // unheld under storage-dead — with localStorage permanently throwing, the
+  // watermark can never advance (annWatermark() always returns 0), so a
+  // second render call after dismiss stays hidden ONLY if ANN_DISMISSED is
+  // doing the work. Re-render explicitly and assert it stays down.
+  wC49.renderAnnouncements();
+  const staysHiddenAfterDismissC49 = barC49.hidden === true;
+  const noPageErrorsC49 = domX49c.pageErrors.length === 0;
+  domX49c.window.close();
+
+  check("X49: §24 A-SEEN watermark honesty — a >24h-future row renders in Updates but never shows as unseen in the bar, and dismissing the real row leaves the watermark strictly below the future row's instant; a malformed `when` renders last in Updates and never counts as unseen; with window.localStorage throwing on every access, the bar still renders, dismiss still hides it for the session, and a repeat renderAnnouncements() after dismiss stays hidden (ANN_DISMISSED alone, since the watermark can never advance under permanent storage failure), with zero page errors",
+    futureInUpdatesA49 && futureNotUnseenA49 && wmBelowFutureA49 &&
+    malformedLastB49 && malformedNeverUnseenB49 &&
+    rendersUnderBlockC49 && dismissHidesC49 && staysHiddenAfterDismissC49 && noPageErrorsC49,
+    "futureInUpdates="+futureInUpdatesA49+" futureNotUnseen="+futureNotUnseenA49+" wmBelowFuture="+wmBelowFutureA49+
+      " (wm="+wmStoredA49+" futureAt="+futureAtA49+")"+
+      " malformedLast="+malformedLastB49+" malformedNeverUnseen="+malformedNeverUnseenB49+
+      " rendersUnderBlock="+rendersUnderBlockC49+" dismissHides="+dismissHidesC49+
+      " staysHiddenAfterDismiss="+staysHiddenAfterDismissC49+" pageErrors="+noPageErrorsC49);
+}
+
+// X50: Home's #annUpdates lists ALL current-season rows (seen + unseen
+// alike — a seeded watermark that "sees" one of them must not drop it from
+// the list); scorer suppression via body[data-view="score"] hides
+// #announceBar (computed style, not just the [hidden] attribute) and #board
+// restores it.
+{
+  const atUnseenX50 = nowW - 3600000;
+  const atSeenX50 = nowW - 7200000;
+  const rowsX50 = annCsv([
+    [2026, iso(atUnseenX50), "Unseen headline"],
+    [2026, iso(atSeenX50), "Seen headline"],
+    // review round 1 finding 5: current-season filter was unheld — a
+    // wrong-year row (fresher than both current-season rows above, so it
+    // WOULD sort first if the year filter were dropped) must not leak into
+    // either the bar or #annUpdates.
+    [2025, iso(nowW - 1800000), "Wrong year headline"],
+  ]);
+  const domX50 = makeDom("", withOverride({
+    announce: () => Promise.resolve({ ok: true, status: 200, text: async () => rowsX50 }),
+  }));
+  await until(() => domX50.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const w50 = domX50.window;
+
+  // Seed the watermark strictly between the two rows so "Seen headline" is
+  // already seen and "Unseen headline" is not, then re-render.
+  w50.localStorage.setItem("gfyAnnSeen", String(w50.parseWhen(iso(atSeenX50))));
+  w50.renderAnnouncements();
+
+  const updatesTextX50 = w50.document.getElementById("annUpdates")?.textContent || "";
+  const bothInUpdatesX50 = updatesTextX50.includes("Unseen headline") && updatesTextX50.includes("Seen headline");
+  const barTextX50 = w50.document.getElementById("announceBar")?.textContent || "";
+  const onlyUnseenInBarX50 = barTextX50.includes("Unseen headline") && !barTextX50.includes("Seen headline");
+  const wrongYearExcludedX50 = !updatesTextX50.includes("Wrong year headline") && !barTextX50.includes("Wrong year headline");
+
+  w50.location.hash = "#score";
+  w50.dispatchEvent(new w50.Event("hashchange"));
+  const displayScoreX50 = w50.getComputedStyle(w50.document.getElementById("announceBar")).display;
+
+  w50.location.hash = "#board";
+  w50.dispatchEvent(new w50.Event("hashchange"));
+  const displayBoardX50 = w50.getComputedStyle(w50.document.getElementById("announceBar")).display;
+
+  check("X50: §24 A-BANNER — Home's #annUpdates lists ALL current-season rows regardless of seen/unseen (a seeded watermark makes one seen, one unseen; both still listed; the bar itself only carries the unseen one); a wrong-year row (fresher than either current-season row) renders in NEITHER the bar NOR #annUpdates (current-season filter); navigating to #score computes #announceBar to display:none (suppression), and #board restores a non-none display",
+    bothInUpdatesX50 && onlyUnseenInBarX50 && wrongYearExcludedX50 && displayScoreX50 === "none" && displayBoardX50 !== "none",
+    "bothInUpdates="+bothInUpdatesX50+" onlyUnseenInBar="+onlyUnseenInBarX50+" wrongYearExcluded="+wrongYearExcludedX50+
+      " displayScore="+displayScoreX50+" displayBoard="+displayBoardX50);
+  domX50.window.close();
+}
+
+/* ---------------------------------------------------------------------
+   GROUP X (cont'd) — §24 H-NOWNEXT: Now/Next strip resolver, selection,
+   render honesty (Task 3)
+   --------------------------------------------------------------------- */
+
+// X51: scheduleInstants resolver truth — offset-anchored, TZ-independent.
+// first_tee is a fixed FAR-FUTURE calendar date (2099-08-15, a confirmed
+// Saturday) so expected epochs can be hand-computed from ISO strings,
+// independent of the resolver under test (same far-future idiom as
+// E2/X5, not a "real calendar date" in the time-bomb sense — it is never
+// asserted to be "now"). A second dom swaps the offset to +09:00 (same
+// calendar date, different UTC offset) to prove the offset CARRIED BY
+// first_tee — not the test machine's TZ — is what drives every instant.
+{
+  const infoX51 = FIXTURES.info.replace("first_tee,2026-08-15T09:00:00-06:00", "first_tee,2099-08-15T09:00:00-06:00");
+  const domX51 = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX51 }),
+  }));
+  await until(() => domX51.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wX51 = domX51.window;
+
+  const rowsX51 = [
+    { label: "Friday", time: "3:00 pm" },
+    { label: "Saturday", time: "9:00 am" },
+    { label: "Sunday", time: "8:30 am" },
+    { label: "Satruday", time: "9:00 am" },  // typo'd label — never in the byDay map
+    { label: "Saturday", time: "noon" },      // unparseable time
+  ];
+  const outX51 = wX51.scheduleInstants(rowsX51);
+
+  const expFriX51 = new Date("2099-08-14T15:00:00-06:00").getTime();
+  const expSatX51 = new Date("2099-08-15T09:00:00-06:00").getTime();
+  const expSunX51 = new Date("2099-08-16T08:30:00-06:00").getTime();
+
+  const baseOkX51 = outX51[0].at === expFriX51 && outX51[1].at === expSatX51 && outX51[2].at === expSunX51;
+  const nullsOkX51 = outX51[3].at === null && outX51[4].at === null;
+
+  const infoX51b = FIXTURES.info.replace("first_tee,2026-08-15T09:00:00-06:00", "first_tee,2099-08-15T09:00:00+09:00");
+  const domX51b = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX51b }),
+  }));
+  await until(() => domX51b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const outX51b = domX51b.window.scheduleInstants(rowsX51.slice(0, 3));
+  const shiftOkX51 = [0, 1, 2].every(i => outX51[i].at - outX51b[i].at === 15 * 3600000);
+
+  check("X51: §24 H-NOWNEXT — scheduleInstants resolves Friday/Saturday/Sunday rows to the exact offset-anchored instant (independently computed from ISO strings), a typo'd label and an unparseable time both come back at:null, and swapping first_tee's offset from -06:00 to +09:00 shifts every instant by exactly 15h (the offset carried by first_tee — not host TZ — is the single owner of the day/time mapping)",
+    baseOkX51 && nullsOkX51 && shiftOkX51,
+    "base=" + JSON.stringify(outX51.map(x => x.at)) + " nulls=" + nullsOkX51 +
+      " plus09=" + JSON.stringify(outX51b.map(x => x.at)) + " shiftOk=" + shiftOkX51);
+  domX51.window.close();
+  domX51b.window.close();
+}
+
+// X52: nowNextModel selection — pure calls, rows resolving off the same
+// 2099/-06:00 fixture as X51 so expected instants stay independently
+// hand-computed. Exercises: mid-day now/next with a day boundary
+// crossed; McCall-midnight expiry (dayEnd, not the next row's start,
+// ends "now"); before-all and after-all edges, including the "last row
+// stays now until ITS OWN dayEnd" rule (not cleared the instant its own
+// clock time has passed).
+{
+  const infoX52 = FIXTURES.info.replace("first_tee,2026-08-15T09:00:00-06:00", "first_tee,2099-08-15T09:00:00-06:00");
+  const domX52 = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX52 }),
+  }));
+  await until(() => domX52.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const wX52 = domX52.window;
+  const rowsX52 = [
+    { label: "Friday", time: "3:00 pm" },
+    { label: "Saturday", time: "9:00 am" },
+    { label: "Sunday", time: "8:30 am" },
+  ];
+
+  const friAtX52 = new Date("2099-08-14T15:00:00-06:00").getTime();
+  const satAtX52 = new Date("2099-08-15T09:00:00-06:00").getTime();
+  const satDayEndX52 = new Date("2099-08-16T00:00:00-06:00").getTime();  // McCall midnight ending Saturday
+  const sunAtX52 = new Date("2099-08-16T08:30:00-06:00").getTime();
+
+  const midSatX52 = wX52.nowNextModel(rowsX52, satAtX52 + 3600000); // Saturday 10am
+  const midSatOkX52 = !!midSatX52.now && midSatX52.now.r.label === "Saturday" &&
+    !!midSatX52.next && midSatX52.next.r.label === "Sunday";
+
+  const pastMidnightX52 = wX52.nowNextModel(rowsX52, satDayEndX52 + 60000); // Saturday 23:59 McCall +1min past dayEnd
+  const pastMidnightOkX52 = pastMidnightX52.now === null &&
+    !!pastMidnightX52.next && pastMidnightX52.next.r.label === "Sunday";
+
+  const beforeAllX52 = wX52.nowNextModel(rowsX52, friAtX52 - 3600000);
+  const beforeAllOkX52 = beforeAllX52.now === null &&
+    !!beforeAllX52.next && beforeAllX52.next.r.label === "Friday";
+
+  const afterAllX52 = wX52.nowNextModel(rowsX52, sunAtX52 + 3600000); // Sunday 9:30am — still Sunday's calendar day
+  const afterAllOkX52 = !!afterAllX52.now && afterAllX52.now.r.label === "Sunday" && afterAllX52.next === null;
+
+  check("X52: §24 H-NOWNEXT — nowNextModel selection: mid-Saturday returns now=Saturday/next=Sunday (day boundary crossed); 1 minute past Saturday's McCall-midnight dayEnd expires 'now' to null while 'next' still resolves to Sunday; before all rows now=null/next=first (Friday); after the last row's own instant but still inside ITS dayEnd, now stays the last row (Sunday, not cleared) and next is null",
+    midSatOkX52 && pastMidnightOkX52 && beforeAllOkX52 && afterAllOkX52,
+    "midSat=" + JSON.stringify(midSatX52) + " pastMidnight=" + JSON.stringify(pastMidnightX52) +
+      " beforeAll=" + JSON.stringify(beforeAllX52) + " afterAll=" + JSON.stringify(afterAllX52));
+  domX52.window.close();
+}
+
+// X53: render honesty — #nowNext only ever claims a row it could
+// actually resolve, and clears entirely off-phase. dynInfo(+1) keeps
+// first_tee inside the ±3d event window (seasonPhase()==="event"); the
+// resolvable row's day is the TEE DAY itself (k=0 in the resolver's
+// byDay window) — since daysFromNow=+1, that calendar day (in the fixed
+// -06:00 reference the fixture carries) is ALWAYS strictly later than
+// "now"'s -06:00 calendar day, so the row deterministically lands as
+// `next` (never `now`) no matter what wall-clock hour the suite runs at
+// — no flakiness from real-time proximity. The unresolvable "Someday"
+// label must still render on the Schedule tab (renderSchedule has no
+// resolvability filter — only an `event` filter) but must never reach
+// #nowNext's Now/Next claims. A second dom at dynInfo(+10) (off phase)
+// proves the strip goes fully empty outside the event window.
+{
+  const WD_X53 = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const teeDateX53 = dynFirstTee(1).slice(0, 10);
+  const teeWeekdayX53 = WD_X53[new Date(teeDateX53 + "T00:00:00Z").getUTCDay()];
+  const scheduleX53 = "year,day,label,time,event,location\n" +
+    `2026,Day One,${teeWeekdayX53},9:00 am,Round One,Meadow Creek\n` +
+    `2026,Day Two,Someday,10:00 am,Mystery Session,Clubhouse\n`;
+
+  const domX53a = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => dynInfo(1) }),
+    schedule: () => Promise.resolve({ ok: true, status: 200, text: async () => scheduleX53 }),
+  }));
+  await until(() => domX53a.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const docX53a = domX53a.window.document;
+  const nnHtmlX53a = docX53a.querySelector("#nowNext")?.innerHTML || "";
+  const chipsX53a = docX53a.querySelectorAll('#nowNext a[href="#pairings"],#nowNext a[href="#board"],#nowNext a[href="#rooms"]').length;
+  const claimsResolvableX53a = /Round One/.test(nnHtmlX53a) && /Meadow Creek/.test(nnHtmlX53a);
+  const neverClaimsSomedayX53a = !/Someday/.test(nnHtmlX53a) && !/Mystery Session/.test(nnHtmlX53a);
+  const scheduleTabTextX53a = docX53a.querySelector("#scheduleBody")?.textContent || "";
+  const somedayInScheduleTabX53a = /Mystery Session/.test(scheduleTabTextX53a);
+  domX53a.window.close();
+
+  const domX53b = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => dynInfo(10) }),
+    schedule: () => Promise.resolve({ ok: true, status: 200, text: async () => scheduleX53 }),
+  }));
+  await until(() => domX53b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const nnHtmlX53b = domX53b.window.document.querySelector("#nowNext")?.innerHTML || "";
+  const offPhaseEmptyX53b = nnHtmlX53b.trim() === "";
+  domX53b.window.close();
+
+  check("X53: §24 H-NOWNEXT — render honesty: inside the event window (dynInfo(+1)) #nowNext claims the resolvable row (event+location text) and shows exactly 3 static chips (#pairings/#board/#rooms), never claims the unresolvable 'Someday'/'Mystery Session' row even though that row still renders on the Schedule tab; off phase (dynInfo(+10)) #nowNext is entirely empty",
+    claimsResolvableX53a && neverClaimsSomedayX53a && chipsX53a === 3 && somedayInScheduleTabX53a && offPhaseEmptyX53b,
+    "claimsResolvable=" + claimsResolvableX53a + " neverClaimsSomeday=" + neverClaimsSomedayX53a +
+      " chips=" + chipsX53a + " somedayInScheduleTab=" + somedayInScheduleTabX53a +
+      " offPhaseEmpty=" + offPhaseEmptyX53b + " nn=" + JSON.stringify(nnHtmlX53a).slice(0, 300));
+}
+
+// X54: §24 H-REFRESH — the visibility seam. jsdom's own `document.hidden`
+// defaults to true (a "prerender" tab) so the bootstrap's FIRST load() call
+// (unconditional, not gated by pageVisible()) still fires regardless — only
+// the periodic/wake path goes through the seam. refreshTick is a top-level
+// function declaration in index.html's inline script, hence a `window`
+// property the suite can call directly (no synthetic timer-advance needed).
+// Fetches are counted by wrapping the fixture stub passed to makeDom.
+{
+  let fetchCountX54 = 0;
+  const countingFetchX54 = (url) => { fetchCountX54++; return fakeFetch(url); };
+  const domX54 = makeDom("", countingFetchX54);
+  const docX54 = domX54.window.document;
+  await until(() => docX54.querySelectorAll("#lbBody .lb-row").length > 0);
+  await settle(200); // let the bootstrap load()'s full cycle land before capturing the baseline count
+  const afterInitialLoadX54 = fetchCountX54; // unconditional first load(): TABS.length fetches
+
+  Object.defineProperty(docX54, "hidden", { configurable: true, get: () => true });
+  domX54.window.refreshTick();
+  await settle(300); // give a (buggy) hidden-tab fetch every chance to land before asserting there isn't one
+  const afterHiddenTickX54 = fetchCountX54;
+
+  Object.defineProperty(docX54, "hidden", { configurable: true, get: () => false });
+  docX54.dispatchEvent(new domX54.window.Event("visibilitychange"));
+  // settle, not a tight until(): fetchCountX54 jumps synchronously the instant
+  // load()'s Promise.all(TABS.map(pull)) fires each pull()'s first fetch() call,
+  // long before that load() cycle's own await-chain (fetch->res.text()->...->
+  // paint()) actually finishes — a count-based until() would resolve mid-cycle
+  // and let a later close() race a still-in-flight paint() (observed: crashes
+  // on a post-close `document` inside renderInfo). settle() gives the WHOLE
+  // cycle real wall-clock time to land before we read the counter or move on.
+  await settle(300);
+  const afterWakeX54 = fetchCountX54; // wake fires load() immediately, no 60s wait
+
+  domX54.window.refreshTick();
+  await settle(300); // same reasoning: let this tick's full load() cycle finish
+  const afterTickX54 = fetchCountX54; // a subsequent visible refreshTick() still loads
+
+  await settle(300); // drain any straggler before closing — close() nulls `document` under an in-flight paint()
+  domX54.window.close();
+
+  check("X54: §24 H-REFRESH — refreshTick() is a no-op while document.hidden is true (fetch count unchanged), flipping hidden to false and dispatching visibilitychange fires load() immediately (wake = instant freshness, no 60s wait), and a further refreshTick() while visible loads again (the retained cadence path)",
+    afterHiddenTickX54 === afterInitialLoadX54 && afterWakeX54 > afterHiddenTickX54 && afterTickX54 > afterWakeX54,
+    `initial=${afterInitialLoadX54} afterHiddenTick=${afterHiddenTickX54} afterWake=${afterWakeX54} afterTick=${afterTickX54}`);
+}
+
+// X55: §24 H-FRESH — event-phase Home stamp. eventStampFor reads pull()'s
+// scores-tab result: live:true+at ⇒ the "Checked" honesty copy; a failed
+// re-load falls to cacheTab's cache-served result (live:false, at = the
+// cache's last-success write time — pull()'s own honesty rule, not
+// re-derived here) ⇒ "Couldn't refresh" with the SAME h:mm, since a backoff
+// poll can never advance the stamp. The h:mm itself is real-clock-dependent
+// so it's asserted by shape, then by byte-identity across the two states
+// (proves the failed fetch didn't silently re-stamp); the fixed copy around
+// it is asserted byte-exact. Off phase (dynInfo(+10)) #homeSync is empty —
+// #lbSync (untouched, per the spec amendment) carries the board's stamp.
+{
+  const domX55 = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => dynInfo(1) }),
+  }));
+  const docX55 = domX55.window.document;
+  await until(() => docX55.querySelectorAll("#lbBody .lb-row").length > 0);
+  await until(() => !!docX55.querySelector("#homeSync")?.textContent);
+  const liveTextX55 = docX55.querySelector("#homeSync")?.textContent || "";
+  const liveMatchX55 = /^Checked (\d{1,2}:\d{2}(?:am|pm)) · the sheet publishes a few minutes behind edits$/.exec(liveTextX55);
+  const hmmX55 = liveMatchX55 ? liveMatchX55[1] : null;
+
+  // Force the wake-visible path (jsdom's document.hidden defaults true — see
+  // X54) so this refreshTick() actually re-loads, per the brief's mechanism.
+  Object.defineProperty(docX55, "hidden", { configurable: true, get: () => false });
+  domX55.window.fetch = () => Promise.reject(new Error("network down"));
+  domX55.window.refreshTick();
+  await until(() => /^Couldn't refresh/.test(docX55.querySelector("#homeSync")?.textContent || ""));
+  const failTextX55 = docX55.querySelector("#homeSync")?.textContent || "";
+  const failMatchX55 = hmmX55 !== null && failTextX55 === `Couldn't refresh — showing data from ${hmmX55}`;
+  await settle(100); // drain any straggler before closing (X54's post-close crash lesson)
+  domX55.window.close();
+
+  const domX55b = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => dynInfo(10) }),
+  }));
+  await until(() => domX55b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  await settle(300); // off-phase: prove #homeSync stays empty through a full paint, not just pre-render
+  const offTextX55b = domX55b.window.document.querySelector("#homeSync")?.textContent || "";
+  domX55b.window.close();
+
+  check("X55: §24 H-FRESH — event-phase #homeSync reads 'Checked ‹h:mm› · the sheet publishes a few minutes behind edits' after a live load (h:mm = fmtClock of the scores tab's successful fetch); a subsequent failed refresh flips it to 'Couldn't refresh — showing data from ‹same h:mm›' (pull()'s cache-served at never advances the stamp); off-phase (dynInfo(+10)) #homeSync is empty",
+    !!liveMatchX55 && failMatchX55 && offTextX55b === "",
+    `live=${JSON.stringify(liveTextX55)} fail=${JSON.stringify(failTextX55)} off=${JSON.stringify(offTextX55b)}`);
+}
+
+// X57: §24 C-FALLBACK — hero sub + the .ics builder's LOCATION/DESCRIPTION
+// lines compose from Info keys (heroLine()) instead of carrying a hardcoded
+// fact that can outlive its year. Normal fixtures (course=Meadow Creek,
+// lodging=Bear Creek Lodge) render the full sentence and the full LOCATION;
+// an Info fetch with both keys missing (still a valid row set — just
+// without those two) falls back to the neutral sentence, the bare
+// "McCall, Idaho" LOCATION (no dangling prefix/comma), and the neutral
+// DESCRIPTION. Review round 1 additions: (a) DESCRIPTION pin on the keyless
+// run, and (b) icsEsc() — a lodging value carrying a comma must come out
+// backslash-escaped per RFC 5545 TEXT, not corrupt the LOCATION field.
+{
+  const domX57a = makeDom("");
+  const docX57a = domX57a.window.document;
+  await until(() => docX57a.querySelectorAll("#lbBody .lb-row").length > 0);
+  const heroX57a = (docX57a.querySelector("#heroSub")?.textContent || "").trim();
+
+  let capturedBlobX57a = null;
+  domX57a.window.URL.createObjectURL = (blob) => { capturedBlobX57a = blob; return "blob:captured-x57a"; };
+  domX57a.window.URL.revokeObjectURL = () => {};
+  docX57a.querySelector("#icsBtn").click();
+  const icsTextX57a = capturedBlobX57a ? await capturedBlobX57a.text() : "";
+  domX57a.window.close();
+
+  const infoNoCourseLodgingX57 = FIXTURES.info.split(/\r?\n/)
+    .filter(l => !l.startsWith("course,") && !l.startsWith("lodging,")).join("\n");
+  const domX57b = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoNoCourseLodgingX57 }),
+  }));
+  const docX57b = domX57b.window.document;
+  await until(() => docX57b.querySelectorAll("#lbBody .lb-row").length > 0);
+  const heroX57b = (docX57b.querySelector("#heroSub")?.textContent || "").trim();
+
+  let capturedBlobX57b = null;
+  domX57b.window.URL.createObjectURL = (blob) => { capturedBlobX57b = blob; return "blob:captured-x57b"; };
+  domX57b.window.URL.revokeObjectURL = () => {};
+  docX57b.querySelector("#icsBtn").click();
+  const icsTextX57b = capturedBlobX57b ? await capturedBlobX57b.text() : "";
+  domX57b.window.close();
+
+  // (c) review round 1 / icsEsc: lodging value carries a comma (CSV-quoted
+  // so parseCSV keeps it as one field) — the .ics LOCATION line must carry
+  // it backslash-escaped, not raw (which would split the TEXT field).
+  const infoLodgingCommaX57 = FIXTURES.info.split(/\r?\n/)
+    .map(l => l.startsWith("lodging,") ? 'lodging,"Bear Creek Lodge, Unit 4"' : l).join("\n");
+  const domX57c = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoLodgingCommaX57 }),
+  }));
+  const docX57c = domX57c.window.document;
+  await until(() => docX57c.querySelectorAll("#lbBody .lb-row").length > 0);
+
+  let capturedBlobX57c = null;
+  domX57c.window.URL.createObjectURL = (blob) => { capturedBlobX57c = blob; return "blob:captured-x57c"; };
+  domX57c.window.URL.revokeObjectURL = () => {};
+  docX57c.querySelector("#icsBtn").click();
+  const icsTextX57c = capturedBlobX57c ? await capturedBlobX57c.text() : "";
+  domX57c.window.close();
+
+  check("X57: §24 C-FALLBACK — hero sub + .ics LOCATION/DESCRIPTION compose from Info via heroLine(): normal fixtures (course=Meadow Creek, lodging=Bear Creek Lodge) render the full hero sentence and the full LOCATION line; an Info fetch missing both course and lodging keys falls back to the neutral hero sentence, the bare LOCATION (no dangling comma/prefix), and the pinned neutral DESCRIPTION; a lodging value containing a comma (Bear Creek Lodge, Unit 4) comes out of icsEsc() backslash-escaped in LOCATION, not raw",
+    heroX57a === "Two rounds at Meadow Creek. Two nights at Bear Creek Lodge. One trophy nobody wants to explain."
+      && icsTextX57a.includes("LOCATION:Bear Creek Lodge, McCall, Idaho")
+      && heroX57b === "Two rounds. Two nights. One trophy nobody wants to explain."
+      && icsTextX57b.includes("LOCATION:McCall, Idaho") && !icsTextX57b.includes("LOCATION:Bear Creek Lodge")
+      && icsTextX57b.includes("DESCRIPTION:Two rounds. Two nights.")
+      && icsTextX57c.includes("Bear Creek Lodge\\, Unit 4"),
+    "heroA=" + JSON.stringify(heroX57a) + " icsA=" + JSON.stringify(icsTextX57a) +
+      " heroB=" + JSON.stringify(heroX57b) + " icsB=" + JSON.stringify(icsTextX57b) +
+      " icsC=" + JSON.stringify(icsTextX57c));
+}
+
+// X58: §24 C-FALLBACK (review round 1) — the STATIC seed markup inside
+// #scheduleBody (what paints before renderSchedule() ever runs, i.e. every
+// page load until the schedule fetch resolves) must not carry last year's
+// hardcoded fake weekend either. Source-level check (raw index.html text,
+// not the rendered DOM): zero occurrences of the old "Steaks on the lodge
+// grill" relic anywhere in the file, and the #scheduleBody seed region
+// itself (pre-JS) carries the pinned honest empty-state string verbatim.
+{
+  const steaksCountX58 = (html.match(/Steaks on the lodge grill/g) || []).length;
+  const schedBodySrcX58 = (html.match(/<div id="scheduleBody">([\s\S]*?)<\/div>/) || [, ""])[1];
+  check("X58: §24 C-FALLBACK — index.html source contains zero occurrences of the old hardcoded 'Steaks on the lodge grill' fact, and the static #scheduleBody seed markup (pre-JS, first paint) carries the pinned honest empty-state string verbatim",
+    steaksCountX58 === 0
+      && schedBodySrcX58.includes("Schedule not loaded yet — it lives in the sheet's Schedule tab."),
+    "steaksCount=" + steaksCountX58 + " schedBodySrc=" + JSON.stringify(schedBodySrcX58));
+}
+
+/* ---------------------------------------------------------------------
+   EV group — §24 R-READY (task 6): tools/event-ready.mjs preflight checks.
+   Pure unit tests over the exported check functions with inline fixture
+   row arrays (the toRows() shape: lowercase-keyed objects, trimmed string
+   values) — no network, no fetch mocking. main() is the only fetch site
+   and is intentionally not unit-tested here.
+
+   FORWARD-RISK (Task 1 review, binding): sample-fingerprints.json carries
+   real-calendar dates from the template's sample rows. Every `now` below
+   is a synthetic fixture instant (Date.UTC/local Date literal picked for
+   the test's own arithmetic), never "real today" — these tests must stay
+   true regardless of what today's real date is.
+   --------------------------------------------------------------------- */
+
+// EV1: checkFirstTee — malformed/incomplete first_tee FAILs before anything
+// else (no fallthrough to a false PASS via NaN comparisons); a first_tee
+// >7 days past `now` WARNs "year rollover?".
+{
+  const nowEV1 = Date.UTC(2026, 7, 20);
+  const r1a = checkFirstTee("2026-13-01", nowEV1);
+  const r1b = checkFirstTee("2026-08-01T09:00:00-06:00", nowEV1);
+  check("EV1: checkFirstTee — an incomplete/malformed first_tee (no ISO+offset shape) FAILs before anything else; a first_tee >7 days past `now` WARNs 'year rollover'",
+    r1a.level === "FAIL" && /unparseable/.test(r1a.detail) &&
+      r1b.level === "WARN" && /rollover/i.test(r1b.detail),
+    "r1a=" + JSON.stringify(r1a) + " r1b=" + JSON.stringify(r1b));
+}
+
+// EV2: checkResidue — a verbatim template Field row FAILs naming tab+row;
+// the same row with ONE cell edited PASSes (documents the stated
+// verbatim-only limit — an edited-in-place sample is out of reach).
+{
+  const fpEV2 = { field: [["2026", "Duck", "Duck", "2019", "8", "In", "TRUE", "", "steady off the tee"]] };
+  const verbatimEV2 = { field: [["2026", "Duck", "Duck", "2019", "8", "In", "TRUE", "", "steady off the tee"]] };
+  const editedEV2 = { field: [["2026", "Duck", "Duck", "2019", "9", "In", "TRUE", "", "steady off the tee"]] };
+  const rVerbatim = checkResidue(verbatimEV2, fpEV2);
+  const rEdited = checkResidue(editedEV2, fpEV2);
+  check("EV2: checkResidue — a verbatim template Field row FAILs naming tab+row; the same row with ONE cell edited PASSes (documents the stated verbatim-only limit)",
+    rVerbatim.length === 1 && rVerbatim[0].level === "FAIL" &&
+      /field row 2/.test(rVerbatim[0].detail) &&
+      rEdited.length === 1 && rEdited[0].level === "PASS",
+    "verbatim=" + JSON.stringify(rVerbatim) + " edited=" + JSON.stringify(rEdited));
+}
+
+// EV3: checkSchedule — a missing event day FAILs naming the day; an
+// unresolvable row label FAILs naming the row; full coverage with
+// resolvable rows PASSes alongside an INFO line naming the window basis.
+{
+  const ftEV3 = "2026-08-15T09:00:00-06:00"; // Fri/Sat/Sun = Aug 14/15/16
+  const yearEV3 = "2026";
+  const missing = checkSchedule(
+    [{ year: "2026", label: "Friday", time: "3:00 pm" }, { year: "2026", label: "Saturday", time: "9:00 am" }],
+    ftEV3, "Aug 14–16", yearEV3);
+  const badLabel = checkSchedule(
+    [{ year: "2026", label: "Friday", time: "3:00 pm" }, { year: "2026", label: "Saturday", time: "9:00 am" }, { year: "2026", label: "Blursday", time: "9:00 am" }],
+    ftEV3, "Aug 14–16", yearEV3);
+  const clean = checkSchedule(
+    [{ year: "2026", label: "Friday", time: "3:00 pm" }, { year: "2026", label: "Saturday", time: "9:00 am" }, { year: "2026", label: "Sunday", time: "8:30 am" }],
+    ftEV3, "Aug 14–16", yearEV3);
+  check("EV3: checkSchedule — a missing event day FAILs naming the day; an unresolvable row label FAILs naming the row; full coverage PASSes with an INFO line naming the window basis",
+    missing.some(r => r.level === "FAIL" && r.detail.includes("2026-08-16")) &&
+      badLabel.some(r => r.level === "FAIL" && r.detail.includes("row 4") && r.detail.includes("Blursday")) &&
+      clean.some(r => r.level === "INFO" && /basis/.test(r.detail)) &&
+      clean.some(r => r.level === "PASS"),
+    "missing=" + JSON.stringify(missing) + " badLabel=" + JSON.stringify(badLabel) + " clean=" + JSON.stringify(clean));
+}
+
+// EV3b: checkSchedule — a resolvable row from the WRONG year must not
+// satisfy target-year coverage (year-rollover false-PASS class from the
+// whole-branch review: leftover prior-year rows must not paper over a
+// missing current-year day, matching forYear's strict year filter).
+{
+  const ftEV3b = "2026-08-15T09:00:00-06:00"; // Fri/Sat/Sun = Aug 14/15/16
+  const yearEV3b = "2026";
+  const wrongYear = checkSchedule(
+    [{ year: "2026", label: "Friday", time: "3:00 pm" },
+     { year: "2026", label: "Saturday", time: "9:00 am" },
+     { year: "2025", label: "Sunday", time: "8:30 am" }], // last year's Sunday row — resolvable, but wrong year
+    ftEV3b, "Aug 14–16", yearEV3b);
+  check("EV3b: checkSchedule — a resolvable row from a prior year does NOT satisfy target-year coverage; the missing day still FAILs even though a same-label/time row exists under the wrong year",
+    wrongYear.some(r => r.level === "FAIL" && r.detail.includes("2026-08-16")) &&
+      !wrongYear.some(r => r.level === "FAIL" && /Sunday/.test(r.detail)),
+    "wrongYear=" + JSON.stringify(wrongYear));
+}
+
+// EV3c: checkSchedule — an archive-year row with a garbage label/time must
+// NOT FAIL the per-row resolution check (Now/Next never reads a
+// non-target-year row, so it should never false-FAIL the label/time
+// resolution class either); target-year coverage still PASSes.
+{
+  const ftEV3c = "2026-08-15T09:00:00-06:00"; // Fri/Sat/Sun = Aug 14/15/16
+  const yearEV3c = "2026";
+  const archiveGarbage = checkSchedule(
+    [{ year: "2026", label: "Friday", time: "3:00 pm" },
+     { year: "2026", label: "Saturday", time: "9:00 am" },
+     { year: "2026", label: "Sunday", time: "8:30 am" },
+     { year: "2019", label: "Whenevs", time: "not-a-time" }], // archive-year garbage row
+    ftEV3c, "Aug 14–16", yearEV3c);
+  check("EV3c: checkSchedule — an archive-year row with an unresolvable label/time does not FAIL (filtered out before resolution logic runs); full target-year coverage still PASSes",
+    !archiveGarbage.some(r => r.level === "FAIL") &&
+      archiveGarbage.some(r => r.level === "PASS"),
+    "archiveGarbage=" + JSON.stringify(archiveGarbage));
+}
+
+// EV4: checkPairings — a round with no timed row FAILs naming the round;
+// every round timed PASSes; zero rows for the target year FAILs.
+{
+  const bad = checkPairings(
+    [{ year: "2026", round: "Round One", time: "9:00 am" }, { year: "2026", round: "Round Two", time: "" }],
+    "2026");
+  const clean = checkPairings(
+    [{ year: "2026", round: "Round One", time: "9:00 am" }, { year: "2026", round: "Round Two", time: "8:30 am" }],
+    "2026");
+  const noYear = checkPairings([{ year: "2025", round: "Round One", time: "9:00 am" }], "2026");
+  check("EV4: checkPairings — a round with no row carrying a parseable time FAILs naming the round; every round timed PASSes; zero rows for the target year FAILs",
+    bad.some(r => r.level === "FAIL" && /Round Two/.test(r.detail)) &&
+      clean.length === 1 && clean[0].level === "PASS" &&
+      noYear.length === 1 && noYear[0].level === "FAIL",
+    "bad=" + JSON.stringify(bad) + " clean=" + JSON.stringify(clean) + " noYear=" + JSON.stringify(noYear));
+}
+
+// EV5: checkPars — 18/18 positive-int pars PASSes; a missing hole FAILs
+// naming it; missing/non-int yards WARN only (yards optional per-hole).
+{
+  const full18 = Array.from({ length: 18 }, (_, i) => ({ hole: String(i + 1), par: "4", yards: String(300 + i) }));
+  const okAll = checkPars(full18);
+  const missingPar = checkPars(full18.slice(0, 17));
+  const missingYards = checkPars(full18.map((r, i) => (i === 0 ? { ...r, yards: "" } : r)));
+  check("EV5: checkPars — 18/18 positive-int pars PASSes; a missing hole's par FAILs naming the hole; missing/non-int yards WARN only",
+    okAll.length === 1 && okAll[0].level === "PASS" &&
+      missingPar.some(r => r.level === "FAIL" && /hole\(s\) 18\b/.test(r.detail)) &&
+      missingYards.some(r => r.level === "WARN" && /hole\(s\) 1\b/.test(r.detail)),
+    "okAll=" + JSON.stringify(okAll) + " missingPar=" + JSON.stringify(missingPar) + " missingYards=" + JSON.stringify(missingYards));
+}
+
+// EV6: checkScorer — score_endpoint absent FAILs; an https://script.google.com/...
+// URL PASSes; form_url absent is INFO only (optional by design, README:314);
+// form_url present but not forms.gle/docs.google.com/forms FAILs.
+{
+  const rAbsent = checkScorer({});
+  const rArmed = checkScorer({ score_endpoint: "https://script.google.com/macros/s/abc/exec" });
+  const rBadForm = checkScorer({ score_endpoint: "https://script.google.com/macros/s/abc/exec", form_url: "https://example.com/form" });
+  check("EV6: checkScorer — score_endpoint absent FAILs; a valid script.google.com URL PASSes; form_url absent is INFO only; form_url present but wrong-shape FAILs",
+    rAbsent.some(r => r.level === "FAIL" && /score_endpoint/.test(r.detail)) &&
+      rAbsent.some(r => r.level === "INFO" && /form_url/.test(r.detail)) &&
+      rArmed.some(r => r.level === "PASS" && /score_endpoint/.test(r.detail)) &&
+      rBadForm.some(r => r.level === "FAIL" && /form_url/.test(r.detail)),
+    "absent=" + JSON.stringify(rAbsent) + " armed=" + JSON.stringify(rArmed) + " badForm=" + JSON.stringify(rBadForm));
+}
+
+// EV7: checkField — a missing handicap on a target-year row WARNs; zero
+// target-year rows FAILs; non-target-year rows are never flagged.
+{
+  const rowsEV7 = [
+    { year: "2026", player: "Duck", handicap: "8" },
+    { year: "2026", player: "Hammer", handicap: "" },
+    { year: "2027", player: "Duck", handicap: "" },
+  ];
+  const rWarn = checkField(rowsEV7, "2026");
+  const rNoRows = checkField(rowsEV7, "2099");
+  check("EV7: checkField — a missing handicap on a target-year row WARNs; zero target-year rows FAILs; non-target-year rows (Next Year collections) are never flagged",
+    rWarn.some(r => r.level === "WARN" && /handicap/.test(r.detail)) &&
+      !rWarn.some(r => r.level === "FAIL") &&
+      rNoRows.length === 1 && rNoRows[0].level === "FAIL",
+    "warn=" + JSON.stringify(rWarn) + " noRows=" + JSON.stringify(rNoRows));
+}
+
+// EV8: checkAnnounce — zero rows is INFO only (first morning must not cry
+// wolf); the newest post older than the current event day, inside the
+// event window, WARNs; a >24h-future `when` WARNs naming the row.
+{
+  function fmtLocalEV8(ms) {
+    const d = new Date(ms);
+    const p = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  const nowEV8 = new Date(2026, 7, 15, 12, 0, 0).getTime();
+  const winStartEV8 = nowEV8 - 5 * 86400000, winEndEV8 = nowEV8 + 5 * 86400000;
+  const zero = checkAnnounce([], nowEV8, winStartEV8, winEndEV8);
+  const stale = checkAnnounce([{ when: "2026-08-10 09:00", message: "old" }], nowEV8, winStartEV8, winEndEV8);
+  const future = checkAnnounce([{ when: fmtLocalEV8(nowEV8 + 30 * 3600000), message: "future" }], nowEV8, winStartEV8, winEndEV8);
+  check("EV8: checkAnnounce — zero rows is INFO only; the newest post older than today inside the event window WARNs; a >24h-future `when` WARNs naming the row",
+    zero.length === 1 && zero[0].level === "INFO" &&
+      stale.some(r => r.level === "WARN" && /older than today/.test(r.detail)) &&
+      future.some(r => r.level === "WARN" && /future/.test(r.detail)),
+    "zero=" + JSON.stringify(zero) + " stale=" + JSON.stringify(stale) + " future=" + JSON.stringify(future));
+}
+
+// EV9: checkCrossTab — scores.team "Duck" with Field teams ["Jake","Greg"]
+// FAILs; calcutta.team mismatch FAILs; rooms.player "Pat" not in field and
+// not "guest:"-prefixed WARNs; "guest:Pat" never flags. (2026-08-15 live shape.)
+{
+  const fieldEV9 = [{ year: "2026", player: "Jake", team: "Jake" }, { year: "2026", player: "Greg", team: "Jake" }];
+  const rBad = checkCrossTab({
+    scores: [{ year: "2026", team: "Duck" }],
+    calcutta: [{ year: "2026", team: "Duck", owner: "Sully" }],
+    rooms: [{ year: "2026", player: "Pat" }],
+    field: fieldEV9,
+  }, "2026");
+  const rGuest = checkCrossTab({
+    scores: [], calcutta: [],
+    rooms: [{ year: "2026", player: "guest:Pat" }],
+    field: fieldEV9,
+  }, "2026");
+  check("EV9: checkCrossTab — scores.team not in Field FAILs; calcutta.team not in Field FAILs; rooms.player not in Field and not guest:-prefixed WARNs; guest:-prefixed never flags",
+    rBad.some(r => r.level === "FAIL" && /scores\.team "Duck"/.test(r.detail)) &&
+      rBad.some(r => r.level === "FAIL" && /calcutta\.team "Duck"/.test(r.detail)) &&
+      rBad.some(r => r.level === "WARN" && /rooms\.player "Pat"/.test(r.detail)) &&
+      rGuest.length === 1 && rGuest[0].level === "PASS",
+    "bad=" + JSON.stringify(rBad) + " guest=" + JSON.stringify(rGuest));
+}
+
+// EV10: checkFallbackParity — config FIRST_TEE vs Info first_tee drift
+// WARNs; a matching pair with the pinned empty-state string and no stale
+// facts-literal PASSes; a missing empty-state string FAILs; a hardcoded
+// "Aug \d" literal inside the facts block FAILs. Fixtures use the REAL
+// index.html class shape (`class="facts rise d4"`, index.html:918) — not a
+// bare `class="facts"`, which doesn't exist in the app and made the check
+// vacuous (review round 1: factsBlock was always "" against real markup, so
+// the FAIL branch could never fire no matter what got hardcoded back).
+{
+  const cfgTextEV10 = 'window.CONFIG = { FIRST_TEE: "2026-08-15T09:00:00-06:00" };';
+  const infoRowsMatch = [{ key: "first_tee", value: "2026-08-15T09:00:00-06:00" }];
+  const infoRowsDrift = [{ key: "first_tee", value: "2027-08-14T09:00:00-06:00" }];
+  const htmlGood = '<dl class="facts rise d4"><dd data-info="dates">—</dd></dl>Schedule not loaded yet — it lives in the sheet\'s Schedule tab.';
+  const htmlMissingEmptyState = '<dl class="facts rise d4"><dd data-info="dates">—</dd></dl>';
+  const htmlStaleLiteral = '<dl class="facts rise d4"><dd data-info="dates">Aug 14–16</dd></dl>Schedule not loaded yet — it lives in the sheet\'s Schedule tab.';
+  const drift = checkFallbackParity(cfgTextEV10, htmlGood, infoRowsDrift);
+  const clean = checkFallbackParity(cfgTextEV10, htmlGood, infoRowsMatch);
+  const missingEmpty = checkFallbackParity(cfgTextEV10, htmlMissingEmptyState, infoRowsMatch);
+  const staleFact = checkFallbackParity(cfgTextEV10, htmlStaleLiteral, infoRowsMatch);
+
+  // Real-shape proof (review round 1, Important): the exact multi-<div>
+  // #home facts markup index.html actually renders (index.html:918-923),
+  // with the Dates <dd> hardcoded back to "Aug 14–16" instead of the honest
+  // "—" fallback. Must FAIL — this is the literal regression check (i)
+  // exists to catch, and the pre-fix regex missed it entirely.
+  const htmlRealShapeStale =
+    '<dl class="facts rise d4">\n' +
+    '  <div class="fact"><dt>Dates</dt><dd data-info="dates">Aug 14–16</dd></div>\n' +
+    '  <div class="fact"><dt>Course</dt><dd data-info="course">—</dd></div>\n' +
+    '  <div class="fact"><dt>Lodging</dt><dd data-info="lodging">—</dd></div>\n' +
+    '  <div class="fact"><dt>Format</dt><dd data-info="format">—</dd></div>\n' +
+    '</dl>\n' +
+    'Schedule not loaded yet — it lives in the sheet\'s Schedule tab.';
+  const realShapeStale = checkFallbackParity(cfgTextEV10, htmlRealShapeStale, infoRowsMatch);
+
+  check("EV10: checkFallbackParity — config/Info first_tee drift WARNs; a clean matching pair (real facts-rise-d4 shape) PASSes; a missing pinned empty-state string FAILs; a hardcoded 'Aug \\d' literal in the facts block FAILs against the REAL `class=\"facts rise d4\"` shape (not just a nonexistent bare `class=\"facts\"`)",
+    drift.some(r => r.level === "WARN" && /FIRST_TEE/.test(r.detail)) &&
+      clean.length === 1 && clean[0].level === "PASS" &&
+      missingEmpty.some(r => r.level === "FAIL" && /empty-state/.test(r.detail)) &&
+      staleFact.some(r => r.level === "FAIL" && /Aug/.test(r.detail)) &&
+      realShapeStale.some(r => r.level === "FAIL" && /Aug/.test(r.detail)),
+    "drift=" + JSON.stringify(drift) + " clean=" + JSON.stringify(clean) +
+      " missingEmpty=" + JSON.stringify(missingEmpty) + " staleFact=" + JSON.stringify(staleFact) +
+      " realShapeStale=" + JSON.stringify(realShapeStale));
 }
 
 /* ---------------------------------------------------------------------

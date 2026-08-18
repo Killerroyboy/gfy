@@ -47,9 +47,9 @@ tab has its own deep link (`yoursite.com/#calcutta`, `#nextyear`, `#rooms`,
    xlsx→Sheets import and hasn't been checked against the real thing — select
    the data cells of the affected column(s), one at a time, and **Insert >
    Checkbox** by hand. **Never** the `handicap` column.
-4. The sheet has 13 tabs along the bottom (Info, Course, Field, Scores, …,
-   Invites, Rooms). Each has a bold header row and a few sample rows showing
-   the shape.
+4. The sheet has 14 tabs along the bottom (Info, Course, Field, Scores, …,
+   Invites, Rooms, Announce). Each has a bold header row and a few sample rows
+   showing the shape.
    **Keep the header rows exactly as they are.** Replace the sample rows
    with real data.
 5. **Teams, captains, and the `team` column.** Each row's `team` cell holds
@@ -93,7 +93,7 @@ If your PUB_ID doesn't start with `2PACX-`, you copied the wrong one.
 2. Look at the browser address bar. It ends with `#gid=` followed by a
    number, e.g. `…/edit#gid=1837552901`.
 3. That number is the gid for the tab you have selected. Click each of the
-   13 tabs in turn and write down each number. The first tab is usually `0`.
+   14 tabs in turn and write down each number. The first tab is usually `0`.
 
 ### 5. Share the photo folder (optional)
 
@@ -141,7 +141,7 @@ https://<your-pages-url>/?debug=1
 
 A panel appears listing every tab as `OK` (with a row count), `EMPTY`, or
 `FAILED` with the reason, plus the same health warnings as the strip above.
-Thirteen `OK` lines means the plumbing is done (the site reads its 13
+Fourteen `OK` lines means the plumbing is done (the site reads its 14
 configured tabs; extra tabs like START HERE and Form Responses are ignored
 by it). Remove `?debug=1` and hand out the link.
 
@@ -460,6 +460,84 @@ the `paid_date` cell — only on the first tick; re-ticking never overwrites
 a date that's already there, and unticking never erases it. Paid order on
 the Next Year board follows `paid_date`.
 
+## Announcements
+
+The Announce tab is a one-way logistics feed, not a chat — post a short
+dated line and the site handles the ordering, the unseen banner, and the
+Home page's Updates list on its own. Columns: `year, when, message`.
+
+**The `when` format:** `YYYY-MM-DD HH:MM`, 24-hour clock (a bare
+`YYYY-MM-DD` defaults to 00:00). The time isn't decoration — it's what
+orders same-day posts correctly. Two announcements posted the same morning
+with no time both read as "today" and could sort either way; give each one
+its own `HH:MM` and the later post reliably lands on top and reliably marks
+itself unseen ahead of the earlier one.
+
+**The future-guard:** a `when` more than 24 hours out never lights up the
+unseen banner or advances anyone's watermark — it still appears in the
+Updates list, at the top, since it sorts by its claimed time; it just never
+triggers the banner. That means a typo'd year or a pre-written post scheduled
+too far ahead can't ping every phone that opens the site, but it also means
+a future-dated post is loudly visible at the top of the list even though it
+never banners — check the `when` column if a post you just added isn't
+showing up as new, or is sitting at the top when it shouldn't be.
+
+**The habit:** any time you edit Schedule or Pairings mid-weekend — a
+pushed tee time, a moved round, a rain delay — post an announcement in the
+same sitting. The sheet edit alone is silent; nobody's phone lights up just
+because a cell changed. The announcement is what tells people to look.
+Paste-ready lines, edit the specifics and go:
+
+- `Draft complete — see the Draft tab.`
+- `R2 tee times posted — leaders out last.`
+- `Weather delay — R2 pushed 30 min.`
+
+**On-course reality.** This is a no-push design end to end — no servers, no
+accounts, nothing that can hand a phone a notification. Someone has to have
+the page open to see an update, and a chunk of the course is dead cells.
+Don't count on an announcement reaching someone mid-round: a real emergency
+or a pace problem goes by voice or through a marshal, same as every year
+before this site existed. Announcements are for logistics people can catch
+between holes or back at the lodge, not for anything that can't wait.
+
+## Event-ready preflight
+
+```
+npm run event-ready
+```
+
+is a read-only checklist against the LIVE published sheet — run it before
+any captain link goes out, and again each tournament morning. It never
+writes anything; it just reads `config.js` and the sheet over the network
+and reports what it finds.
+
+Each line comes back as one of three levels:
+
+- **FAIL** — blocks. The preflight exits 1 if any FAIL is present, so it's
+  safe to script a "go/no-go" off it. Examples: an unparseable `first_tee`,
+  a schedule row Now/Next could never resolve, an unarmed scorer endpoint,
+  a Scores or Calcutta row whose team doesn't match any Field team —
+  anything that would show up broken on the live site.
+- **WARN** — advisory, doesn't block, worth a look. Examples: a `first_tee`
+  that looks like last year's date, a Field row missing a handicap, an
+  announcement dated more than 24h out, a Rooms row whose player doesn't
+  match any Field player (skipped when the cell is empty or `guest:`-prefixed —
+  Rooms is allowed to hold names Field doesn't track).
+- **INFO** — context, not a problem. Examples: which schedule-coverage basis
+  it used, the Announce tab not being wired up yet, `form_url` intentionally
+  left unset.
+
+**The verbatim-residue limit.** One check (sample-residue) catches sheet
+rows that still exactly match the template's sample data — Duck, Hammer,
+Tex, straight out of `tools/gfy-template.xlsx`. It can only ever catch a
+byte-for-byte match. A sample row that's been edited in place — same shape,
+real-looking values typed over the sample text — is invisible to it; there's
+no mechanical way to tell "real Duck" from "leftover sample row someone
+half-edited." That's the live sheet's current state (see BACKLOG #6) — a
+clean `event-ready` run is necessary, not sufficient, and the morning
+eyeball over Field/Scores/Rooms stays in the runbook regardless of how
+clean the preflight reports.
+
 ## Names — the one convention
 
 Field.player, Invites.player, Rooms.player (and the vault's Contacts.player)
@@ -490,6 +568,34 @@ live-scoring writer can no longer find that team's rows.
 - Update `first_tee` in the Info tab (ISO format with timezone offset,
   e.g. `2027-08-14T09:00:00-06:00`) — the countdown and calendar button
   follow it. No code changes needed for a new year.
+
+### Rolling the whole event over (checklist)
+
+The above covers adding a season's rows. The full pass, in order, before a
+new season's captain links go out:
+
+1. **New-season Info values.** `first_tee` (ISO **with** timezone offset,
+   e.g. `2027-08-14T09:00:00-06:00`), `dates`, `course`, `lodging` — and
+   anything else that changed (`deposit_amount`, `payment_handle`).
+2. **Real Field/Schedule/Pairings rows** for the new season — captains and
+   roster on Field, real tee times on Schedule, real groups on Pairings.
+3. **Delete or replace every SAMPLE row**, on every tab, not just those
+   three — the template ships sample rows (Duck, Hammer, Tex, …) meant to
+   be overwritten, not built around.
+4. **Run `polish()`** (Extensions → Apps Script → run `polish()`) — rebuilds
+   START HERE, reapplies checkboxes/dropdowns/coloring, autofills what it
+   owns.
+5. **Run `npm run event-ready` until clean** (no FAIL; only expected
+   WARN/INFO) — see **Event-ready preflight**, above. Fix what it flags and
+   re-run; don't chase it once and stop.
+6. **Re-verify the scorer endpoint** — confirm `score_endpoint` and
+   `form_url` on Info still point at the current season's deployment/form.
+   A stale endpoint carried over from last year silently misroutes scores
+   (see **Live scoring**, above, for the "never redeploy with New
+   deployment" trap).
+7. **Send captain links** — only after every step above is clean. See
+   **Captain links & the Form's Team list**, above; the draft-night drill
+   (SC-DRILL) still applies on top of this checklist, not instead of it.
 
 ## Collecting for next year
 
@@ -716,7 +822,7 @@ tools/sheet-triggers.gs       Apps Script live-scoring triggers — form writer 
 tools/presend-check.mjs       the pre-send checker — vault diff, DNI check, email-leak watchdog (see above)
 tools/check_template.py       drift check: xlsx templates vs their generators (npm run check-template)
 tools/gid-check.mjs           drift check: config.js gids vs the live published sheet (npm run check-gids)
-fixtures/                     sample CSVs mirroring the 13 tabs, incl. edge cases
+fixtures/                     sample CSVs mirroring the 14 tabs, incl. edge cases
 test/smoke.mjs                headless render test against the fixtures
 ```
 

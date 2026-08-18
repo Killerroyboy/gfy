@@ -7,6 +7,7 @@ xlsx (regeneration is the generators' job). Exit 0 = both in sync; 1 = drift
 Why not a hash gate: openpyxl stamps timestamps, so the binaries are never
 byte-reproducible — git diff on them is noise and md5 can't see real drift.
 Run: npm run check-template"""
+import json
 import sys
 from pathlib import Path
 
@@ -51,17 +52,30 @@ def main():
         ("make_admin_template", HERE / "gfy-admin-template.xlsx", "admin template"),
     ]
     all_problems = []
+    template_spec = None
     for module, xlsx, label in checks:
         try:
             spec = sheet_dict(module)
         except Exception as e:
             print(f"CANNOT IMPORT {module}: {e}")
             return 2
+        if module == "make_template":
+            template_spec = spec
         try:
             all_problems += diff_workbook(xlsx, spec, label)
         except Exception as e:
             print(f"CANNOT READ {xlsx.name}: {e}")
             return 2
+
+    # §24 R-READY(a): checker and template can't drift — sample-fingerprints.json
+    # is a derivative of make_template.SHEETS, checked the same way as the xlsx.
+    fp_path = HERE / "sample-fingerprints.json"
+    derived = {name.lower(): [[str(c).strip() for c in row] for row in spec["rows"]]
+               for name, spec in template_spec.items()}
+    if not fp_path.exists() or json.loads(fp_path.read_text()) != derived:
+        print("FAIL: tools/sample-fingerprints.json is out of sync with make_template.SHEETS — rerun make_template.py")
+        return 1
+
     if all_problems:
         print(f"TEMPLATE DRIFT — {len(all_problems)} difference(s):")
         for p in all_problems:

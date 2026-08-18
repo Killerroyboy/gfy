@@ -59,6 +59,13 @@
           font-variant-numeric:tabular-nums}
   .cd-lab{font-size:.56rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage);margin-top:7px}
   .cd-msg{font-family:var(--display);font-size:1.5rem;color:var(--brass);margin:30px 0 0}
+  /* §24 H-NOWNEXT strip — site tokens only, no new palette. */
+  .nn-row{font-size:.92rem;color:var(--bone);margin:8px 0 0}
+  .nn-row strong{color:var(--brass);font-weight:600}
+  .nn-chips{margin:14px 0 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .nn-chips a{color:var(--brass);text-decoration:none;font-size:.62rem;letter-spacing:.2em;
+    text-transform:uppercase;border:1px solid rgba(200,162,74,.45);padding:6px 14px}
+  .nn-chips a:hover,.nn-chips a:focus-visible{background:rgba(200,162,74,.12)}
   .hero-rule{width:60px;height:1px;background:var(--brass-dim);margin:26px auto;border:0}
   .hero-sub{max-width:34ch;margin:0 auto;color:var(--sage);font-size:1.02rem}
   .hero-actions{margin:30px 0 0;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
@@ -91,6 +98,27 @@
   .health-strip[hidden]{display:none}
   .health-strip summary{cursor:pointer;color:var(--rust)}
   .health-strip div{padding:4px 0 0}
+
+  #announceBar{position:relative;background:var(--brass,#8a6d3b);color:var(--pine);
+    padding:10px 14px;font-size:.95rem;display:flex;gap:12px;align-items:baseline}
+  /* review round 1: was position:sticky;top:0;z-index:60 — that painted over
+     .nav (also sticky top:0) once the page scrolled, hiding the nav whenever
+     an unseen announcement was up. Loud-at-top-of-page is the requirement,
+     not loud-forever; it may scroll away like any other in-flow content. */
+  #announceBar[hidden]{display:none}
+  body[data-view="score"] #announceBar{display:none} /* §24 A-BANNER: never interrupt a captain mid-entry */
+  #announceBar .ann-msg{flex:1}
+  /* pine-on-brass per repo convention (.year-btn[aria-pressed="true"]) —
+     #fff on --brass was ~2.2:1; pine on brass is ~7.5:1. #annDismiss gets its
+     own rule so it never falls back to default UA button chrome (white text
+     on brass, browser-native border) on this surface. */
+  #announceBar #annDismiss{font-family:var(--ui);font-size:.62rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--pine);background:none;border:1px solid var(--pine);
+    padding:6px 12px;cursor:pointer;flex:none}
+  #announceBar #annDismiss:hover,#announceBar #annDismiss:focus-visible{background:rgba(14,32,25,.12)}
+  #annUpdates{margin:26px 0 0}
+  #annUpdates .ann-row{display:flex;gap:10px;padding:4px 0;font-size:.9rem}
+  #annUpdates .ann-when{opacity:.6;white-space:nowrap}
   .subhead{font-family:var(--display);font-size:1.4rem;margin:44px 0 16px;font-weight:400}
 
   .years{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 26px}
@@ -117,7 +145,7 @@
   .lb-thru{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
   .lb-num{text-align:right;font-variant-numeric:tabular-nums;font-size:.95rem;color:var(--sage)}
   .lb-tot{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
-  .lb-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
+  .lb-empty,.sched-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
   /* SC-PAR-LABEL (§20 amendment 2): courseMap() null means the second
      .lb-tot column is honestly relabeled "Total" (renderLeaderboard) — at
      widths where the SEPARATE .lb-total column also shows, that would put
@@ -876,21 +904,25 @@
     <p class="expansion rise d2">Go Fuck Yourself</p>
     <div id="countdown" class="countdown rise d3" aria-live="polite"></div>
     <hr class="hero-rule rise d3">
-    <p class="hero-sub rise d3">Two rounds at Meadow Creek. Two nights at Bear Creek Lodge. One trophy nobody wants to explain.</p>
+    <p class="hero-sub rise d3" id="heroSub">Two rounds. Two nights. One trophy nobody wants to explain.</p>
 
     <div class="hero-actions rise d4">
       <button class="btn" id="icsBtn" type="button">Add to calendar</button>
       <button class="btn" id="installBtn" type="button" hidden>Install app</button>
     </div>
 
+    <div id="nowNext"></div>
     <div id="homeStatus"></div>
+    <div id="homeSync" class="sync"></div>
 
     <dl class="facts rise d4">
-      <div class="fact"><dt>Dates</dt><dd data-info="dates">Aug 14–16</dd></div>
-      <div class="fact"><dt>Course</dt><dd data-info="course">Meadow Creek</dd></div>
-      <div class="fact"><dt>Lodging</dt><dd data-info="lodging">Bear Creek Lodge</dd></div>
-      <div class="fact"><dt>Format</dt><dd data-info="format">2-day scramble</dd></div>
+      <div class="fact"><dt>Dates</dt><dd data-info="dates">—</dd></div>
+      <div class="fact"><dt>Course</dt><dd data-info="course">—</dd></div>
+      <div class="fact"><dt>Lodging</dt><dd data-info="lodging">—</dd></div>
+      <div class="fact"><dt>Format</dt><dd data-info="format">—</dd></div>
     </dl>
+
+    <section id="annUpdates"></section>
 
     <div class="holder" id="homeBird">
       <svg aria-hidden="true"><use href="#mark"/></svg>
@@ -1038,24 +1070,11 @@
     <h2>The Card</h2>
     <p class="lede">Everything is optional except the tee times. Show up late and you are playing from wherever the group is.</p>
     <div id="scheduleBody">
-      <div class="day">
-        <div class="day-head"><strong>Day One</strong><span>Friday</span></div>
-        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Check in, claim a bed, unload the coolers</div><div class="slot-where">Bear Creek Lodge</div></div>
-        <div class="slot"><div class="slot-time">5:30 pm</div><div class="slot-what">Draw for pairings and settle the handicaps</div><div class="slot-where">Lodge deck</div></div>
-        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Dinner, cards, bad decisions</div><div class="slot-where">Lodge</div></div>
-      </div>
-      <div class="day">
-        <div class="day-head"><strong>Day Two</strong><span>Saturday</span></div>
-        <div class="slot"><div class="slot-time">7:30 am</div><div class="slot-what">Coffee and quiet regret</div><div class="slot-where">Lodge</div></div>
-        <div class="slot"><div class="slot-time">9:00 am</div><div class="slot-what">Round One — shotgun start</div><div class="slot-where">Meadow Creek</div></div>
-        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Steaks on the lodge grill</div><div class="slot-where">Bear Creek Lodge</div></div>
-      </div>
-      <div class="day">
-        <div class="day-head"><strong>Day Three</strong><span>Sunday</span></div>
-        <div class="slot"><div class="slot-time">8:30 am</div><div class="slot-what">Round Two — leaders out last</div><div class="slot-where">Meadow Creek</div></div>
-        <div class="slot"><div class="slot-time">2:00 pm</div><div class="slot-what">Presentation of The Bird</div><div class="slot-where">18th green</div></div>
-        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Everyone goes home</div><div class="slot-where">GFY</div></div>
-      </div>
+      <!-- §24 C-FALLBACK (review round 1): this STATIC seed markup carried
+           the same hardcoded sample weekend renderSchedule()'s JS fallback
+           used to — except this copy painted it from first paint until the
+           schedule fetch resolved, on every page load. Same S12 class. -->
+      <p class="sched-empty">Schedule not loaded yet — it lives in the sheet's Schedule tab.</p>
     </div>
     <p class="sync" id="schedSync"></p>
   </div>
@@ -1240,6 +1259,7 @@ function showView(name){
   const bare=(name||"").split("?")[0];              // §18 SC-LINK router pin
   const aliased=VIEW_ALIASES[bare]||bare;
   const v=VIEWS.includes(aliased)?aliased:"home";
+  document.body.dataset.view=v;
   document.querySelectorAll(".view").forEach(s=>{ s.hidden=s.dataset.view!==v; });
   document.querySelectorAll(".nav a").forEach(a=>a.classList.toggle("active",a.hash==="#"+v));
 }
@@ -1261,7 +1281,7 @@ if (typeof CONFIG === "undefined") {
 const $ = s => document.querySelector(s);
 const CACHE_KEY = "gfy-cache-v2";
 const TABS = ["info","course","field","scores","schedule","pairings",
-              "calcutta","payout","ledger","champions","shame","invites","rooms"];
+              "calcutta","payout","ledger","champions","shame","invites","rooms","announce"];
 let INFO = {};
 const HOLES = Array.from({length:18},(_,i)=>i+1);
 /* Hole-number pin positions on assets/course-map.png, percent of image
@@ -1298,7 +1318,7 @@ function toObjects(rows){
 const FPRINT={info:["key"],course:["hole"],field:["player"],scores:["h1","r1"],
   schedule:["event"],pairings:["players"],calcutta:["price"],payout:["share"],
   ledger:["buyin"],champions:["champion"],shame:["award"],invites:["invited"],
-  rooms:["property"]};
+  rooms:["property"],announce:["message"]};
 const BACKOFF={};      // tab -> next-allowed epoch ms
 const BACKOFF_N={};    // tab -> consecutive-failure count (drives the curve)
 const LAST_ERR={};     // tab -> last REAL error message (never the backoff sentinel)
@@ -1389,6 +1409,21 @@ function parseDate(v){
     return valid(new Date(Date.UTC(yr,mo-1,day)),yr,mo,day);
   }
   return null;
+}
+
+/* §24 A-WHEN: announce-only timestamp parser. parseDate above is DATE-ONLY and
+   frozen (paid-order etc. depend on that); announcements need same-day ordering,
+   so they get their own strict format: "YYYY-MM-DD HH:MM" (24h) or a bare date
+   (= 00:00). Device-local interpretation — only ORDER matters for the unseen
+   watermark, and the >24h future-guard (renderAnnouncements) bounds clock abuse. */
+function parseWhen(v){
+  const m=String(v==null?"":v).trim().match(/^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/);
+  if(!m) return null;
+  const y=+m[1],mo=+m[2],d=+m[3],hh=m[4]?+m[4]:0,mi=m[5]?+m[5]:0;
+  if(y<2000||y>2100||hh>23||mi>59) return null;
+  const dt=new Date(y,mo-1,d,hh,mi);
+  if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d) return null;
+  return dt.getTime();
 }
 
 /* C3 disclosure: a slash date where BOTH components are <=12 is genuinely
@@ -1616,6 +1651,15 @@ function renderInfo(rows){
     $("#crestEst").textContent="EST. "+map.est_year;
     $("#footNote").textContent="McCall, Idaho · Est. "+map.est_year;
   }
+  const hero=$("#heroSub");
+  if(hero) hero.textContent=heroLine();
+}
+
+/* §24 C-FALLBACK: compose from Info keys; neutral when absent — a hardcoded fact
+   that can outlive its year is the S12 class. */
+function heroLine(){
+  const c=INFO.course, l=INFO.lodging;
+  return `Two rounds${c?" at "+c:""}. Two nights${l?" at "+l:""}. One trophy nobody wants to explain.`;
 }
 
 function renderYears(){
@@ -2833,25 +2877,10 @@ function renderShame(){
 function renderSchedule(){
   const rows=forYear(STATE.data.schedule,STATE.year).filter(r=>r.event);
   if(!rows.length){
-    $("#scheduleBody").innerHTML=`
-      <div class="day">
-        <div class="day-head"><strong>Day One</strong><span>Friday</span></div>
-        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Check in, claim a bed, unload the coolers</div><div class="slot-where">Bear Creek Lodge</div></div>
-        <div class="slot"><div class="slot-time">5:30 pm</div><div class="slot-what">Draw for pairings and settle the handicaps</div><div class="slot-where">Lodge deck</div></div>
-        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Dinner, cards, bad decisions</div><div class="slot-where">Lodge</div></div>
-      </div>
-      <div class="day">
-        <div class="day-head"><strong>Day Two</strong><span>Saturday</span></div>
-        <div class="slot"><div class="slot-time">7:30 am</div><div class="slot-what">Coffee and quiet regret</div><div class="slot-where">Lodge</div></div>
-        <div class="slot"><div class="slot-time">9:00 am</div><div class="slot-what">Round One — shotgun start</div><div class="slot-where">Meadow Creek</div></div>
-        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Steaks on the lodge grill</div><div class="slot-where">Bear Creek Lodge</div></div>
-      </div>
-      <div class="day">
-        <div class="day-head"><strong>Day Three</strong><span>Sunday</span></div>
-        <div class="slot"><div class="slot-time">8:30 am</div><div class="slot-what">Round Two — leaders out last</div><div class="slot-where">Meadow Creek</div></div>
-        <div class="slot"><div class="slot-time">2:00 pm</div><div class="slot-what">Presentation of The Bird</div><div class="slot-where">18th green</div></div>
-        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Everyone goes home</div><div class="slot-where">GFY</div></div>
-      </div>`;
+    // §24 C-FALLBACK: the old hardcoded sample weekend here showed LAST
+    // YEAR's times as fact whenever the sheet was unreachable — same S12
+    // class as a mislabeled number.
+    $("#scheduleBody").innerHTML='<p class="sched-empty">Schedule not loaded yet — it lives in the sheet\'s Schedule tab.</p>';
     return;
   }
   const days=[];
@@ -2951,6 +2980,45 @@ function renderHealth(){
     HEALTH.map(h=>`<div>${esc(h)}</div>`).join("")+`</details>`;
 }
 
+/* §24 A-BANNER/A-SEEN. Unseen = parseWhen(when) newer than the persisted watermark
+   AND not >24h future (future-guard: a typo'd year must never poison the watermark).
+   Dismiss collapses in-memory for the session, then best-effort persists — if
+   storage is unavailable the banner simply returns next visit (errs loud; no false
+   "saved" claim). Malformed when: renders in sheet order after parseables, never
+   unseen, never advances the watermark. Missing/empty tab: no DOM, no error. */
+const ANN_KEY="gfyAnnSeen";
+let ANN_DISMISSED=false;
+function annWatermark(){ try{ const v=+localStorage.getItem(ANN_KEY); return isFinite(v)&&v>0?v:0; }catch(e){ return 0; } }
+function renderAnnouncements(){
+  let bar=document.getElementById("announceBar");
+  const host=document.getElementById("annUpdates");
+  const rows=(STATE.data.announce||[]).filter(r=>String(r.year||"").trim()===String(activeSeason()));
+  if(!rows.length){ if(bar) bar.hidden=true; if(host) host.innerHTML=""; return; }
+  const lim=Date.now()+24*3600000;
+  const parsed=rows.map(r=>({r,at:parseWhen(r.when)}));
+  const ordered=parsed.filter(x=>x.at!==null).sort((a,b)=>b.at-a.at)
+    .concat(parsed.filter(x=>x.at===null));
+  const wm=annWatermark();
+  const unseen=ordered.filter(x=>x.at!==null&&x.at>wm&&x.at<=lim);
+  if(!bar){
+    bar=document.createElement("div"); bar.id="announceBar"; bar.hidden=true;
+    const nav=document.querySelector(".nav");
+    nav.parentNode.insertBefore(bar,nav);
+  }
+  if(unseen.length&&!ANN_DISMISSED){
+    bar.hidden=false;
+    bar.innerHTML=unseen.map(x=>`<span class="ann-msg">${esc(x.r.message)}</span>`).join("")
+      +`<button id="annDismiss" type="button">Got it</button>`;
+    bar.querySelector("#annDismiss").addEventListener("click",()=>{
+      ANN_DISMISSED=true; bar.hidden=true;
+      const top=unseen[0].at;
+      try{ localStorage.setItem(ANN_KEY,String(top)); }catch(e){ /* session-only; returns next visit */ }
+    });
+  } else bar.hidden=true;
+  if(host) host.innerHTML=`<h3>Updates</h3>`+ordered.map(x=>
+    `<div class="ann-row"><span class="ann-when">${esc(x.r.when||"")}</span><span>${esc(x.r.message||"")}</span></div>`).join("");
+}
+
 /* ---------- N-ORDER (§17): canonical seasonal nav ----------
    One canonical, story-shaped order year-round — who's in → draft → play →
    bets → settle → next season's collections → logistics → lore → rules.
@@ -2967,6 +3035,53 @@ function seasonPhase(){
   const win=3*86400000, t=tee.getTime(), now=Date.now();
   return (now>=t-win && now<=t+win) ? "event" : "off";
 }
+
+/* §24 H-NOWNEXT. Truth rule: compare INSTANTS only. A schedule row's instant is
+   its resolved event-window date + its time cell, interpreted in the UTC OFFSET
+   carried by the effective first_tee string — the offset has ONE owner. Times are
+   DISPLAYED as the sheet's own text; nothing is re-rendered into device wall time.
+   Unresolvable label/time ⇒ at:null ⇒ the row can never be claimed Now/Next. */
+const WEEKDAYS=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+function teeOffsetMs(){
+  const m=String(INFO.first_tee||CONFIG.FIRST_TEE||"").match(/([+-])(\d{2}):(\d{2})\s*$/);
+  return m ? (m[1]==="-"?-1:1)*((+m[2])*60+(+m[3]))*60000 : null;
+}
+function parseClock(t){
+  const m=String(t||"").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if(!m) return null;
+  let h=+m[1]; const mi=m[2]?+m[2]:0, ap=m[3]&&m[3].toLowerCase();
+  if(mi>59) return null;
+  if(ap){ if(h<1||h>12) return null; if(ap==="pm"&&h<12)h+=12; if(ap==="am"&&h===12)h=0; }
+  else if(h>23) return null;
+  return (h*60+mi)*60000;
+}
+function scheduleInstants(rows){
+  const eff=String(INFO.first_tee||CONFIG.FIRST_TEE||"");
+  const dm=eff.match(/^(\d{4}-\d{2}-\d{2})T.*([+-]\d{2}:\d{2})$/), off=teeOffsetMs();
+  if(!dm||off===null) return (rows||[]).map(r=>({r,at:null,dayEnd:null}));
+  const base=new Date(dm[1]+"T00:00:00"+dm[2]).getTime();  // McCall midnight of first-tee day
+  const byDay={};
+  for(let k=-3;k<=3;k++){                                   // 7-day window ⇒ weekdays unique
+    const mid=base+k*86400000;
+    const wd=WEEKDAYS[new Date(mid+off).getUTCDay()];
+    if(!(wd in byDay)) byDay[wd]=mid;
+  }
+  return (rows||[]).map(r=>{
+    const mid=byDay[String(r.label||"").trim().toLowerCase()];
+    const clk=parseClock(r.time);
+    return (mid===undefined||clk===null) ? {r,at:null,dayEnd:null}
+      : {r,at:mid+clk,dayEnd:mid+86400000};
+  });
+}
+function nowNextModel(rows,now){
+  const xs=scheduleInstants(rows).filter(x=>x.at!==null).sort((a,b)=>a.at-b.at);
+  let cur=null;
+  for(const x of xs){ if(x.at<=now) cur=x; else break; }
+  if(cur&&now>=cur.dayEnd) cur=null;                        // McCall-midnight expiry
+  const nxt=xs.find(x=>x.at>now)||null;                     // crosses day boundaries
+  return {now:cur,next:nxt};
+}
+
 function applyNavOrder(){
   const nav=document.querySelector(".nav-links");
   if(!nav) return;
@@ -3001,6 +3116,13 @@ function tick(){
 /* ---------- calendar ---------- */
 const pad=n=>String(n).padStart(2,"0");
 const stamp=d=>d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+"T"+pad(d.getUTCHours())+pad(d.getUTCMinutes())+"00Z";
+/* §24 C-FALLBACK (review round 1): sheet-sourced values (INFO.lodging,
+   INFO.course via heroLine()) flow into the .ics unescaped otherwise. RFC
+   5545 TEXT requires backslash/semicolon/comma/newline escaping — a lodging
+   name with a comma would otherwise corrupt the property's field
+   boundaries. The pre-existing static ", McCall, Idaho" commas are not
+   sheet-sourced and are left as-is (accepted residual). */
+const icsEsc=s=>String(s).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\r?\n/g,"\\n");
 $("#icsBtn").addEventListener("click",()=>{
   const start=new Date(CONFIG.FIRST_TEE);
   if(isNaN(start)) return;
@@ -3008,8 +3130,8 @@ $("#icsBtn").addEventListener("click",()=>{
     "UID:gfy-"+start.getFullYear()+"@mccall","DTSTAMP:"+stamp(new Date()),
     "DTSTART:"+stamp(new Date(start.getTime()-18*3600000)),
     "DTEND:"+stamp(new Date(start.getTime()+30*3600000)),
-    "SUMMARY:GFY — McCall, Idaho","LOCATION:Bear Creek Lodge, McCall, Idaho",
-    "DESCRIPTION:Two rounds at Meadow Creek. Two nights at Bear Creek Lodge.",
+    "SUMMARY:GFY — McCall, Idaho","LOCATION:"+(INFO.lodging?icsEsc(INFO.lodging)+", ":"")+"McCall, Idaho",
+    "DESCRIPTION:"+icsEsc(heroLine().replace(/ One trophy.*$/,"")),
     "END:VEVENT","END:VCALENDAR"].join("\r\n");
   const url=URL.createObjectURL(new Blob([ics],{type:"text/calendar"}));
   const a=document.createElement("a"); a.href=url; a.download="gfy.ics"; a.click();
@@ -3275,6 +3397,19 @@ function stampFor(tab,results){
   if(!r.err) return "";
   return "Offline — "+r.err;
 }
+function fmtClock(ms){ const d=new Date(ms); const h=d.getHours()%12||12;
+  return h+":"+String(d.getMinutes()).padStart(2,"0")+(d.getHours()<12?"am":"pm"); }
+/* §24 H-FRESH: stamp time = last SUCCESSFUL live fetch of the scores tab, device-
+   local (the stamp describes the READER's fetch event — McCall time would be the
+   wrong frame). pull() already encodes the honesty: live:false + at = the cache's
+   last-success write time, so a backoff-served poll can never advance the stamp. */
+function eventStampFor(results){
+  if(seasonPhase()!=="event") return "";
+  const r=results[TABS.indexOf("scores")];
+  if(!r||!r.at) return "";
+  return r.live ? `Checked ${fmtClock(r.at)} · the sheet publishes a few minutes behind edits`
+                : `Couldn't refresh — showing data from ${fmtClock(r.at)}`;
+}
 /* Date-aware Home: pre-event shows the countdown as today; once we're
    more than 3 days past first tee, the countdown gives way to a status
    strip. The numbers come from nextYearModel()/calcuttaModel(); calcuttaModel
@@ -3283,6 +3418,17 @@ function stampFor(tab,results){
 function paintHome(){
   const statusEl=$("#homeStatus");
   if(!statusEl) return;
+  const nn=$("#nowNext");
+  if(nn){
+    if(seasonPhase()!=="event"){ nn.innerHTML=""; }
+    else{
+      const model=nowNextModel(forYear(STATE.data.schedule,activeSeason()),Date.now());
+      const line=(tag,x)=>x?`<div class="nn-row"><strong>${tag}:</strong> ${esc(x.r.event||"")}`
+        +` · ${esc(x.r.time||"")}${x.r.location?" · "+esc(x.r.location):""}</div>`:"";
+      nn.innerHTML=(line("Now",model.now)+line("Next",model.next)
+        +`<div class="nn-chips"><a href="#pairings">Pairings</a><a href="#board">Board</a><a href="#rooms">Rooms</a></div>`);
+    }
+  }
   const tee=new Date(INFO.first_tee||CONFIG.FIRST_TEE);
   const post=!isNaN(tee)&&Date.now()>tee.getTime()+3*86400000;
   if(!post){ statusEl.innerHTML=""; return; }
@@ -4660,10 +4806,12 @@ function paint(data,results){
   $("#schedSync").textContent=stampFor("schedule",results);
   $("#calSync").textContent=stampFor("calcutta",results);
   const nyEl=$("#nySync"); if(nyEl) nyEl.textContent=stampFor("field",results);
+  const hs=$("#homeSync"); if(hs) hs.textContent=eventStampFor(results);
   tick();
   paintHome();
   applyNavOrder();
   renderHealth();
+  renderAnnouncements();
   renderScorer();
 }
 async function load(){
@@ -4675,7 +4823,14 @@ async function load(){
 }
 
 tick(); setInterval(tick,30000);
-load(); setInterval(load,CONFIG.REFRESH_MS);
+/* §24 H-REFRESH: the existing unconditional 60s load() loop is RETAINED at its
+   cadence (rev 2 — reuse, don't duplicate). Two additions only: skip fetches
+   while hidden (through this named seam so tests can drive it), and load()
+   immediately on wake — phone unlocked at the tee sees fresh data instantly. */
+function pageVisible(){ return typeof document.hidden==="undefined"||!document.hidden; }
+function refreshTick(){ if(pageVisible()) load(); }
+load(); setInterval(refreshTick,CONFIG.REFRESH_MS);
+document.addEventListener("visibilitychange",()=>{ if(pageVisible()) load(); });
 </script>
 </body>
 </html>

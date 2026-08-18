@@ -19,6 +19,7 @@ outside this codebase entirely). Invites.status accepts "out" (not
 returning, silently suppressed) or "declined" (this season only, shown
 under the site's ?admin=1 view, reappears next season) — see F-DECLINED.
 """
+import json
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -174,7 +175,23 @@ SHEETS = {
             [2026, "Bear Creek Lodge", "2", "guest:Pat"],
         ],
     },
+    "Announce": {
+        "headers": ["year", "when", "message"],
+        "rows": [
+            [2026, "2026-08-14 18:05", "SAMPLE — Draft complete. See the Draft tab."],
+            [2026, "2026-08-16 07:40", "SAMPLE — R2 tee times posted. Leaders out last."],
+        ],
+        "note": "when = YYYY-MM-DD HH:MM (24h). The time orders same-day posts on the site.",
+    },
 }
+
+
+def write_fingerprints(sheets: dict, path: Path) -> None:
+    # §24 R-READY(a): single authority for the sample-row shape check_template.py
+    # verifies sample-fingerprints.json against — regenerated here, never hand-edited.
+    fp = {name.lower(): [[str(c).strip() for c in row] for row in spec["rows"]]
+          for name, spec in sheets.items()}
+    path.write_text(json.dumps(fp, indent=1) + "\n")
 
 
 def main() -> None:
@@ -191,6 +208,7 @@ def main() -> None:
             ws.append(row)
     out = Path(__file__).resolve().parent / "gfy-template.xlsx"
     wb.save(out)
+    write_fingerprints(SHEETS, Path(__file__).parent / "sample-fingerprints.json")
     print(f"wrote {out} ({len(SHEETS)} sheets)")
 
 

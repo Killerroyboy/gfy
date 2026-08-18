@@ -1,0 +1,502 @@
+{
+ "info": [
+  [
+   "dates",
+   "Aug 14\u201316"
+  ],
+  [
+   "course",
+   "Meadow Creek"
+  ],
+  [
+   "lodging",
+   "Bear Creek Lodge"
+  ],
+  [
+   "format",
+   "2-day scramble"
+  ],
+  [
+   "first_tee",
+   "2026-08-15T09:00:00-06:00"
+  ],
+  [
+   "est_year",
+   "2019"
+  ],
+  [
+   "calcutta_rake",
+   "10"
+  ],
+  [
+   "calcutta_basis",
+   "gross"
+  ],
+  [
+   "deposit_amount",
+   "200"
+  ],
+  [
+   "payment_handle",
+   "Venmo @gfy-duck"
+  ]
+ ],
+ "course": [
+  [
+   "1",
+   "4",
+   "319"
+  ],
+  [
+   "2",
+   "5",
+   "469"
+  ],
+  [
+   "3",
+   "4",
+   "407"
+  ],
+  [
+   "4",
+   "3",
+   "124"
+  ],
+  [
+   "5",
+   "4",
+   "357"
+  ],
+  [
+   "6",
+   "4",
+   "348"
+  ],
+  [
+   "7",
+   "4",
+   "391"
+  ],
+  [
+   "8",
+   "3",
+   "180"
+  ],
+  [
+   "9",
+   "5",
+   "499"
+  ],
+  [
+   "10",
+   "4",
+   "286"
+  ],
+  [
+   "11",
+   "4",
+   "354"
+  ],
+  [
+   "12",
+   "4",
+   "344"
+  ],
+  [
+   "13",
+   "3",
+   "148"
+  ],
+  [
+   "14",
+   "4",
+   "406"
+  ],
+  [
+   "15",
+   "5",
+   "433"
+  ],
+  [
+   "16",
+   "4",
+   "352"
+  ],
+  [
+   "17",
+   "3",
+   "151"
+  ],
+  [
+   "18",
+   "5",
+   "533"
+  ]
+ ],
+ "field": [
+  [
+   "2026",
+   "Duck",
+   "Duck",
+   "2019",
+   "8",
+   "In",
+   "TRUE",
+   "",
+   "steady off the tee"
+  ],
+  [
+   "2026",
+   "Hammer",
+   "Duck",
+   "2019",
+   "10",
+   "In",
+   "TRUE",
+   "",
+   ""
+  ],
+  [
+   "2026",
+   "Sully",
+   "Sully",
+   "2021",
+   "15",
+   "In",
+   "FALSE",
+   "",
+   ""
+  ],
+  [
+   "2026",
+   "Tank",
+   "Sully",
+   "2026",
+   "20",
+   "In",
+   "TRUE",
+   "",
+   ""
+  ],
+  [
+   "2026",
+   "Tex",
+   "Tex",
+   "2019",
+   "18",
+   "In",
+   "TRUE",
+   "",
+   "long drives"
+  ],
+  [
+   "2027",
+   "Duck",
+   "",
+   "",
+   "",
+   "",
+   "TRUE",
+   "2026-08-20",
+   ""
+  ]
+ ],
+ "scores": [
+  [
+   "2026",
+   "Duck",
+   "1",
+   "4",
+   "5",
+   "3",
+   "6",
+   "4",
+   "4",
+   "3",
+   "5",
+   "5",
+   "4",
+   "5",
+   "3",
+   "4",
+   "4",
+   "4",
+   "3",
+   "6",
+   "4"
+  ],
+  [
+   "2026",
+   "Sully",
+   "1",
+   "5",
+   "4",
+   "4",
+   "5",
+   "4",
+   "5",
+   "3",
+   "4",
+   "5",
+   "4",
+   "6",
+   "3",
+   "5",
+   "4",
+   "4",
+   "4",
+   "5",
+   "5"
+  ],
+  [
+   "2026",
+   "Tex",
+   "1",
+   "5",
+   "4",
+   "3",
+   "5",
+   "4",
+   "6",
+   "4",
+   "4",
+   "5",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   ""
+  ]
+ ],
+ "schedule": [
+  [
+   "2026",
+   "Day One",
+   "Friday",
+   "3:00 pm",
+   "Check in, claim a bed",
+   "Bear Creek Lodge"
+  ],
+  [
+   "2026",
+   "Day One",
+   "Friday",
+   "5:30 pm",
+   "Draw for pairings",
+   "Lodge deck"
+  ],
+  [
+   "2026",
+   "Day Two",
+   "Saturday",
+   "9:00 am",
+   "Round One \u2014 shotgun start",
+   "Meadow Creek"
+  ]
+ ],
+ "pairings": [
+  [
+   "2026",
+   "Round One",
+   "Saturday \u00b7 Shotgun",
+   "9:00 am",
+   "Duck \u00b7 Hammer",
+   "1"
+  ],
+  [
+   "2026",
+   "Round One",
+   "Saturday \u00b7 Shotgun",
+   "9:00 am",
+   "Sully \u00b7 Tank",
+   "4"
+  ],
+  [
+   "2026",
+   "Round Two",
+   "Sunday \u00b7 Tee times",
+   "8:30 am",
+   "Leaders out last",
+   ""
+  ]
+ ],
+ "calcutta": [
+  [
+   "2026",
+   "Duck",
+   "Tex",
+   "120",
+   "TRUE"
+  ],
+  [
+   "2026",
+   "Sully",
+   "Duck",
+   "100",
+   "FALSE"
+  ],
+  [
+   "2026",
+   "Tex",
+   "Sully",
+   "90",
+   "TRUE"
+  ]
+ ],
+ "payout": [
+  [
+   "2026",
+   "1",
+   "50"
+  ],
+  [
+   "2026",
+   "2",
+   "30"
+  ],
+  [
+   "2026",
+   "3",
+   "20"
+  ]
+ ],
+ "ledger": [
+  [
+   "2026",
+   "Duck",
+   "100",
+   "180",
+   "TRUE"
+  ],
+  [
+   "2026",
+   "Hammer",
+   "100",
+   "40",
+   "FALSE"
+  ],
+  [
+   "2026",
+   "Sully",
+   "100",
+   "0",
+   "FALSE"
+  ]
+ ],
+ "champions": [
+  [
+   "2025",
+   "Duck",
+   "151 (+7)",
+   "",
+   "Duck \u00b7 Hammer \u00b7 Sully \u00b7 Tank"
+  ],
+  [
+   "2025",
+   "Tex",
+   "153 (+9)",
+   "2",
+   "Tex \u00b7 Sock \u00b7 Bear \u00b7 Crash"
+  ],
+  [
+   "2025",
+   "Moose",
+   "155 (+11)",
+   "3",
+   "Moose \u00b7 Ghost \u00b7 Blade \u00b7 Zeke"
+  ],
+  [
+   "2024",
+   "Hammer",
+   "149 (+5)",
+   "",
+   ""
+  ],
+  [
+   "2019",
+   "Tex",
+   "Inaugural",
+   "",
+   ""
+  ]
+ ],
+ "shame": [
+  [
+   "2026",
+   "Cart incident",
+   "Moose",
+   "Found the one tree on the 7th."
+  ],
+  [
+   "2026",
+   "Most balls lost",
+   "Sully",
+   "Eleven. The creek ate nine of them."
+  ]
+ ],
+ "invites": [
+  [
+   "2027",
+   "Sully",
+   "TRUE",
+   "TRUE",
+   ""
+  ],
+  [
+   "2027",
+   "Tex",
+   "TRUE",
+   "FALSE",
+   ""
+  ],
+  [
+   "2027",
+   "Bear",
+   "FALSE",
+   "FALSE",
+   "out"
+  ]
+ ],
+ "rooms": [
+  [
+   "2026",
+   "Bear Creek Lodge",
+   "1",
+   "Duck"
+  ],
+  [
+   "2026",
+   "Bear Creek Lodge",
+   "1",
+   "Hammer"
+  ],
+  [
+   "2026",
+   "Bear Creek Lodge",
+   "2",
+   "Sully"
+  ],
+  [
+   "2026",
+   "Bear Creek Lodge",
+   "2",
+   "guest:Pat"
+  ]
+ ],
+ "announce": [
+  [
+   "2026",
+   "2026-08-14 18:05",
+   "SAMPLE \u2014 Draft complete. See the Draft tab."
+  ],
+  [
+   "2026",
+   "2026-08-16 07:40",
+   "SAMPLE \u2014 R2 tee times posted. Leaders out last."
+  ]
+ ]
+}

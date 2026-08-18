@@ -5,6 +5,7 @@
   "scripts": {
     "test": "node test/smoke.mjs",
     "presend": "node tools/presend-check.mjs",
+    "event-ready": "node tools/event-ready.mjs",
     "check-template": "python3 tools/check_template.py",
     "check-gids": "node tools/gid-check.mjs"
   },
