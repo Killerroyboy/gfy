@@ -212,7 +212,8 @@ export function checkAnnounce(rows, now, windowStart, windowEnd){
     const resolved=parsed.filter(p=>p.at!==null);
     if(resolved.length){
       const newest=Math.max(...resolved.map(p=>p.at));
-      const dayStart=Math.floor(now/86400000)*86400000;
+      const d=new Date(now); d.setHours(0,0,0,0);
+      const dayStart=d.getTime();
       if(newest<dayStart)
         out.push({level:"WARN", detail:"announce: newest post is older than today, inside the event window — no update posted yet this event day"});
     }
@@ -261,7 +262,7 @@ export function checkFallbackParity(configText, indexHtml, infoRows){
   if(!/Schedule not loaded yet — it lives in the sheet's Schedule tab\./.test(html))
     out.push({level:"FAIL", detail:"fallback parity: index.html is missing the pinned honest schedule empty-state string"});
 
-  const factsBlock=(html.match(/<dl class="facts"[\s\S]*?<\/dl>/)||[""])[0];
+  const factsBlock=(html.match(/<dl class="facts[^"]*"[\s\S]*?<\/dl>/)||[""])[0];
   if(/Aug\s*\d/.test(factsBlock))
     out.push({level:"FAIL", detail:"fallback parity: the facts <dd> block still contains a hardcoded 'Aug \\d'-shaped date literal"});
 

@@ -5782,25 +5782,47 @@ const nowW = Date.now();
 // EV10: checkFallbackParity — config FIRST_TEE vs Info first_tee drift
 // WARNs; a matching pair with the pinned empty-state string and no stale
 // facts-literal PASSes; a missing empty-state string FAILs; a hardcoded
-// "Aug \d" literal inside the facts block FAILs.
+// "Aug \d" literal inside the facts block FAILs. Fixtures use the REAL
+// index.html class shape (`class="facts rise d4"`, index.html:918) — not a
+// bare `class="facts"`, which doesn't exist in the app and made the check
+// vacuous (review round 1: factsBlock was always "" against real markup, so
+// the FAIL branch could never fire no matter what got hardcoded back).
 {
   const cfgTextEV10 = 'window.CONFIG = { FIRST_TEE: "2026-08-15T09:00:00-06:00" };';
   const infoRowsMatch = [{ key: "first_tee", value: "2026-08-15T09:00:00-06:00" }];
   const infoRowsDrift = [{ key: "first_tee", value: "2027-08-14T09:00:00-06:00" }];
-  const htmlGood = '<dl class="facts"><dd data-info="dates">—</dd></dl>Schedule not loaded yet — it lives in the sheet\'s Schedule tab.';
-  const htmlMissingEmptyState = '<dl class="facts"><dd data-info="dates">—</dd></dl>';
-  const htmlStaleLiteral = '<dl class="facts"><dd data-info="dates">Aug 14–16</dd></dl>Schedule not loaded yet — it lives in the sheet\'s Schedule tab.';
+  const htmlGood = '<dl class="facts rise d4"><dd data-info="dates">—</dd></dl>Schedule not loaded yet — it lives in the sheet\'s Schedule tab.';
+  const htmlMissingEmptyState = '<dl class="facts rise d4"><dd data-info="dates">—</dd></dl>';
+  const htmlStaleLiteral = '<dl class="facts rise d4"><dd data-info="dates">Aug 14–16</dd></dl>Schedule not loaded yet — it lives in the sheet\'s Schedule tab.';
   const drift = checkFallbackParity(cfgTextEV10, htmlGood, infoRowsDrift);
   const clean = checkFallbackParity(cfgTextEV10, htmlGood, infoRowsMatch);
   const missingEmpty = checkFallbackParity(cfgTextEV10, htmlMissingEmptyState, infoRowsMatch);
   const staleFact = checkFallbackParity(cfgTextEV10, htmlStaleLiteral, infoRowsMatch);
-  check("EV10: checkFallbackParity — config/Info first_tee drift WARNs; a clean matching pair PASSes; a missing pinned empty-state string FAILs; a hardcoded 'Aug \\d' literal in the facts block FAILs",
+
+  // Real-shape proof (review round 1, Important): the exact multi-<div>
+  // #home facts markup index.html actually renders (index.html:918-923),
+  // with the Dates <dd> hardcoded back to "Aug 14–16" instead of the honest
+  // "—" fallback. Must FAIL — this is the literal regression check (i)
+  // exists to catch, and the pre-fix regex missed it entirely.
+  const htmlRealShapeStale =
+    '<dl class="facts rise d4">\n' +
+    '  <div class="fact"><dt>Dates</dt><dd data-info="dates">Aug 14–16</dd></div>\n' +
+    '  <div class="fact"><dt>Course</dt><dd data-info="course">—</dd></div>\n' +
+    '  <div class="fact"><dt>Lodging</dt><dd data-info="lodging">—</dd></div>\n' +
+    '  <div class="fact"><dt>Format</dt><dd data-info="format">—</dd></div>\n' +
+    '</dl>\n' +
+    'Schedule not loaded yet — it lives in the sheet\'s Schedule tab.';
+  const realShapeStale = checkFallbackParity(cfgTextEV10, htmlRealShapeStale, infoRowsMatch);
+
+  check("EV10: checkFallbackParity — config/Info first_tee drift WARNs; a clean matching pair (real facts-rise-d4 shape) PASSes; a missing pinned empty-state string FAILs; a hardcoded 'Aug \\d' literal in the facts block FAILs against the REAL `class=\"facts rise d4\"` shape (not just a nonexistent bare `class=\"facts\"`)",
     drift.some(r => r.level === "WARN" && /FIRST_TEE/.test(r.detail)) &&
       clean.length === 1 && clean[0].level === "PASS" &&
       missingEmpty.some(r => r.level === "FAIL" && /empty-state/.test(r.detail)) &&
-      staleFact.some(r => r.level === "FAIL" && /Aug/.test(r.detail)),
+      staleFact.some(r => r.level === "FAIL" && /Aug/.test(r.detail)) &&
+      realShapeStale.some(r => r.level === "FAIL" && /Aug/.test(r.detail)),
     "drift=" + JSON.stringify(drift) + " clean=" + JSON.stringify(clean) +
-      " missingEmpty=" + JSON.stringify(missingEmpty) + " staleFact=" + JSON.stringify(staleFact));
+      " missingEmpty=" + JSON.stringify(missingEmpty) + " staleFact=" + JSON.stringify(staleFact) +
+      " realShapeStale=" + JSON.stringify(realShapeStale));
 }
 
 /* ---------------------------------------------------------------------
