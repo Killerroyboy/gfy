@@ -21,6 +21,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import jsdom from "jsdom";
+import {
+  checkFirstTee, checkResidue, checkSchedule, checkPairings, checkPars,
+  checkScorer, checkField, checkAnnounce, checkCrossTab, checkFallbackParity,
+} from "../tools/event-ready.mjs";
 
 const { JSDOM, VirtualConsole, requestInterceptor } = jsdom;
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -5599,6 +5603,204 @@ const nowW = Date.now();
     steaksCountX58 === 0
       && schedBodySrcX58.includes("Schedule not loaded yet — it lives in the sheet's Schedule tab."),
     "steaksCount=" + steaksCountX58 + " schedBodySrc=" + JSON.stringify(schedBodySrcX58));
+}
+
+/* ---------------------------------------------------------------------
+   EV group — §24 R-READY (task 6): tools/event-ready.mjs preflight checks.
+   Pure unit tests over the exported check functions with inline fixture
+   row arrays (the toRows() shape: lowercase-keyed objects, trimmed string
+   values) — no network, no fetch mocking. main() is the only fetch site
+   and is intentionally not unit-tested here.
+
+   FORWARD-RISK (Task 1 review, binding): sample-fingerprints.json carries
+   real-calendar dates from the template's sample rows. Every `now` below
+   is a synthetic fixture instant (Date.UTC/local Date literal picked for
+   the test's own arithmetic), never "real today" — these tests must stay
+   true regardless of what today's real date is.
+   --------------------------------------------------------------------- */
+
+// EV1: checkFirstTee — malformed/incomplete first_tee FAILs before anything
+// else (no fallthrough to a false PASS via NaN comparisons); a first_tee
+// >7 days past `now` WARNs "year rollover?".
+{
+  const nowEV1 = Date.UTC(2026, 7, 20);
+  const r1a = checkFirstTee("2026-13-01", nowEV1);
+  const r1b = checkFirstTee("2026-08-01T09:00:00-06:00", nowEV1);
+  check("EV1: checkFirstTee — an incomplete/malformed first_tee (no ISO+offset shape) FAILs before anything else; a first_tee >7 days past `now` WARNs 'year rollover'",
+    r1a.level === "FAIL" && /unparseable/.test(r1a.detail) &&
+      r1b.level === "WARN" && /rollover/i.test(r1b.detail),
+    "r1a=" + JSON.stringify(r1a) + " r1b=" + JSON.stringify(r1b));
+}
+
+// EV2: checkResidue — a verbatim template Field row FAILs naming tab+row;
+// the same row with ONE cell edited PASSes (documents the stated
+// verbatim-only limit — an edited-in-place sample is out of reach).
+{
+  const fpEV2 = { field: [["2026", "Duck", "Duck", "2019", "8", "In", "TRUE", "", "steady off the tee"]] };
+  const verbatimEV2 = { field: [["2026", "Duck", "Duck", "2019", "8", "In", "TRUE", "", "steady off the tee"]] };
+  const editedEV2 = { field: [["2026", "Duck", "Duck", "2019", "9", "In", "TRUE", "", "steady off the tee"]] };
+  const rVerbatim = checkResidue(verbatimEV2, fpEV2);
+  const rEdited = checkResidue(editedEV2, fpEV2);
+  check("EV2: checkResidue — a verbatim template Field row FAILs naming tab+row; the same row with ONE cell edited PASSes (documents the stated verbatim-only limit)",
+    rVerbatim.length === 1 && rVerbatim[0].level === "FAIL" &&
+      /field row 2/.test(rVerbatim[0].detail) &&
+      rEdited.length === 1 && rEdited[0].level === "PASS",
+    "verbatim=" + JSON.stringify(rVerbatim) + " edited=" + JSON.stringify(rEdited));
+}
+
+// EV3: checkSchedule — a missing event day FAILs naming the day; an
+// unresolvable row label FAILs naming the row; full coverage with
+// resolvable rows PASSes alongside an INFO line naming the window basis.
+{
+  const ftEV3 = "2026-08-15T09:00:00-06:00"; // Fri/Sat/Sun = Aug 14/15/16
+  const nowEV3 = Date.UTC(2026, 7, 10);
+  const missing = checkSchedule(
+    [{ label: "Friday", time: "3:00 pm" }, { label: "Saturday", time: "9:00 am" }],
+    ftEV3, "Aug 14–16", nowEV3);
+  const badLabel = checkSchedule(
+    [{ label: "Friday", time: "3:00 pm" }, { label: "Saturday", time: "9:00 am" }, { label: "Blursday", time: "9:00 am" }],
+    ftEV3, "Aug 14–16", nowEV3);
+  const clean = checkSchedule(
+    [{ label: "Friday", time: "3:00 pm" }, { label: "Saturday", time: "9:00 am" }, { label: "Sunday", time: "8:30 am" }],
+    ftEV3, "Aug 14–16", nowEV3);
+  check("EV3: checkSchedule — a missing event day FAILs naming the day; an unresolvable row label FAILs naming the row; full coverage PASSes with an INFO line naming the window basis",
+    missing.some(r => r.level === "FAIL" && r.detail.includes("2026-08-16")) &&
+      badLabel.some(r => r.level === "FAIL" && r.detail.includes("row 4") && r.detail.includes("Blursday")) &&
+      clean.some(r => r.level === "INFO" && /basis/.test(r.detail)) &&
+      clean.some(r => r.level === "PASS"),
+    "missing=" + JSON.stringify(missing) + " badLabel=" + JSON.stringify(badLabel) + " clean=" + JSON.stringify(clean));
+}
+
+// EV4: checkPairings — a round with no timed row FAILs naming the round;
+// every round timed PASSes; zero rows for the target year FAILs.
+{
+  const bad = checkPairings(
+    [{ year: "2026", round: "Round One", time: "9:00 am" }, { year: "2026", round: "Round Two", time: "" }],
+    "2026");
+  const clean = checkPairings(
+    [{ year: "2026", round: "Round One", time: "9:00 am" }, { year: "2026", round: "Round Two", time: "8:30 am" }],
+    "2026");
+  const noYear = checkPairings([{ year: "2025", round: "Round One", time: "9:00 am" }], "2026");
+  check("EV4: checkPairings — a round with no row carrying a parseable time FAILs naming the round; every round timed PASSes; zero rows for the target year FAILs",
+    bad.some(r => r.level === "FAIL" && /Round Two/.test(r.detail)) &&
+      clean.length === 1 && clean[0].level === "PASS" &&
+      noYear.length === 1 && noYear[0].level === "FAIL",
+    "bad=" + JSON.stringify(bad) + " clean=" + JSON.stringify(clean) + " noYear=" + JSON.stringify(noYear));
+}
+
+// EV5: checkPars — 18/18 positive-int pars PASSes; a missing hole FAILs
+// naming it; missing/non-int yards WARN only (yards optional per-hole).
+{
+  const full18 = Array.from({ length: 18 }, (_, i) => ({ hole: String(i + 1), par: "4", yards: String(300 + i) }));
+  const okAll = checkPars(full18);
+  const missingPar = checkPars(full18.slice(0, 17));
+  const missingYards = checkPars(full18.map((r, i) => (i === 0 ? { ...r, yards: "" } : r)));
+  check("EV5: checkPars — 18/18 positive-int pars PASSes; a missing hole's par FAILs naming the hole; missing/non-int yards WARN only",
+    okAll.length === 1 && okAll[0].level === "PASS" &&
+      missingPar.some(r => r.level === "FAIL" && /hole\(s\) 18\b/.test(r.detail)) &&
+      missingYards.some(r => r.level === "WARN" && /hole\(s\) 1\b/.test(r.detail)),
+    "okAll=" + JSON.stringify(okAll) + " missingPar=" + JSON.stringify(missingPar) + " missingYards=" + JSON.stringify(missingYards));
+}
+
+// EV6: checkScorer — score_endpoint absent FAILs; an https://script.google.com/...
+// URL PASSes; form_url absent is INFO only (optional by design, README:314);
+// form_url present but not forms.gle/docs.google.com/forms FAILs.
+{
+  const rAbsent = checkScorer({});
+  const rArmed = checkScorer({ score_endpoint: "https://script.google.com/macros/s/abc/exec" });
+  const rBadForm = checkScorer({ score_endpoint: "https://script.google.com/macros/s/abc/exec", form_url: "https://example.com/form" });
+  check("EV6: checkScorer — score_endpoint absent FAILs; a valid script.google.com URL PASSes; form_url absent is INFO only; form_url present but wrong-shape FAILs",
+    rAbsent.some(r => r.level === "FAIL" && /score_endpoint/.test(r.detail)) &&
+      rAbsent.some(r => r.level === "INFO" && /form_url/.test(r.detail)) &&
+      rArmed.some(r => r.level === "PASS" && /score_endpoint/.test(r.detail)) &&
+      rBadForm.some(r => r.level === "FAIL" && /form_url/.test(r.detail)),
+    "absent=" + JSON.stringify(rAbsent) + " armed=" + JSON.stringify(rArmed) + " badForm=" + JSON.stringify(rBadForm));
+}
+
+// EV7: checkField — a missing handicap on a target-year row WARNs; zero
+// target-year rows FAILs; non-target-year rows are never flagged.
+{
+  const rowsEV7 = [
+    { year: "2026", player: "Duck", handicap: "8" },
+    { year: "2026", player: "Hammer", handicap: "" },
+    { year: "2027", player: "Duck", handicap: "" },
+  ];
+  const rWarn = checkField(rowsEV7, "2026");
+  const rNoRows = checkField(rowsEV7, "2099");
+  check("EV7: checkField — a missing handicap on a target-year row WARNs; zero target-year rows FAILs; non-target-year rows (Next Year collections) are never flagged",
+    rWarn.some(r => r.level === "WARN" && /handicap/.test(r.detail)) &&
+      !rWarn.some(r => r.level === "FAIL") &&
+      rNoRows.length === 1 && rNoRows[0].level === "FAIL",
+    "warn=" + JSON.stringify(rWarn) + " noRows=" + JSON.stringify(rNoRows));
+}
+
+// EV8: checkAnnounce — zero rows is INFO only (first morning must not cry
+// wolf); the newest post older than the current event day, inside the
+// event window, WARNs; a >24h-future `when` WARNs naming the row.
+{
+  function fmtLocalEV8(ms) {
+    const d = new Date(ms);
+    const p = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  const nowEV8 = new Date(2026, 7, 15, 12, 0, 0).getTime();
+  const winStartEV8 = nowEV8 - 5 * 86400000, winEndEV8 = nowEV8 + 5 * 86400000;
+  const zero = checkAnnounce([], nowEV8, winStartEV8, winEndEV8);
+  const stale = checkAnnounce([{ when: "2026-08-10 09:00", message: "old" }], nowEV8, winStartEV8, winEndEV8);
+  const future = checkAnnounce([{ when: fmtLocalEV8(nowEV8 + 30 * 3600000), message: "future" }], nowEV8, winStartEV8, winEndEV8);
+  check("EV8: checkAnnounce — zero rows is INFO only; the newest post older than today inside the event window WARNs; a >24h-future `when` WARNs naming the row",
+    zero.length === 1 && zero[0].level === "INFO" &&
+      stale.some(r => r.level === "WARN" && /older than today/.test(r.detail)) &&
+      future.some(r => r.level === "WARN" && /future/.test(r.detail)),
+    "zero=" + JSON.stringify(zero) + " stale=" + JSON.stringify(stale) + " future=" + JSON.stringify(future));
+}
+
+// EV9: checkCrossTab — scores.team "Duck" with Field teams ["Jake","Greg"]
+// FAILs; calcutta.team mismatch FAILs; rooms.player "Pat" not in field and
+// not "guest:"-prefixed WARNs; "guest:Pat" never flags. (2026-08-15 live shape.)
+{
+  const fieldEV9 = [{ year: "2026", player: "Jake", team: "Jake" }, { year: "2026", player: "Greg", team: "Jake" }];
+  const rBad = checkCrossTab({
+    scores: [{ year: "2026", team: "Duck" }],
+    calcutta: [{ year: "2026", team: "Duck", owner: "Sully" }],
+    rooms: [{ year: "2026", player: "Pat" }],
+    field: fieldEV9,
+  }, "2026");
+  const rGuest = checkCrossTab({
+    scores: [], calcutta: [],
+    rooms: [{ year: "2026", player: "guest:Pat" }],
+    field: fieldEV9,
+  }, "2026");
+  check("EV9: checkCrossTab — scores.team not in Field FAILs; calcutta.team not in Field FAILs; rooms.player not in Field and not guest:-prefixed WARNs; guest:-prefixed never flags",
+    rBad.some(r => r.level === "FAIL" && /scores\.team "Duck"/.test(r.detail)) &&
+      rBad.some(r => r.level === "FAIL" && /calcutta\.team "Duck"/.test(r.detail)) &&
+      rBad.some(r => r.level === "WARN" && /rooms\.player "Pat"/.test(r.detail)) &&
+      rGuest.length === 1 && rGuest[0].level === "PASS",
+    "bad=" + JSON.stringify(rBad) + " guest=" + JSON.stringify(rGuest));
+}
+
+// EV10: checkFallbackParity — config FIRST_TEE vs Info first_tee drift
+// WARNs; a matching pair with the pinned empty-state string and no stale
+// facts-literal PASSes; a missing empty-state string FAILs; a hardcoded
+// "Aug \d" literal inside the facts block FAILs.
+{
+  const cfgTextEV10 = 'window.CONFIG = { FIRST_TEE: "2026-08-15T09:00:00-06:00" };';
+  const infoRowsMatch = [{ key: "first_tee", value: "2026-08-15T09:00:00-06:00" }];
+  const infoRowsDrift = [{ key: "first_tee", value: "2027-08-14T09:00:00-06:00" }];
+  const htmlGood = '<dl class="facts"><dd data-info="dates">—</dd></dl>Schedule not loaded yet — it lives in the sheet\'s Schedule tab.';
+  const htmlMissingEmptyState = '<dl class="facts"><dd data-info="dates">—</dd></dl>';
+  const htmlStaleLiteral = '<dl class="facts"><dd data-info="dates">Aug 14–16</dd></dl>Schedule not loaded yet — it lives in the sheet\'s Schedule tab.';
+  const drift = checkFallbackParity(cfgTextEV10, htmlGood, infoRowsDrift);
+  const clean = checkFallbackParity(cfgTextEV10, htmlGood, infoRowsMatch);
+  const missingEmpty = checkFallbackParity(cfgTextEV10, htmlMissingEmptyState, infoRowsMatch);
+  const staleFact = checkFallbackParity(cfgTextEV10, htmlStaleLiteral, infoRowsMatch);
+  check("EV10: checkFallbackParity — config/Info first_tee drift WARNs; a clean matching pair PASSes; a missing pinned empty-state string FAILs; a hardcoded 'Aug \\d' literal in the facts block FAILs",
+    drift.some(r => r.level === "WARN" && /FIRST_TEE/.test(r.detail)) &&
+      clean.length === 1 && clean[0].level === "PASS" &&
+      missingEmpty.some(r => r.level === "FAIL" && /empty-state/.test(r.detail)) &&
+      staleFact.some(r => r.level === "FAIL" && /Aug/.test(r.detail)),
+    "drift=" + JSON.stringify(drift) + " clean=" + JSON.stringify(clean) +
+      " missingEmpty=" + JSON.stringify(missingEmpty) + " staleFact=" + JSON.stringify(staleFact));
 }
 
 /* ---------------------------------------------------------------------
