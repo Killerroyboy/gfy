@@ -96,9 +96,19 @@ function parseWhen(v){
   return dt.getTime();
 }
 
-export function checkSchedule(rows, firstTee, datesProse, now){
+export function checkSchedule(rows, firstTee, datesProse, targetYear){
   const tee=teeMidnight(firstTee);
   if(!tee) return [{level:"FAIL", detail:`schedule coverage: first_tee unparseable ("${firstTee}") — cannot derive the event window`}];
+
+  // Filter to targetYear BEFORE both coverage and per-row resolution — mirrors
+  // index.html's forYear (index.html:~1539) and the other row-reading checks
+  // (checkPairings, checkField, checkCrossTab). Without this, a leftover
+  // prior-year row can falsely satisfy coverage (Now/Next never reads it —
+  // the live site renders schedule through forYear too) and an archive-year
+  // row with a garbage label can falsely FAIL resolution even though
+  // Now/Next never shows it. Original array index is preserved for the
+  // per-row "row N" detail so it still names the true CSV row.
+  const yr=(rows||[]).map((r,i)=>({r,i})).filter(({r})=>String(r.year)===String(targetYear));
 
   // Event-day window for COVERAGE: Info "dates" prose ("Aug 14–16", in
   // first_tee's month) when it parses; otherwise first_tee ±1 day, with an
@@ -117,7 +127,7 @@ export function checkSchedule(rows, firstTee, datesProse, now){
   const byDay=byWeekday(tee.ms);
   const out=[{level:"INFO", detail:`schedule coverage window basis: ${basis}`}];
   const rowMids=new Set();
-  (rows||[]).forEach((r,i)=>{
+  yr.forEach(({r,i})=>{
     const wd=String(r.label||"").trim().toLowerCase();
     const mid=byDay[wd];
     const clk=parseClock(r.time);
@@ -365,7 +375,7 @@ export async function main(){
 
   // (b) schedule coverage
   const sched=need("schedule", "schedule coverage");
-  if(sched) push(checkSchedule(sched.rows, effectiveFirstTee, info.dates, now));
+  if(sched) push(checkSchedule(sched.rows, effectiveFirstTee, info.dates, targetYear));
 
   // (c) pairings
   const pairings=need("pairings", "pairings");

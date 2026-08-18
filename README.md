@@ -474,11 +474,13 @@ its own `HH:MM` and the later post reliably lands on top and reliably marks
 itself unseen ahead of the earlier one.
 
 **The future-guard:** a `when` more than 24 hours out never lights up the
-unseen banner or advances anyone's watermark — it still appears in the Home
-Updates list, just quietly, so a typo'd year or a pre-written post scheduled
-too far ahead can't ping every phone that opens the site. If a post you just
-added isn't showing up as new, check the `when` column before anything
-else — a stray future date is the usual cause.
+unseen banner or advances anyone's watermark — it still appears in the
+Updates list, at the top, since it sorts by its claimed time; it just never
+triggers the banner. That means a typo'd year or a pre-written post scheduled
+too far ahead can't ping every phone that opens the site, but it also means
+a future-dated post is loudly visible at the top of the list even though it
+never banners — check the `when` column if a post you just added isn't
+showing up as new, or is sitting at the top when it shouldn't be.
 
 **The habit:** any time you edit Schedule or Pairings mid-weekend — a
 pushed tee time, a moved round, a rain delay — post an announcement in the
@@ -514,11 +516,13 @@ Each line comes back as one of three levels:
 - **FAIL** — blocks. The preflight exits 1 if any FAIL is present, so it's
   safe to script a "go/no-go" off it. Examples: an unparseable `first_tee`,
   a schedule row Now/Next could never resolve, an unarmed scorer endpoint,
-  a Scores/Calcutta/Rooms row that doesn't match any Field team or player —
+  a Scores or Calcutta row whose team doesn't match any Field team —
   anything that would show up broken on the live site.
 - **WARN** — advisory, doesn't block, worth a look. Examples: a `first_tee`
   that looks like last year's date, a Field row missing a handicap, an
-  announcement dated more than 24h out.
+  announcement dated more than 24h out, a Rooms row whose player doesn't
+  match any Field player (skipped when the cell is empty or `guest:`-prefixed —
+  Rooms is allowed to hold names Field doesn't track).
 - **INFO** — context, not a problem. Examples: which schedule-coverage basis
   it used, the Announce tab not being wired up yet, `form_url` intentionally
   left unset.

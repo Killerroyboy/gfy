@@ -5653,22 +5653,59 @@ const nowW = Date.now();
 // resolvable rows PASSes alongside an INFO line naming the window basis.
 {
   const ftEV3 = "2026-08-15T09:00:00-06:00"; // Fri/Sat/Sun = Aug 14/15/16
-  const nowEV3 = Date.UTC(2026, 7, 10);
+  const yearEV3 = "2026";
   const missing = checkSchedule(
-    [{ label: "Friday", time: "3:00 pm" }, { label: "Saturday", time: "9:00 am" }],
-    ftEV3, "Aug 14–16", nowEV3);
+    [{ year: "2026", label: "Friday", time: "3:00 pm" }, { year: "2026", label: "Saturday", time: "9:00 am" }],
+    ftEV3, "Aug 14–16", yearEV3);
   const badLabel = checkSchedule(
-    [{ label: "Friday", time: "3:00 pm" }, { label: "Saturday", time: "9:00 am" }, { label: "Blursday", time: "9:00 am" }],
-    ftEV3, "Aug 14–16", nowEV3);
+    [{ year: "2026", label: "Friday", time: "3:00 pm" }, { year: "2026", label: "Saturday", time: "9:00 am" }, { year: "2026", label: "Blursday", time: "9:00 am" }],
+    ftEV3, "Aug 14–16", yearEV3);
   const clean = checkSchedule(
-    [{ label: "Friday", time: "3:00 pm" }, { label: "Saturday", time: "9:00 am" }, { label: "Sunday", time: "8:30 am" }],
-    ftEV3, "Aug 14–16", nowEV3);
+    [{ year: "2026", label: "Friday", time: "3:00 pm" }, { year: "2026", label: "Saturday", time: "9:00 am" }, { year: "2026", label: "Sunday", time: "8:30 am" }],
+    ftEV3, "Aug 14–16", yearEV3);
   check("EV3: checkSchedule — a missing event day FAILs naming the day; an unresolvable row label FAILs naming the row; full coverage PASSes with an INFO line naming the window basis",
     missing.some(r => r.level === "FAIL" && r.detail.includes("2026-08-16")) &&
       badLabel.some(r => r.level === "FAIL" && r.detail.includes("row 4") && r.detail.includes("Blursday")) &&
       clean.some(r => r.level === "INFO" && /basis/.test(r.detail)) &&
       clean.some(r => r.level === "PASS"),
     "missing=" + JSON.stringify(missing) + " badLabel=" + JSON.stringify(badLabel) + " clean=" + JSON.stringify(clean));
+}
+
+// EV3b: checkSchedule — a resolvable row from the WRONG year must not
+// satisfy target-year coverage (year-rollover false-PASS class from the
+// whole-branch review: leftover prior-year rows must not paper over a
+// missing current-year day, matching forYear's strict year filter).
+{
+  const ftEV3b = "2026-08-15T09:00:00-06:00"; // Fri/Sat/Sun = Aug 14/15/16
+  const yearEV3b = "2026";
+  const wrongYear = checkSchedule(
+    [{ year: "2026", label: "Friday", time: "3:00 pm" },
+     { year: "2026", label: "Saturday", time: "9:00 am" },
+     { year: "2025", label: "Sunday", time: "8:30 am" }], // last year's Sunday row — resolvable, but wrong year
+    ftEV3b, "Aug 14–16", yearEV3b);
+  check("EV3b: checkSchedule — a resolvable row from a prior year does NOT satisfy target-year coverage; the missing day still FAILs even though a same-label/time row exists under the wrong year",
+    wrongYear.some(r => r.level === "FAIL" && r.detail.includes("2026-08-16")) &&
+      !wrongYear.some(r => r.level === "FAIL" && /Sunday/.test(r.detail)),
+    "wrongYear=" + JSON.stringify(wrongYear));
+}
+
+// EV3c: checkSchedule — an archive-year row with a garbage label/time must
+// NOT FAIL the per-row resolution check (Now/Next never reads a
+// non-target-year row, so it should never false-FAIL the label/time
+// resolution class either); target-year coverage still PASSes.
+{
+  const ftEV3c = "2026-08-15T09:00:00-06:00"; // Fri/Sat/Sun = Aug 14/15/16
+  const yearEV3c = "2026";
+  const archiveGarbage = checkSchedule(
+    [{ year: "2026", label: "Friday", time: "3:00 pm" },
+     { year: "2026", label: "Saturday", time: "9:00 am" },
+     { year: "2026", label: "Sunday", time: "8:30 am" },
+     { year: "2019", label: "Whenevs", time: "not-a-time" }], // archive-year garbage row
+    ftEV3c, "Aug 14–16", yearEV3c);
+  check("EV3c: checkSchedule — an archive-year row with an unresolvable label/time does not FAIL (filtered out before resolution logic runs); full target-year coverage still PASSes",
+    !archiveGarbage.some(r => r.level === "FAIL") &&
+      archiveGarbage.some(r => r.level === "PASS"),
+    "archiveGarbage=" + JSON.stringify(archiveGarbage));
 }
 
 // EV4: checkPairings — a round with no timed row FAILs naming the round;
