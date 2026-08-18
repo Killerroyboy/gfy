@@ -5516,13 +5516,16 @@ const nowW = Date.now();
     `live=${JSON.stringify(liveTextX55)} fail=${JSON.stringify(failTextX55)} off=${JSON.stringify(offTextX55b)}`);
 }
 
-// X57: §24 C-FALLBACK — hero sub + the .ics builder's LOCATION line compose
-// from Info keys (heroLine()) instead of carrying a hardcoded fact that can
-// outlive its year. Normal fixtures (course=Meadow Creek, lodging=Bear Creek
-// Lodge) render the full sentence and the full LOCATION; an Info fetch with
-// both keys missing (still a valid row set — just without those two) falls
-// back to the neutral sentence and the bare "McCall, Idaho" LOCATION, no
-// dangling prefix/comma.
+// X57: §24 C-FALLBACK — hero sub + the .ics builder's LOCATION/DESCRIPTION
+// lines compose from Info keys (heroLine()) instead of carrying a hardcoded
+// fact that can outlive its year. Normal fixtures (course=Meadow Creek,
+// lodging=Bear Creek Lodge) render the full sentence and the full LOCATION;
+// an Info fetch with both keys missing (still a valid row set — just
+// without those two) falls back to the neutral sentence, the bare
+// "McCall, Idaho" LOCATION (no dangling prefix/comma), and the neutral
+// DESCRIPTION. Review round 1 additions: (a) DESCRIPTION pin on the keyless
+// run, and (b) icsEsc() — a lodging value carrying a comma must come out
+// backslash-escaped per RFC 5545 TEXT, not corrupt the LOCATION field.
 {
   const domX57a = makeDom("");
   const docX57a = domX57a.window.document;
@@ -5552,13 +5555,50 @@ const nowW = Date.now();
   const icsTextX57b = capturedBlobX57b ? await capturedBlobX57b.text() : "";
   domX57b.window.close();
 
-  check("X57: §24 C-FALLBACK — hero sub + .ics LOCATION compose from Info via heroLine(): normal fixtures (course=Meadow Creek, lodging=Bear Creek Lodge) render the full hero sentence and the full LOCATION line; an Info fetch missing both course and lodging keys falls back to the neutral hero sentence and the bare LOCATION (no dangling comma/prefix)",
+  // (c) review round 1 / icsEsc: lodging value carries a comma (CSV-quoted
+  // so parseCSV keeps it as one field) — the .ics LOCATION line must carry
+  // it backslash-escaped, not raw (which would split the TEXT field).
+  const infoLodgingCommaX57 = FIXTURES.info.split(/\r?\n/)
+    .map(l => l.startsWith("lodging,") ? 'lodging,"Bear Creek Lodge, Unit 4"' : l).join("\n");
+  const domX57c = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoLodgingCommaX57 }),
+  }));
+  const docX57c = domX57c.window.document;
+  await until(() => docX57c.querySelectorAll("#lbBody .lb-row").length > 0);
+
+  let capturedBlobX57c = null;
+  domX57c.window.URL.createObjectURL = (blob) => { capturedBlobX57c = blob; return "blob:captured-x57c"; };
+  domX57c.window.URL.revokeObjectURL = () => {};
+  docX57c.querySelector("#icsBtn").click();
+  const icsTextX57c = capturedBlobX57c ? await capturedBlobX57c.text() : "";
+  domX57c.window.close();
+
+  check("X57: §24 C-FALLBACK — hero sub + .ics LOCATION/DESCRIPTION compose from Info via heroLine(): normal fixtures (course=Meadow Creek, lodging=Bear Creek Lodge) render the full hero sentence and the full LOCATION line; an Info fetch missing both course and lodging keys falls back to the neutral hero sentence, the bare LOCATION (no dangling comma/prefix), and the pinned neutral DESCRIPTION; a lodging value containing a comma (Bear Creek Lodge, Unit 4) comes out of icsEsc() backslash-escaped in LOCATION, not raw",
     heroX57a === "Two rounds at Meadow Creek. Two nights at Bear Creek Lodge. One trophy nobody wants to explain."
       && icsTextX57a.includes("LOCATION:Bear Creek Lodge, McCall, Idaho")
       && heroX57b === "Two rounds. Two nights. One trophy nobody wants to explain."
-      && icsTextX57b.includes("LOCATION:McCall, Idaho") && !icsTextX57b.includes("LOCATION:Bear Creek Lodge"),
+      && icsTextX57b.includes("LOCATION:McCall, Idaho") && !icsTextX57b.includes("LOCATION:Bear Creek Lodge")
+      && icsTextX57b.includes("DESCRIPTION:Two rounds. Two nights.")
+      && icsTextX57c.includes("Bear Creek Lodge\\, Unit 4"),
     "heroA=" + JSON.stringify(heroX57a) + " icsA=" + JSON.stringify(icsTextX57a) +
-      " heroB=" + JSON.stringify(heroX57b) + " icsB=" + JSON.stringify(icsTextX57b));
+      " heroB=" + JSON.stringify(heroX57b) + " icsB=" + JSON.stringify(icsTextX57b) +
+      " icsC=" + JSON.stringify(icsTextX57c));
+}
+
+// X58: §24 C-FALLBACK (review round 1) — the STATIC seed markup inside
+// #scheduleBody (what paints before renderSchedule() ever runs, i.e. every
+// page load until the schedule fetch resolves) must not carry last year's
+// hardcoded fake weekend either. Source-level check (raw index.html text,
+// not the rendered DOM): zero occurrences of the old "Steaks on the lodge
+// grill" relic anywhere in the file, and the #scheduleBody seed region
+// itself (pre-JS) carries the pinned honest empty-state string verbatim.
+{
+  const steaksCountX58 = (html.match(/Steaks on the lodge grill/g) || []).length;
+  const schedBodySrcX58 = (html.match(/<div id="scheduleBody">([\s\S]*?)<\/div>/) || [, ""])[1];
+  check("X58: §24 C-FALLBACK — index.html source contains zero occurrences of the old hardcoded 'Steaks on the lodge grill' fact, and the static #scheduleBody seed markup (pre-JS, first paint) carries the pinned honest empty-state string verbatim",
+    steaksCountX58 === 0
+      && schedBodySrcX58.includes("Schedule not loaded yet — it lives in the sheet's Schedule tab."),
+    "steaksCount=" + steaksCountX58 + " schedBodySrc=" + JSON.stringify(schedBodySrcX58));
 }
 
 /* ---------------------------------------------------------------------

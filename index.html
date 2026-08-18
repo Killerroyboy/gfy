@@ -145,7 +145,7 @@
   .lb-thru{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
   .lb-num{text-align:right;font-variant-numeric:tabular-nums;font-size:.95rem;color:var(--sage)}
   .lb-tot{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
-  .lb-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
+  .lb-empty,.sched-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
   /* SC-PAR-LABEL (§20 amendment 2): courseMap() null means the second
      .lb-tot column is honestly relabeled "Total" (renderLeaderboard) — at
      widths where the SEPARATE .lb-total column also shows, that would put
@@ -1070,24 +1070,11 @@
     <h2>The Card</h2>
     <p class="lede">Everything is optional except the tee times. Show up late and you are playing from wherever the group is.</p>
     <div id="scheduleBody">
-      <div class="day">
-        <div class="day-head"><strong>Day One</strong><span>Friday</span></div>
-        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Check in, claim a bed, unload the coolers</div><div class="slot-where">Bear Creek Lodge</div></div>
-        <div class="slot"><div class="slot-time">5:30 pm</div><div class="slot-what">Draw for pairings and settle the handicaps</div><div class="slot-where">Lodge deck</div></div>
-        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Dinner, cards, bad decisions</div><div class="slot-where">Lodge</div></div>
-      </div>
-      <div class="day">
-        <div class="day-head"><strong>Day Two</strong><span>Saturday</span></div>
-        <div class="slot"><div class="slot-time">7:30 am</div><div class="slot-what">Coffee and quiet regret</div><div class="slot-where">Lodge</div></div>
-        <div class="slot"><div class="slot-time">9:00 am</div><div class="slot-what">Round One — shotgun start</div><div class="slot-where">Meadow Creek</div></div>
-        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Steaks on the lodge grill</div><div class="slot-where">Bear Creek Lodge</div></div>
-      </div>
-      <div class="day">
-        <div class="day-head"><strong>Day Three</strong><span>Sunday</span></div>
-        <div class="slot"><div class="slot-time">8:30 am</div><div class="slot-what">Round Two — leaders out last</div><div class="slot-where">Meadow Creek</div></div>
-        <div class="slot"><div class="slot-time">2:00 pm</div><div class="slot-what">Presentation of The Bird</div><div class="slot-where">18th green</div></div>
-        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Everyone goes home</div><div class="slot-where">GFY</div></div>
-      </div>
+      <!-- §24 C-FALLBACK (review round 1): this STATIC seed markup carried
+           the same hardcoded sample weekend renderSchedule()'s JS fallback
+           used to — except this copy painted it from first paint until the
+           schedule fetch resolved, on every page load. Same S12 class. -->
+      <p class="sched-empty">Schedule not loaded yet — it lives in the sheet's Schedule tab.</p>
     </div>
     <p class="sync" id="schedSync"></p>
   </div>
@@ -3129,6 +3116,13 @@ function tick(){
 /* ---------- calendar ---------- */
 const pad=n=>String(n).padStart(2,"0");
 const stamp=d=>d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+"T"+pad(d.getUTCHours())+pad(d.getUTCMinutes())+"00Z";
+/* §24 C-FALLBACK (review round 1): sheet-sourced values (INFO.lodging,
+   INFO.course via heroLine()) flow into the .ics unescaped otherwise. RFC
+   5545 TEXT requires backslash/semicolon/comma/newline escaping — a lodging
+   name with a comma would otherwise corrupt the property's field
+   boundaries. The pre-existing static ", McCall, Idaho" commas are not
+   sheet-sourced and are left as-is (accepted residual). */
+const icsEsc=s=>String(s).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\r?\n/g,"\\n");
 $("#icsBtn").addEventListener("click",()=>{
   const start=new Date(CONFIG.FIRST_TEE);
   if(isNaN(start)) return;
@@ -3136,8 +3130,8 @@ $("#icsBtn").addEventListener("click",()=>{
     "UID:gfy-"+start.getFullYear()+"@mccall","DTSTAMP:"+stamp(new Date()),
     "DTSTART:"+stamp(new Date(start.getTime()-18*3600000)),
     "DTEND:"+stamp(new Date(start.getTime()+30*3600000)),
-    "SUMMARY:GFY — McCall, Idaho","LOCATION:"+(INFO.lodging?INFO.lodging+", ":"")+"McCall, Idaho",
-    "DESCRIPTION:"+heroLine().replace(/ One trophy.*$/,""),
+    "SUMMARY:GFY — McCall, Idaho","LOCATION:"+(INFO.lodging?icsEsc(INFO.lodging)+", ":"")+"McCall, Idaho",
+    "DESCRIPTION:"+icsEsc(heroLine().replace(/ One trophy.*$/,"")),
     "END:VEVENT","END:VCALENDAR"].join("\r\n");
   const url=URL.createObjectURL(new Blob([ics],{type:"text/calendar"}));
   const a=document.createElement("a"); a.href=url; a.download="gfy.ics"; a.click();
