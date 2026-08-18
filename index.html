@@ -904,7 +904,7 @@
     <p class="expansion rise d2">Go Fuck Yourself</p>
     <div id="countdown" class="countdown rise d3" aria-live="polite"></div>
     <hr class="hero-rule rise d3">
-    <p class="hero-sub rise d3">Two rounds at Meadow Creek. Two nights at Bear Creek Lodge. One trophy nobody wants to explain.</p>
+    <p class="hero-sub rise d3" id="heroSub">Two rounds. Two nights. One trophy nobody wants to explain.</p>
 
     <div class="hero-actions rise d4">
       <button class="btn" id="icsBtn" type="button">Add to calendar</button>
@@ -916,10 +916,10 @@
     <div id="homeSync" class="sync"></div>
 
     <dl class="facts rise d4">
-      <div class="fact"><dt>Dates</dt><dd data-info="dates">Aug 14–16</dd></div>
-      <div class="fact"><dt>Course</dt><dd data-info="course">Meadow Creek</dd></div>
-      <div class="fact"><dt>Lodging</dt><dd data-info="lodging">Bear Creek Lodge</dd></div>
-      <div class="fact"><dt>Format</dt><dd data-info="format">2-day scramble</dd></div>
+      <div class="fact"><dt>Dates</dt><dd data-info="dates">—</dd></div>
+      <div class="fact"><dt>Course</dt><dd data-info="course">—</dd></div>
+      <div class="fact"><dt>Lodging</dt><dd data-info="lodging">—</dd></div>
+      <div class="fact"><dt>Format</dt><dd data-info="format">—</dd></div>
     </dl>
 
     <section id="annUpdates"></section>
@@ -1664,6 +1664,15 @@ function renderInfo(rows){
     $("#crestEst").textContent="EST. "+map.est_year;
     $("#footNote").textContent="McCall, Idaho · Est. "+map.est_year;
   }
+  const hero=$("#heroSub");
+  if(hero) hero.textContent=heroLine();
+}
+
+/* §24 C-FALLBACK: compose from Info keys; neutral when absent — a hardcoded fact
+   that can outlive its year is the S12 class. */
+function heroLine(){
+  const c=INFO.course, l=INFO.lodging;
+  return `Two rounds${c?" at "+c:""}. Two nights${l?" at "+l:""}. One trophy nobody wants to explain.`;
 }
 
 function renderYears(){
@@ -2881,25 +2890,10 @@ function renderShame(){
 function renderSchedule(){
   const rows=forYear(STATE.data.schedule,STATE.year).filter(r=>r.event);
   if(!rows.length){
-    $("#scheduleBody").innerHTML=`
-      <div class="day">
-        <div class="day-head"><strong>Day One</strong><span>Friday</span></div>
-        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Check in, claim a bed, unload the coolers</div><div class="slot-where">Bear Creek Lodge</div></div>
-        <div class="slot"><div class="slot-time">5:30 pm</div><div class="slot-what">Draw for pairings and settle the handicaps</div><div class="slot-where">Lodge deck</div></div>
-        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Dinner, cards, bad decisions</div><div class="slot-where">Lodge</div></div>
-      </div>
-      <div class="day">
-        <div class="day-head"><strong>Day Two</strong><span>Saturday</span></div>
-        <div class="slot"><div class="slot-time">7:30 am</div><div class="slot-what">Coffee and quiet regret</div><div class="slot-where">Lodge</div></div>
-        <div class="slot"><div class="slot-time">9:00 am</div><div class="slot-what">Round One — shotgun start</div><div class="slot-where">Meadow Creek</div></div>
-        <div class="slot"><div class="slot-time">7:00 pm</div><div class="slot-what">Steaks on the lodge grill</div><div class="slot-where">Bear Creek Lodge</div></div>
-      </div>
-      <div class="day">
-        <div class="day-head"><strong>Day Three</strong><span>Sunday</span></div>
-        <div class="slot"><div class="slot-time">8:30 am</div><div class="slot-what">Round Two — leaders out last</div><div class="slot-where">Meadow Creek</div></div>
-        <div class="slot"><div class="slot-time">2:00 pm</div><div class="slot-what">Presentation of The Bird</div><div class="slot-where">18th green</div></div>
-        <div class="slot"><div class="slot-time">3:00 pm</div><div class="slot-what">Everyone goes home</div><div class="slot-where">GFY</div></div>
-      </div>`;
+    // §24 C-FALLBACK: the old hardcoded sample weekend here showed LAST
+    // YEAR's times as fact whenever the sheet was unreachable — same S12
+    // class as a mislabeled number.
+    $("#scheduleBody").innerHTML='<p class="sched-empty">Schedule not loaded yet — it lives in the sheet\'s Schedule tab.</p>';
     return;
   }
   const days=[];
@@ -3142,8 +3136,8 @@ $("#icsBtn").addEventListener("click",()=>{
     "UID:gfy-"+start.getFullYear()+"@mccall","DTSTAMP:"+stamp(new Date()),
     "DTSTART:"+stamp(new Date(start.getTime()-18*3600000)),
     "DTEND:"+stamp(new Date(start.getTime()+30*3600000)),
-    "SUMMARY:GFY — McCall, Idaho","LOCATION:Bear Creek Lodge, McCall, Idaho",
-    "DESCRIPTION:Two rounds at Meadow Creek. Two nights at Bear Creek Lodge.",
+    "SUMMARY:GFY — McCall, Idaho","LOCATION:"+(INFO.lodging?INFO.lodging+", ":"")+"McCall, Idaho",
+    "DESCRIPTION:"+heroLine().replace(/ One trophy.*$/,""),
     "END:VEVENT","END:VCALENDAR"].join("\r\n");
   const url=URL.createObjectURL(new Blob([ics],{type:"text/calendar"}));
   const a=document.createElement("a"); a.href=url; a.download="gfy.ics"; a.click();

@@ -1581,6 +1581,20 @@ dom.window.close();
   check("Z4: unconfigured deploy — all four freshness stamps are empty (no fabricated Offline text)",
     stampsZ.every(s => s === ""), JSON.stringify(stampsZ));
 
+  // X56: §24 C-FALLBACK — the old renderSchedule() empty branch printed a
+  // hardcoded sample weekend (LAST YEAR's actual times) whenever the sheet
+  // was unreachable, same S12 class as a mislabeled number. Unconfigured
+  // deploy (this Z harness — empty PUB_ID/GID, every fetch rejecting) is the
+  // sharpest proof: nothing was ever fetched, so any fact on screen is fake.
+  const schedBodyTextZ = (zdoc.querySelector("#scheduleBody")?.textContent || "").trim();
+  const factsDdZ = Array.from(zdoc.querySelectorAll("dl.facts dd[data-info]"))
+    .map(d => (d.textContent || "").trim());
+  check("X56: §24 C-FALLBACK — unconfigured deploy: #scheduleBody shows the honest empty-state message verbatim (no hardcoded fake weekend, no 'Steaks'/'9:00 am' relic), and every facts <dd> reads '—' (no stale year-baked fact)",
+    schedBodyTextZ === "Schedule not loaded yet — it lives in the sheet's Schedule tab."
+      && !schedBodyTextZ.includes("Steaks") && !schedBodyTextZ.includes("9:00 am")
+      && factsDdZ.length === 4 && factsDdZ.every(t => t === "—"),
+    "sched=" + JSON.stringify(schedBodyTextZ) + " dds=" + JSON.stringify(factsDdZ));
+
   domZ.window.close();
 }
 
@@ -5500,6 +5514,51 @@ const nowW = Date.now();
   check("X55: §24 H-FRESH — event-phase #homeSync reads 'Checked ‹h:mm› · the sheet publishes a few minutes behind edits' after a live load (h:mm = fmtClock of the scores tab's successful fetch); a subsequent failed refresh flips it to 'Couldn't refresh — showing data from ‹same h:mm›' (pull()'s cache-served at never advances the stamp); off-phase (dynInfo(+10)) #homeSync is empty",
     !!liveMatchX55 && failMatchX55 && offTextX55b === "",
     `live=${JSON.stringify(liveTextX55)} fail=${JSON.stringify(failTextX55)} off=${JSON.stringify(offTextX55b)}`);
+}
+
+// X57: §24 C-FALLBACK — hero sub + the .ics builder's LOCATION line compose
+// from Info keys (heroLine()) instead of carrying a hardcoded fact that can
+// outlive its year. Normal fixtures (course=Meadow Creek, lodging=Bear Creek
+// Lodge) render the full sentence and the full LOCATION; an Info fetch with
+// both keys missing (still a valid row set — just without those two) falls
+// back to the neutral sentence and the bare "McCall, Idaho" LOCATION, no
+// dangling prefix/comma.
+{
+  const domX57a = makeDom("");
+  const docX57a = domX57a.window.document;
+  await until(() => docX57a.querySelectorAll("#lbBody .lb-row").length > 0);
+  const heroX57a = (docX57a.querySelector("#heroSub")?.textContent || "").trim();
+
+  let capturedBlobX57a = null;
+  domX57a.window.URL.createObjectURL = (blob) => { capturedBlobX57a = blob; return "blob:captured-x57a"; };
+  domX57a.window.URL.revokeObjectURL = () => {};
+  docX57a.querySelector("#icsBtn").click();
+  const icsTextX57a = capturedBlobX57a ? await capturedBlobX57a.text() : "";
+  domX57a.window.close();
+
+  const infoNoCourseLodgingX57 = FIXTURES.info.split(/\r?\n/)
+    .filter(l => !l.startsWith("course,") && !l.startsWith("lodging,")).join("\n");
+  const domX57b = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoNoCourseLodgingX57 }),
+  }));
+  const docX57b = domX57b.window.document;
+  await until(() => docX57b.querySelectorAll("#lbBody .lb-row").length > 0);
+  const heroX57b = (docX57b.querySelector("#heroSub")?.textContent || "").trim();
+
+  let capturedBlobX57b = null;
+  domX57b.window.URL.createObjectURL = (blob) => { capturedBlobX57b = blob; return "blob:captured-x57b"; };
+  domX57b.window.URL.revokeObjectURL = () => {};
+  docX57b.querySelector("#icsBtn").click();
+  const icsTextX57b = capturedBlobX57b ? await capturedBlobX57b.text() : "";
+  domX57b.window.close();
+
+  check("X57: §24 C-FALLBACK — hero sub + .ics LOCATION compose from Info via heroLine(): normal fixtures (course=Meadow Creek, lodging=Bear Creek Lodge) render the full hero sentence and the full LOCATION line; an Info fetch missing both course and lodging keys falls back to the neutral hero sentence and the bare LOCATION (no dangling comma/prefix)",
+    heroX57a === "Two rounds at Meadow Creek. Two nights at Bear Creek Lodge. One trophy nobody wants to explain."
+      && icsTextX57a.includes("LOCATION:Bear Creek Lodge, McCall, Idaho")
+      && heroX57b === "Two rounds. Two nights. One trophy nobody wants to explain."
+      && icsTextX57b.includes("LOCATION:McCall, Idaho") && !icsTextX57b.includes("LOCATION:Bear Creek Lodge"),
+    "heroA=" + JSON.stringify(heroX57a) + " icsA=" + JSON.stringify(icsTextX57a) +
+      " heroB=" + JSON.stringify(heroX57b) + " icsB=" + JSON.stringify(icsTextX57b));
 }
 
 /* ---------------------------------------------------------------------
