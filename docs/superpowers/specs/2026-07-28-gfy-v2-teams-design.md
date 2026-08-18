@@ -854,7 +854,11 @@ future-guard, cross-tab referential preflight check, static jump chips (matching
   advance the stamp. Verbatim: `Checked ‹h:mm› · the sheet publishes a few minutes behind
   edits`; while fetches are failing: `Couldn't refresh — showing data from ‹h:mm›` (the last
   SUCCESS time); the moment a retry succeeds, the stamp returns to the fresh form with the
-  new time. Existing cache-honesty rules unchanged.
+  new time. Existing cache-honesty rules unchanged. **Amendment (task 4):** H-FRESH's board
+  half is carried by the EXISTING `#lbSync` stamp (index.html:3273 `stampFor` — already
+  honest: `Updated Xm ago` / `Saved copy from … — err`); the §24 verbatim copy renders as
+  `#homeSync` on event-phase Home only. Two stamps on the board would duplicate; replacing
+  `#lbSync`'s copy would churn D1/D4's frozen assertions for zero honesty gain.
 
 ### C — Fallback truth (new in rev 2: no year-stale hardcoded facts, ever)
 

@@ -5412,6 +5412,96 @@ const nowW = Date.now();
       " offPhaseEmpty=" + offPhaseEmptyX53b + " nn=" + JSON.stringify(nnHtmlX53a).slice(0, 300));
 }
 
+// X54: §24 H-REFRESH — the visibility seam. jsdom's own `document.hidden`
+// defaults to true (a "prerender" tab) so the bootstrap's FIRST load() call
+// (unconditional, not gated by pageVisible()) still fires regardless — only
+// the periodic/wake path goes through the seam. refreshTick is a top-level
+// function declaration in index.html's inline script, hence a `window`
+// property the suite can call directly (no synthetic timer-advance needed).
+// Fetches are counted by wrapping the fixture stub passed to makeDom.
+{
+  let fetchCountX54 = 0;
+  const countingFetchX54 = (url) => { fetchCountX54++; return fakeFetch(url); };
+  const domX54 = makeDom("", countingFetchX54);
+  const docX54 = domX54.window.document;
+  await until(() => docX54.querySelectorAll("#lbBody .lb-row").length > 0);
+  await settle(200); // let the bootstrap load()'s full cycle land before capturing the baseline count
+  const afterInitialLoadX54 = fetchCountX54; // unconditional first load(): TABS.length fetches
+
+  Object.defineProperty(docX54, "hidden", { configurable: true, get: () => true });
+  domX54.window.refreshTick();
+  await settle(300); // give a (buggy) hidden-tab fetch every chance to land before asserting there isn't one
+  const afterHiddenTickX54 = fetchCountX54;
+
+  Object.defineProperty(docX54, "hidden", { configurable: true, get: () => false });
+  docX54.dispatchEvent(new domX54.window.Event("visibilitychange"));
+  // settle, not a tight until(): fetchCountX54 jumps synchronously the instant
+  // load()'s Promise.all(TABS.map(pull)) fires each pull()'s first fetch() call,
+  // long before that load() cycle's own await-chain (fetch->res.text()->...->
+  // paint()) actually finishes — a count-based until() would resolve mid-cycle
+  // and let a later close() race a still-in-flight paint() (observed: crashes
+  // on a post-close `document` inside renderInfo). settle() gives the WHOLE
+  // cycle real wall-clock time to land before we read the counter or move on.
+  await settle(300);
+  const afterWakeX54 = fetchCountX54; // wake fires load() immediately, no 60s wait
+
+  domX54.window.refreshTick();
+  await settle(300); // same reasoning: let this tick's full load() cycle finish
+  const afterTickX54 = fetchCountX54; // a subsequent visible refreshTick() still loads
+
+  await settle(300); // drain any straggler before closing — close() nulls `document` under an in-flight paint()
+  domX54.window.close();
+
+  check("X54: §24 H-REFRESH — refreshTick() is a no-op while document.hidden is true (fetch count unchanged), flipping hidden to false and dispatching visibilitychange fires load() immediately (wake = instant freshness, no 60s wait), and a further refreshTick() while visible loads again (the retained cadence path)",
+    afterHiddenTickX54 === afterInitialLoadX54 && afterWakeX54 > afterHiddenTickX54 && afterTickX54 > afterWakeX54,
+    `initial=${afterInitialLoadX54} afterHiddenTick=${afterHiddenTickX54} afterWake=${afterWakeX54} afterTick=${afterTickX54}`);
+}
+
+// X55: §24 H-FRESH — event-phase Home stamp. eventStampFor reads pull()'s
+// scores-tab result: live:true+at ⇒ the "Checked" honesty copy; a failed
+// re-load falls to cacheTab's cache-served result (live:false, at = the
+// cache's last-success write time — pull()'s own honesty rule, not
+// re-derived here) ⇒ "Couldn't refresh" with the SAME h:mm, since a backoff
+// poll can never advance the stamp. The h:mm itself is real-clock-dependent
+// so it's asserted by shape, then by byte-identity across the two states
+// (proves the failed fetch didn't silently re-stamp); the fixed copy around
+// it is asserted byte-exact. Off phase (dynInfo(+10)) #homeSync is empty —
+// #lbSync (untouched, per the spec amendment) carries the board's stamp.
+{
+  const domX55 = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => dynInfo(1) }),
+  }));
+  const docX55 = domX55.window.document;
+  await until(() => docX55.querySelectorAll("#lbBody .lb-row").length > 0);
+  await until(() => !!docX55.querySelector("#homeSync")?.textContent);
+  const liveTextX55 = docX55.querySelector("#homeSync")?.textContent || "";
+  const liveMatchX55 = /^Checked (\d{1,2}:\d{2}(?:am|pm)) · the sheet publishes a few minutes behind edits$/.exec(liveTextX55);
+  const hmmX55 = liveMatchX55 ? liveMatchX55[1] : null;
+
+  // Force the wake-visible path (jsdom's document.hidden defaults true — see
+  // X54) so this refreshTick() actually re-loads, per the brief's mechanism.
+  Object.defineProperty(docX55, "hidden", { configurable: true, get: () => false });
+  domX55.window.fetch = () => Promise.reject(new Error("network down"));
+  domX55.window.refreshTick();
+  await until(() => /^Couldn't refresh/.test(docX55.querySelector("#homeSync")?.textContent || ""));
+  const failTextX55 = docX55.querySelector("#homeSync")?.textContent || "";
+  const failMatchX55 = hmmX55 !== null && failTextX55 === `Couldn't refresh — showing data from ${hmmX55}`;
+  await settle(100); // drain any straggler before closing (X54's post-close crash lesson)
+  domX55.window.close();
+
+  const domX55b = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => dynInfo(10) }),
+  }));
+  await until(() => domX55b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  await settle(300); // off-phase: prove #homeSync stays empty through a full paint, not just pre-render
+  const offTextX55b = domX55b.window.document.querySelector("#homeSync")?.textContent || "";
+  domX55b.window.close();
+
+  check("X55: §24 H-FRESH — event-phase #homeSync reads 'Checked ‹h:mm› · the sheet publishes a few minutes behind edits' after a live load (h:mm = fmtClock of the scores tab's successful fetch); a subsequent failed refresh flips it to 'Couldn't refresh — showing data from ‹same h:mm›' (pull()'s cache-served at never advances the stamp); off-phase (dynInfo(+10)) #homeSync is empty",
+    !!liveMatchX55 && failMatchX55 && offTextX55b === "",
+    `live=${JSON.stringify(liveTextX55)} fail=${JSON.stringify(failTextX55)} off=${JSON.stringify(offTextX55b)}`);
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
