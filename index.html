@@ -243,6 +243,9 @@
   .badge-rookie{color:var(--pine);background:var(--brass);border-color:var(--brass)}
   .rookie-strip{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);
                 padding:10px 6px;border-bottom:1px solid rgba(200,162,74,.13)}
+  .fld-strip{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);
+             padding:10px 6px;border-bottom:1px solid rgba(200,162,74,.13)}
+  .inv-via{font-size:.6rem;letter-spacing:.08em;text-transform:none;color:var(--sage);margin-left:6px}
   .unassigned-lab{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--rust);
                   padding:10px 6px 4px}
 
@@ -1966,16 +1969,23 @@ function renderField(){
   };
 
   const roster=rosterMap();
+  const yearOf=v=>{ const n=parseInt(v,10); return isNaN(n)?Infinity:n; };
   let bodyHTML;
   if(!roster.size){
-    // v1 fallback: no team values present this season, render a flat list.
-    bodyHTML=rows.map(rowHTML).join("");
+    // v1 fallback: no team values present this season, render a flat list —
+    // ordered veterans-first by since (Riley 2026-08-24: veterans ALWAYS
+    // outrank rookies). Earliest since first, rookies (since==season)
+    // naturally last among known, junk/blank since after everything
+    // (yearOf Infinity), sheet order breaks ties.
+    bodyHTML=rows.map((r,i)=>({r,i}))
+      // Fallback || relies on NaN being falsy (Infinity-Infinity=NaN); never change to ??
+      .sort((a,b)=>(yearOf(a.r.since)-yearOf(b.r.since))||(a.i-b.i))
+      .map(o=>rowHTML(o.r)).join("");
   } else {
     const byPlayer={};
     rows.forEach(r=>{ byPlayer[nkey(r.player)]=r; });
 
     const teams=[...roster.entries()].filter(([,t])=>t.captain);
-    const yearOf=v=>{ const n=parseInt(v,10); return isNaN(n)?Infinity:n; };
     const ordered=teams
       .map(([k,t],i)=>({k,t,i}))
       // Fallback || relies on NaN being falsy (Infinity-Infinity=NaN); never change to ??
@@ -2006,7 +2016,22 @@ function renderField(){
   const stripHTML=rookies.length
     ? `<div class="rookie-strip">Rookie Class of ${esc(STATE.year)}: ${rookies.map(esc).join(", ")}</div>`
     : "";
-  $("#fldBody").innerHTML=stripHTML+bodyHTML;
+  // Count strip — counts PERSONS with status In, so a wd/out row is listed
+  // but never inflates "in" or "paid" (S12), and duplicate same-year rows
+  // count once (nkey, LAST row wins — the same last-wins the grouped
+  // branch's byPlayer applies; review F6). When NO one is In (e.g. the raw
+  // next-year collection rows, all-blank statuses) render nothing: no claim
+  // beats a misleading "0 in" over a visibly populated list. Zero owing is
+  // omitted, not shown as "0 owing".
+  const byNkeyCount=new Map();
+  rows.forEach(r=>byNkeyCount.set(nkey(r.player),r));
+  const inRows=[...byNkeyCount.values()].filter(r=>yes(r.status)||/^in$/i.test(r.status||""));
+  const paidIn=inRows.filter(r=>yes(r.deposit)).length;
+  const owingN=inRows.length-paidIn;
+  const countHTML=inRows.length
+    ? `<div class="fld-strip">${esc(inRows.length)} in · ${esc(paidIn)} paid${owingN?" · "+esc(owingN)+" owing":""}</div>`
+    : "";
+  $("#fldBody").innerHTML=countHTML+stripHTML+bodyHTML;
 }
 
 /* ---------- v2.5 draft board (D-DRAFT §15) ---------- */
@@ -2233,7 +2258,7 @@ function nextYearModel(){
   const people=new Map();
   const touch=name=>{
     const k=nkey(name);
-    if(!people.has(k)) people.set(k,{name,paid:false,date:"",invited:false,responded:false,status:"",committed:false,nextOrdinal:Infinity});
+    if(!people.has(k)) people.set(k,{name,paid:false,date:"",invited:false,responded:false,status:"",committed:false,sponsor:"",nextOrdinal:Infinity});
     return people.get(k);
   };
   field.filter(r=>r.player&&trailing.has(r.year)).forEach(r=>touch(r.player));
@@ -2261,12 +2286,16 @@ function nextYearModel(){
     }
   });
 
-  const invitesNextMerged=mergeNextRows(invitesNextRows,["invited","responded","status"]);
+  const invitesNextMerged=mergeNextRows(invitesNextRows,["invited","responded","status","invited_by"]);
   invitesNextMerged.forEach(m=>{
     const p=touch(m.player);
     if(yes(m.raw.invited)) p.invited=true;
     if(yes(m.raw.responded)) p.responded=true;
     p.status=String(m.raw.status||"").trim().toLowerCase();
+    // Sponsor (invited_by, Riley 2026-08-24): rendered ONLY behind ?admin=1
+    // — carried on the admin stage/declined entries below, NEVER onto the
+    // public owing list.
+    p.sponsor=String(m.raw.invited_by||"").trim();
   });
 
   // F-STAGE + F-DECLINED: paid AND out/declined => money was already
@@ -2281,11 +2310,11 @@ function nextYearModel(){
     const dead=p.status==="out"||p.status==="declined";
     if(p.paid&&dead){ refunds.push({name:p.name,date:p.date,status:p.status}); return; }
     if(p.status==="out") return;
-    if(p.status==="declined"){ declined.push({name:p.name}); return; }
+    if(p.status==="declined"){ declined.push({name:p.name,sponsor:p.sponsor}); return; }
     if(p.paid) stages.paid.push({name:p.name,date:p.date,nextOrdinal:p.nextOrdinal});
-    else if(p.responded) stages.responded.push({name:p.name,committed:p.committed});
-    else if(p.invited) stages.invited.push({name:p.name,committed:p.committed});
-    else stages.needs.push({name:p.name,committed:p.committed});
+    else if(p.responded) stages.responded.push({name:p.name,committed:p.committed,sponsor:p.sponsor});
+    else if(p.invited) stages.invited.push({name:p.name,committed:p.committed,sponsor:p.sponsor});
+    else stages.needs.push({name:p.name,committed:p.committed,sponsor:p.sponsor});
   });
 
   // A-DATE + A2 (I1): paid queue orders by real date, not string lexical
@@ -2307,6 +2336,8 @@ function nextYearModel(){
   // people who already have a NEXT-season Field row (they've committed by
   // filling one in) and haven't paid — not the whole responded/invited/
   // needs funnel. Those three stages' NAMES move entirely behind ?admin=1.
+  // .map to {name} ONLY — the owing list is PUBLIC; sponsor must never
+  // ride along (it renders solely on the ?admin=1 lists).
   const owing=[...stages.responded,...stages.invited,...stages.needs]
     .filter(p=>p.committed).map(p=>({name:p.name}));
 
@@ -2646,8 +2677,12 @@ function renderCalcutta(){
     (rowsOut.some(r=>!r.lot||r.lot.owner==="—")?" · unsold lots' shares stay in the pot":"");
 }
 
-function nameListHTML(items,cls){
-  return `<ul class="${cls}">`+items.map(p=>`<li>${esc(p.name)}</li>`).join("")+`</ul>`;
+// withVia: ONLY the ?admin=1 call sites pass true — the sponsor annotation
+// (invited_by) is admin-lens data, same contract as .room-had. The public
+// owing list both omits the flag AND carries no sponsor field (belt and
+// suspenders — see the owing .map in nextYearModel).
+function nameListHTML(items,cls,withVia){
+  return `<ul class="${cls}">`+items.map(p=>`<li>${esc(p.name)}${withVia&&p.sponsor?` <span class="inv-via">via ${esc(p.sponsor)}</span>`:""}</li>`).join("")+`</ul>`;
 }
 function renderNextYear(){
   const nyBody=$("#nyBody");
@@ -2691,13 +2726,13 @@ function renderNextYear(){
   let adminHTML="";
   if(ADMIN){
     const respondedHTML=ny.stages.responded.length
-      ? `<h3 class="subhead">Responded</h3>`+nameListHTML(ny.stages.responded,"mn-net") : "";
+      ? `<h3 class="subhead">Responded</h3>`+nameListHTML(ny.stages.responded,"mn-net",true) : "";
     const invitedHTML=ny.stages.invited.length
-      ? `<h3 class="subhead">Invited</h3>`+nameListHTML(ny.stages.invited,"mn-net") : "";
+      ? `<h3 class="subhead">Invited</h3>`+nameListHTML(ny.stages.invited,"mn-net",true) : "";
     const needsHTML=ny.stages.needs.length
-      ? `<h3 class="subhead">Needs an invite</h3>`+nameListHTML(ny.stages.needs,"mn-net down") : "";
+      ? `<h3 class="subhead">Needs an invite</h3>`+nameListHTML(ny.stages.needs,"mn-net down",true) : "";
     const declinedHTML=ny.declined.length
-      ? `<h3 class="subhead">Declined</h3>`+nameListHTML(ny.declined,"mn-net down") : "";
+      ? `<h3 class="subhead">Declined</h3>`+nameListHTML(ny.declined,"mn-net down",true) : "";
     const refundHTML=ny.refunds.length
       ? `<h3 class="subhead">Paid — refund owed</h3><ul class="mn-net down">`+
         ny.refunds.map(r=>`<li>${esc(r.name)} — paid, ${esc(r.status)} — refund owed</li>`).join("")+`</ul>`

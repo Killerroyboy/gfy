@@ -46,8 +46,9 @@ tab has its own deep link (`yoursite.com/#calcutta`, `#nextyear`, `#rooms`,
    New > Script file** (do **not** paste over `Code.gs`), paste in
    `tools/gfy-promote.gs`, save, and reload the sheet's browser tab — a
    **GFY** menu appears with **Promote committed → Field** (the one-click
-   accept flow — see **The invite list**, below) and a shortcut to
-   `polish()`.
+   accept flow), **Seed next season's Invites** (pre-fills returning
+   players, veterans first — see **The invite list**, below), and a
+   shortcut to `polish()`.
 
    **If the boxes come in unticked after `polish()` runs** — whether Sheets
    renders an imported TRUE/FALSE string as a ticked box depends on the
@@ -531,7 +532,8 @@ Each line comes back as one of three levels:
   match any Field player (skipped when the cell is empty or `guest:`-prefixed —
   Rooms is allowed to hold names Field doesn't track), an Invites row with
   `committed` ticked but no Field row for that year (the GFY-menu promotion
-  hasn't been run — see **The invite list**).
+  hasn't been run), a first-time invitee with no `invited_by` sponsor
+  recorded (see **The invite list**).
 - **INFO** — context, not a problem. Examples: which schedule-coverage basis
   it used, the Announce tab not being wired up yet, `form_url` intentionally
   left unset.
@@ -640,7 +642,7 @@ entirely: it only changes how someone shows on the Field tab itself (a
 The Invites tab tracks next season's *outreach* — who was emailed, who
 wrote back, who still needs a nudge — separate from who's actually paid
 (that's the Field tab, above). Its columns: `year, player, invited,
-responded, status, committed`.
+responded, status, committed, invited_by`.
 
 > **⚠ NEVER put email addresses (or anything sensitive) in this
 > spreadsheet — every published tab is publicly fetchable.** Emails live in
@@ -648,17 +650,30 @@ responded, status, committed`.
 
 The workflow:
 
-1. Add everyone you might invite back to Invites, with **next year** in
-   `year`.
-2. Send your invite email (mail-merge off the GFY Admin sheet, or just BCC
+1. Sheet menu **GFY → Seed next season's Invites** — pre-fills the tab
+   with every returning player from the last three Field seasons,
+   **veterans first** (veterans always outrank rookies), skipping anyone
+   already on the tab and anyone ever marked `out`. Delete the few you're
+   not inviting back; type only the genuinely new names.
+2. For every **new** name you add by hand, put the sponsor — whoever's
+   bringing him — in `invited_by`. That's the group's permanent
+   who-invited-who record, season by season, for the day the group decides
+   somebody isn't working out. (`npm run event-ready` reminds you with a
+   WARN if a first-timer has no sponsor recorded.)
+3. Send your invite email (mail-merge off the GFY Admin sheet, or just BCC
    everyone — the published sheet doesn't send anything itself and must
    never hold the addresses).
-3. Tick `invited` for everyone you emailed.
-4. Tick `responded` as replies land.
-5. When someone says **yes**, tick `committed`.
-6. Sheet menu **GFY → Promote committed → Field** — every committed person
+4. Tick `invited` for everyone you emailed.
+5. Tick `responded` as replies land.
+6. When someone says **yes**, tick `committed`.
+7. Sheet menu **GFY → Promote committed → Field** — every committed person
    who doesn't already have a Field row for that year gets one, in a single
    click. No re-typing anybody. (Details below.)
+
+Until someone pays, the "who still owes the deposit" question is answered
+by the site itself: the Next Year board's public owing list is exactly the
+committed-but-unpaid people, and the full funnel (who's invited, who's
+responded, who still needs a nudge) sits behind `?admin=1`.
 
 The Next Year board turns this into a funnel — paid, responded, invited,
 still needs an invite — so you can see at a glance who's stuck and where
@@ -705,6 +720,23 @@ only meaning of "committed" everywhere (the owing list, the funnel's paid
 stage, the draft pool). The `npm run event-ready` preflight nudges you with
 a WARN if committed ticks are sitting unpromoted.
 
+After a `polish()` run the Invites tab also shows the state at a glance:
+**orange tint** = committed but not yet promoted (run the menu), **red
+tint** = committed *and* `out`/`declined` on the same row — contradictory,
+fix one before promoting.
+
+### Who invited who (`invited_by`)
+
+`invited_by` holds the sponsor's name — recorded once, when a new invitee
+first goes on the tab, and kept season by season (old rows are the
+archive). Under `?admin=1` the funnel and Declined lists show it as
+"via Duck" beside each name; the public site never shows it. Returning
+veterans don't need one — the WARN only fires for first-timers. Like
+everything on this spreadsheet, the column is on a published sheet
+(publicly fetchable): who-brought-whom is group-known info, but any
+*judgment* about a person (do-not-invite, "not working out") belongs in
+the never-published GFY Admin vault, never here.
+
 ### Adding the Invites tab to a sheet you already built
 
 If your GFY sheet predates this feature (it only has the original 11 tabs),
@@ -713,10 +745,11 @@ add the 12th tab yourself — no need to rebuild from the template:
 1. In the Google Sheet, click **+** at the bottom to add a sheet, and name
    it exactly **Invites**.
 2. Paste the header row into row 1: `year, player, invited, responded,
-   status, committed`.
+   status, committed, invited_by`.
 3. Select the `invited`, `responded`, and `committed` columns, one at a
    time: **Insert > Checkbox** (same one-time step as Field.deposit) — or
-   just re-run `polish()`, which applies all three.
+   just re-run `polish()`, which applies all three. `invited_by` is plain
+   text (a name), not a checkbox.
 4. Click the new tab, copy its gid from the address bar (`#gid=…`, same as
    step 4 above), and paste it into `config.js` as `GID.invites`.
 
@@ -857,7 +890,7 @@ tools/make_template.py        regenerates tools/gfy-template.xlsx
 tools/make_admin_template.py  regenerates tools/gfy-admin-template.xlsx (the never-published vault template)
 tools/sheet-polish.gs         Apps Script sheet hygiene — checkboxes, dropdowns, Course autofill (see above)
 tools/sheet-triggers.gs       Apps Script live-scoring triggers — form writer + paid_date stamp (see above)
-tools/gfy-promote.gs          Apps Script GFY menu — one-click Promote committed → Field (see The invite list)
+tools/gfy-promote.gs          Apps Script GFY menu — Promote committed → Field + Seed next season's Invites (see The invite list)
 tools/presend-check.mjs       the pre-send checker — vault diff, DNI check, email-leak watchdog (see above)
 tools/check_template.py       drift check: xlsx templates vs their generators (npm run check-template)
 tools/gid-check.mjs           drift check: config.js gids vs the live published sheet (npm run check-gids)

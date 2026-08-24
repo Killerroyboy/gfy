@@ -885,9 +885,19 @@ check("W3: Sully (declined) and Ghost (paid+declined) are absent from the public
   !nyBodyText.includes("Sully") && !nyBodyText.includes("Ghost"),
   nyBodyText.slice(0, 500));
 
-check("W4: no email column anywhere — Invites schema is year/player/invited/responded/status only (v2.2: email removed to the admin vault, P-VAULT — out of this codebase entirely)",
-  !/email/i.test(FIXTURES.invites.split(/\r?\n/)[0]) && !/@example\.com/.test(doc.documentElement.outerHTML),
-  FIXTURES.invites.split(/\r?\n/)[0]);
+// W4: retitled 2026-08-24 — the schema grew committed + invited_by, but the
+// point of this test was never the column list: it's P-VAULT, no email
+// column anywhere. Now also scans the TEMPLATE generator's Invites headers
+// (the fixture alone could drift from the template silently).
+{
+  const tplInvHeads = (readFileSync(path.join(ROOT, "tools", "make_template.py"), "utf8")
+    .match(/"Invites":[\s\S]*?"headers":\s*\[([^\]]*)\]/) || ["", ""])[1];
+  check("W4: no email column anywhere — fixture header, template generator's Invites headers, and the rendered DOM are all email-free (v2.2 P-VAULT: emails live only in the never-published admin vault)",
+    !/email/i.test(FIXTURES.invites.split(/\r?\n/)[0])
+      && tplInvHeads.length > 0 && !/email/i.test(tplInvHeads)
+      && !/@example\.com/.test(doc.documentElement.outerHTML),
+    "fixture=" + FIXTURES.invites.split(/\r?\n/)[0] + " tpl=" + tplInvHeads);
+}
 
 {
   // The default dom's first_tee (2026-08-15) is only ~18 days out from
@@ -1843,9 +1853,28 @@ dom.window.close();
     && pyCourse.slice(9).reduce((s, r) => s + r[2], 0) === 3007,
     "pyCourse=" + JSON.stringify(pyCourse));
   const triggs = (() => { try { return readFileSync(path.join(ROOT, "tools", "sheet-triggers.gs"), "utf8"); } catch { return ""; } })();
-  check("P6: scripts embed no sheet ids/urls (safe for public repo)",
-    gs.length > 0 && triggs.length > 0
-    && !/docs\.google\.com|spreadsheets\/d\//.test(gs) && !/docs\.google\.com|spreadsheets\/d\//.test(triggs));
+  const promo = (() => { try { return readFileSync(path.join(ROOT, "tools", "gfy-promote.gs"), "utf8"); } catch { return ""; } })();
+  check("P6: scripts embed no sheet ids/urls (safe for public repo) — polish, triggers, AND gfy-promote",
+    gs.length > 0 && triggs.length > 0 && promo.length > 0
+    && !/docs\.google\.com|spreadsheets\/d\//.test(gs) && !/docs\.google\.com|spreadsheets\/d\//.test(triggs)
+    && !/docs\.google\.com|spreadsheets\/d\//.test(promo));
+  // P7: 2026-08-24 wave structural parity — the sheet-side halves the jsdom
+  // suite can't execute. colorInvites_ must exist in polish and be year-aware
+  // (COUNTIFS against Field, not a name-only MATCH) with BOTH dead statuses;
+  // gfy-promote must carry both menu actions and seed veterans-first (a
+  // `since` sort); START HERE must point at the GFY menu flow.
+  const ciBody = (gs.match(/function colorInvites_[\s\S]*?\n\}/) || [""])[0];
+  // seedBody extracted the same way as ciBody (review F9: a bare
+  // /seedInvites[\s\S]*since/ matched the onOpen menu registration plus
+  // promoteCommitted's own "since" — the seed sort could vanish unseen).
+  const seedBody = (promo.match(/function seedInvites[\s\S]*?\n\}/) || [""])[0];
+  check("P7: colorInvites_ is year-aware COUNTIFS w/ out+declined; promote has Promote+Seed menu items; seedInvites' OWN body carries the veterans-first since sort; START HERE names the GFY menu",
+    ciBody.includes("COUNTIFS") && ciBody.includes('INDIRECT("Field!') && ciBody.includes("committed")
+    && ciBody.includes('"out"') && ciBody.includes('"declined"')
+    && promo.includes('"promoteCommitted"') && promo.includes('"seedInvites"')
+    && seedBody.includes(".sort") && seedBody.includes("since")
+    && gs.includes("GFY menu"),
+    "ciBody.len=" + ciBody.length + " seedBody.len=" + seedBody.length);
 }
 
 /* ---------- Q: presend-check (v2.3 §13 V-MATCH/V-PATH) ---------- */
@@ -5875,12 +5904,19 @@ const nowW = Date.now();
     { year: "2027", player: "Duck  Jones" },            // internal double space — NKEY must still match
     { year: "2026", player: "Tex" },                    // prior-year row only
   ];
+  // Sully carries invited_by: he's a first-time invitee, and without a
+  // sponsor the EV12 sponsor WARN would (correctly) fire here too — this
+  // case isolates the promotion logic's quiet-PASS.
   const none = checkInvitesPromotion(
-    [{ year: "2027", player: "Sully", invited: "TRUE", responded: "TRUE", committed: "" }], fieldEV11);
+    [{ year: "2027", player: "Sully", invited: "TRUE", responded: "TRUE", committed: "", invited_by: "Duck" }], fieldEV11);
   const pending = checkInvitesPromotion(
     [{ year: "2027", player: "Wade Johnson", committed: "TRUE" }], fieldEV11);
+  // invited_by here too: Duck Jones' only Field row is the SAME year (the
+  // promoted row), so under the review-hardened first-timer definition
+  // (no Field row EARLIER than the invite year) he'd correctly draw a
+  // sponsor WARN — sponsored to isolate the promotion check.
   const promoted = checkInvitesPromotion(
-    [{ year: "2027", player: "duck jones", committed: "TRUE" }], fieldEV11);
+    [{ year: "2027", player: "duck jones", committed: "TRUE", invited_by: "Tex" }], fieldEV11);
   const priorYear = checkInvitesPromotion(
     [{ year: "2027", player: "Tex", committed: "TRUE" }], fieldEV11);
   const contra = checkInvitesPromotion(
@@ -5895,6 +5931,182 @@ const nowW = Date.now();
     "none=" + JSON.stringify(none) + " pending=" + JSON.stringify(pending) +
       " promoted=" + JSON.stringify(promoted) + " priorYear=" + JSON.stringify(priorYear) +
       " contra=" + JSON.stringify(contra));
+}
+
+// EV12: sponsor accountability (Riley 2026-08-24: track who invited who) —
+// a FIRST-TIME invitee (no Field row in ANY season, F-NKEY matched) with a
+// blank invited_by WARNs, scoped to the LATEST Invites year only (historic
+// rows can't retroactively grow sponsors — no noise); a sponsored
+// first-timer and a returning player without a sponsor never WARN; the
+// WARN fires independent of the committed tick.
+{
+  const fieldEV12 = [
+    { year: "2026", player: "duck  jones" },      // NKEY: casefold + collapse must match
+    { year: "2027", player: "Promoted Kid" },     // SAME-year row only — a promote ran before the sponsor was recorded
+  ];
+  const r = checkInvitesPromotion([
+    { year: "2027", player: "Fresh Face", invited: "TRUE", invited_by: "" },      // WARN — first-timer, no sponsor, not even committed
+    { year: "2027", player: "Sponsored Kid", invited: "TRUE", invited_by: "Tex" },// ok — sponsored
+    { year: "2027", player: "Duck Jones", invited: "TRUE", invited_by: "" },      // ok — returning (2026 Field row, NKEY, EARLIER year)
+    { year: "2026", player: "Old Ghost", invited: "TRUE", invited_by: "" },       // ok — not the latest Invites year
+    { year: "2027", player: "Promoted Kid", committed: "TRUE", invited_by: "" },  // WARN — a same-year Field row must NOT launder a first-timer into "returning" (review F2)
+    { year: "2027", player: "Twin Rows", invited: "TRUE", invited_by: "" },       // ok — sponsor lives on the OTHER duplicate row (per-person, review F8)
+    { year: "2027", player: "Twin Rows", invited: "TRUE", invited_by: "Tex" },
+  ], fieldEV12);
+  check("EV12: first-time invitee w/o invited_by WARNs (latest Invites year only, committed not required); sponsored first-timer, EARLIER-year returning player, and older-year rows never WARN; a SAME-year (just-promoted) Field row keeps the WARN alive; duplicate rows are judged per-person (any row's sponsor satisfies)",
+    r.some(x => x.level === "WARN" && /"Fresh Face" \(2027\)/.test(x.detail) && /invited_by/.test(x.detail))
+      && !r.some(x => /Sponsored Kid/.test(x.detail))
+      && !r.some(x => /Duck Jones/.test(x.detail))
+      && !r.some(x => /Old Ghost/.test(x.detail))
+      && r.some(x => x.level === "WARN" && /"Promoted Kid" \(2027\)/.test(x.detail) && /invited_by/.test(x.detail))
+      && !r.some(x => /Twin Rows/.test(x.detail) && /invited_by/.test(x.detail)),
+    JSON.stringify(r));
+}
+
+// EV13 (review F7): one fat-fingered year (20277) must not hijack the
+// latest-year scope and silently disable the sponsor check for the real
+// season — years outside 2000-2100 are ignored when picking the scope.
+{
+  const r = checkInvitesPromotion([
+    { year: "20277", player: "Typo Row", invited: "TRUE", invited_by: "" },
+    { year: "2027", player: "Real Rookie", invited: "TRUE", invited_by: "" },
+  ], []);
+  check("EV13: a junk year (20277) never becomes the sponsor-check scope — the real 2027 first-timer still WARNs",
+    r.some(x => x.level === "WARN" && /"Real Rookie" \(2027\)/.test(x.detail) && /invited_by/.test(x.detail)),
+    JSON.stringify(r));
+}
+
+/* ---------------------------------------------------------------------
+   GROUP FV — Field veterans-priority display + invited_by (sponsor) lens.
+   Riley rulings 2026-08-24: veterans ALWAYS outrank rookies (pre-draft
+   flat roster sorts by `since`); who-invited-who is recorded on Invites
+   (`invited_by`), shown as "via X" ONLY under ?admin=1.
+   --------------------------------------------------------------------- */
+
+// FV1+FV2: pre-draft flat state (no team values this season) — rows order
+// veterans-first by since (rookie last among known, junk since sorts after
+// everything, sheet order breaks ties), and the count strip counts ONLY
+// status-In rows: a wd row is listed but counted neither as in nor as paid
+// (its deposit tick must not inflate "paid" — S12).
+{
+  const flatCSV = [
+    "year,player,team,since,handicap,status,deposit,paid_date,strengths",
+    "2026,Newguy,,2026,,In,FALSE,,",
+    "2026,Duck,,2019,8,In,TRUE,,",
+    "2026,Midvet,,2022,12,In,TRUE,,",
+    "2026,Junky,,oops,7,In,FALSE,,",
+    "2026,Wady,,2020,9,wd,TRUE,,",
+  ].join("\n");
+  const flatFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => flatCSV }),
+  });
+  const domFV = makeDom("", flatFetch);
+  await until(() => (domFV.window.document.querySelectorAll("#fldBody .fld").length) > 0);
+  const dFV = domFV.window.document;
+  const namesFV = [...dFV.querySelectorAll("#fldBody .fld")]
+    .map(r => (r.querySelector("div")?.textContent || "").replace(/ROOKIE|\d+\w+ year/g, "").trim());
+  check("FV1: flat pre-draft roster sorts veterans-first by since (Duck 2019, Wady 2020, Midvet 2022, Newguy 2026, junk-since last) with zero .team-group wrappers",
+    JSON.stringify(namesFV) === JSON.stringify(["Duck", "Wady", "Midvet", "Newguy", "Junky"])
+      && dFV.querySelectorAll("#fldBody .team-group").length === 0,
+    "names=" + JSON.stringify(namesFV));
+  const stripFV = dFV.querySelector("#fldBody .fld-strip");
+  check("FV2: count strip counts only status-In rows — '4 in · 2 paid · 2 owing' (Wady wd: listed but excluded from in AND paid despite deposit TRUE)",
+    !!stripFV && (stripFV.textContent || "").trim() === "4 in · 2 paid · 2 owing",
+    "strip=" + JSON.stringify(stripFV?.textContent));
+  domFV.window.close();
+}
+
+// FV3: all-blank statuses (the raw next-year collection shape) — the strip
+// does NOT render at all: no claim beats a misleading "0 in" over a list
+// of 2 visible people (S12). Rows themselves still list.
+{
+  const blankCSV = [
+    "year,player,team,since,handicap,status,deposit,paid_date,strengths",
+    "2026,Ghosty,,2019,,,TRUE,,",
+    "2026,Newish,,2026,,,,,",
+  ].join("\n");
+  const blankFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => blankCSV }),
+  });
+  const domFV3 = makeDom("", blankFetch);
+  await until(() => (domFV3.window.document.querySelectorAll("#fldBody .fld").length) > 0);
+  const dFV3 = domFV3.window.document;
+  check("FV3: zero status-In rows — no .fld-strip rendered, both rows still listed",
+    !dFV3.querySelector("#fldBody .fld-strip")
+      && dFV3.querySelectorAll("#fldBody .fld").length === 2,
+    "strip=" + JSON.stringify(dFV3.querySelector("#fldBody .fld-strip")?.textContent) +
+      " rows=" + dFV3.querySelectorAll("#fldBody .fld").length);
+  domFV3.window.close();
+}
+
+// FV4: the strip also renders in the team-grouped state — standard 2026
+// fixture: 9 rows, all In, all paid → "9 in · 9 paid", and the zero-owing
+// segment is omitted rather than shown as "0 owing". Own dom: the shared
+// top-level doc's year picker has been moved by earlier tests (T8-class
+// shared-state trap), so this asserts against a fresh deterministic render.
+{
+  const domFV4 = makeDom("");
+  await until(() => (domFV4.window.document.querySelectorAll("#fldBody .team-group").length) > 0);
+  const stripFV4 = domFV4.window.document.querySelector("#fldBody .fld-strip");
+  check("FV4: grouped-state strip on the standard fixture reads exactly '9 in · 9 paid' (no owing segment at zero)",
+    !!stripFV4 && (stripFV4.textContent || "").trim() === "9 in · 9 paid",
+    "strip=" + JSON.stringify(stripFV4?.textContent));
+  domFV4.window.close();
+}
+
+// FV5: invited_by — admin funnel names carry "via <sponsor>"; the public
+// view NEVER does, anywhere in the Next Year board (leak guard: same
+// override, no ?admin). Sponsor shows on stage lists AND the Declined list.
+{
+  const invCSV = [
+    "year,player,invited,responded,status,committed,invited_by",
+    "2027,Duck,TRUE,TRUE,,,",
+    "2027,Newbie,TRUE,,,,Duck",
+    "2027,Quitty,TRUE,TRUE,declined,,Hammer",
+  ].join("\n");
+  const viaFetch = withOverride({
+    invites: () => Promise.resolve({ ok: true, status: 200, text: async () => invCSV }),
+  });
+  const domPub = makeDom("", viaFetch);
+  const domAdm = makeDom("?admin=1", viaFetch);
+  await until(() => (domPub.window.document.querySelector("#nyBody")?.textContent || "").includes("paid"));
+  await until(() => (domAdm.window.document.querySelector("#nyBody")?.textContent || "").includes("Invited"));
+  const pubText = domPub.window.document.querySelector("#nyBody")?.textContent || "";
+  const admText = domAdm.window.document.querySelector("#nyBody")?.textContent || "";
+  check("FV5: ?admin=1 shows 'via Duck' beside Newbie (Invited) and 'via Hammer' beside Quitty (Declined); the public board contains NEITHER string anywhere",
+    /Newbie/.test(admText) && /via Duck/.test(admText)
+      && /Quitty/.test(admText) && /via Hammer/.test(admText)
+      && /Newbie/.test(pubText) === false            // Newbie is invited-stage: name itself is admin-only
+      && !/via Duck/.test(pubText) && !/via Hammer/.test(pubText),
+    "adm=" + admText.slice(0, 400) + " pub=" + pubText.slice(0, 300));
+  domPub.window.close(); domAdm.window.close();
+}
+
+// FV6 (review F6): duplicate same-year rows for one player must not
+// inflate the count strip — counts are per PERSON (nkey, last row wins,
+// mirroring the grouped branch's byPlayer semantics): Duck's two rows
+// count once, with his LAST row's unpaid deposit deciding paid/owing.
+// The flat list itself still renders every row (existing behavior).
+{
+  const dupCSV = [
+    "year,player,team,since,handicap,status,deposit,paid_date,strengths",
+    "2026,Duck,,2019,8,In,TRUE,,",
+    "2026,Duck,,2019,8,In,FALSE,,",
+    "2026,Vet,,2020,10,In,TRUE,,",
+  ].join("\n");
+  const dupFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => dupCSV }),
+  });
+  const domFV6 = makeDom("", dupFetch);
+  await until(() => (domFV6.window.document.querySelectorAll("#fldBody .fld").length) > 0);
+  const dFV6 = domFV6.window.document;
+  const stripFV6 = dFV6.querySelector("#fldBody .fld-strip");
+  check("FV6: dup same-year rows count as one person, last row wins — '2 in · 1 paid · 1 owing' over 3 rendered rows",
+    !!stripFV6 && (stripFV6.textContent || "").trim() === "2 in · 1 paid · 1 owing"
+      && dFV6.querySelectorAll("#fldBody .fld").length === 3,
+    "strip=" + JSON.stringify(stripFV6?.textContent) +
+      " rows=" + dFV6.querySelectorAll("#fldBody .fld").length);
+  domFV6.window.close();
 }
 
 /* ---------------------------------------------------------------------

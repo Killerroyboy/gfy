@@ -24,6 +24,7 @@ function polish(){
     applyDropdowns_(sh, DROPDOWNS[name] || {});
     if (name === "Field") { repairHandicap_(sh); colorField_(sh); }
     if (name === "Rooms") colorRooms_(sh);
+    if (name === "Invites") colorInvites_(sh);
     if (name === "Course") autofillCourse_(sh);
   });
   buildStartHere_(ss);
@@ -101,6 +102,49 @@ function colorRooms_(sh){
     Logger.log(sh.getName() + ": replacing ALL conditional formatting — hand-added rules are erased (polish owns CF on this sheet)");
   sh.setConditionalFormatRules(rules);
 }
+function colorInvites_(sh){
+  // Red = committed AND status out/declined (contradictory — fix one, never
+  // promoted). Orange = committed with NO Field row for that (year, player)
+  // — the GFY menu's promote hasn't been run yet (same orange as Rooms'
+  // name-not-on-Field). Year-aware COUNTIFS, never a name-only MATCH: a
+  // returning veteran committed for NEXT season must stay orange until
+  // promoted even though prior-year Field rows carry his name. Red is
+  // pushed first — rule order resolves the overlap. COUNTIFS matches
+  // case-insensitively (mirrors nkey's casefold); internal-whitespace
+  // collapse stays event-ready's job — the tint is a nudge, the preflight
+  // is the authority.
+  const pl = headerIndex_(sh, "player"), yr = headerIndex_(sh, "year"),
+        cm = headerIndex_(sh, "committed"), st = headerIndex_(sh, "status");
+  const rules = [];
+  if (cm && pl && yr){
+    const P = colLetter_(pl), Y = colLetter_(yr), C = colLetter_(cm);
+    const ranges = [sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))];
+    // &""-coerce then compare text: matches BOTH a real checkbox boolean and
+    // a typed/imported "TRUE" string — pcYes_/event-ready accept the string
+    // form, so the tint must too (review F3: $C2=TRUE alone misses it).
+    const committedTrue = `UPPER(TRIM($${C}2&""))="TRUE"`;
+    if (st){
+      const S = colLetter_(st);
+      rules.push(SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied(`=AND($${P}2<>"",${committedTrue},OR(LOWER(TRIM($${S}2))="out",LOWER(TRIM($${S}2))="declined"))`)
+        .setBackground("#f4cccc").setRanges(ranges).build());
+    }
+    const field = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Field");
+    if (field){
+      const fy = colLetter_(headerIndex_(field, "year") || 1), fp = colLetter_(headerIndex_(field, "player") || 2);
+      // COUNTIFS criteria treat * ? as wildcards and ~ as escape — escape
+      // the player cell so a stray metachar in a name can't defeat (or
+      // fake) the no-Field-row check (review F10).
+      const escapedPlayer = `SUBSTITUTE(SUBSTITUTE(SUBSTITUTE($${P}2,"~","~~"),"*","~*"),"?","~?")`;
+      rules.push(SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied(`=AND($${P}2<>"",${committedTrue},COUNTIFS(INDIRECT("Field!${fy}:${fy}"),$${Y}2,INDIRECT("Field!${fp}:${fp}"),${escapedPlayer})=0)`)
+        .setBackground("#fce5cd").setRanges(ranges).build());
+    }
+  }
+  if (sh.getConditionalFormatRules().length > rules.length)
+    Logger.log(sh.getName() + ": replacing ALL conditional formatting — hand-added rules are erased (polish owns CF on this sheet)");
+  sh.setConditionalFormatRules(rules);                  // E-IDEM: rules replaced wholesale each run
+}
 function autofillCourse_(sh){
   const last = sh.getLastRow();
   const cur = last >= 2 ? sh.getRange(2, 1, last - 1, 3).getValues()
@@ -144,13 +188,18 @@ function buildStartHere_(ss){
     [eventWindow ? "EVENT WEEK — what matters now:" : "OFF-SEASON — what matters now:", ""],
     ...(eventWindow
       ? [["Scores land via the scoring form (link below)", ""], ["Watch the board", link("Scores")]]
-      : [["Collections: tick deposits on", link("Field")], ["Invites: tick invited/responded on", link("Invites")], ["Rooms:", link("Rooms")]]),
+      : [["Collections: tick deposits on", link("Field")],
+         ["Invites: tick invited / responded — committed on a yes, then GFY menu → Promote committed → Field", link("Invites")],
+         ["  new invitee? record the sponsor in invited_by · season start: GFY menu → Seed next season's Invites", ""],
+         ["Rooms:", link("Rooms")]]),
     ["", ""],
     ["Scoring config moved → Info tab (score_endpoint + form_url)" + (keep ? " — old value preserved below, copy it to Info!" : ""), ""],
     ["", keep],
     ["", ""],
     ["COLOR LEGEND", ""],
-    ["Red row = deposit unpaid", ""], ["Gold tint = rookie (since == this season)", ""], ["Orange tint = Rooms name not on Field", ""],
+    ["Red row = deposit unpaid (Field) · committed but status out/declined (Invites — fix one)", ""],
+    ["Gold tint = rookie (since == this season)", ""],
+    ["Orange tint = name not on Field (Rooms · committed Invites awaiting Promote)", ""],
     ["Names: FIRST + LAST on Field / Invites / Rooms (and the vault), spelled identically everywhere.", ""],
     ["", ""],
     ["CAPTAIN SCORING LINKS — one per team, share directly:", ""],

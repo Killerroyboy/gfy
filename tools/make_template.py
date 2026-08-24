@@ -159,14 +159,18 @@ SHEETS = {
         # committed = they said yes. Tick it, then Sheet menu GFY → Promote
         # committed → Field appends their Field row (team blank — the draft
         # pool — since carried from their latest prior Field row, status In).
-        # The site never reads this column; a Field row stays the one and
-        # only meaning of "committed" (A1). Sample values stay BLANK so the
-        # sample-row fingerprints (residue check) are unchanged by the column.
-        "headers": ["year", "player", "invited", "responded", "status", "committed"],
+        # invited_by = the sponsor: who invited this person (recorded for
+        # every NEW invitee — the group's who-brought-whom accountability;
+        # event-ready WARNs on a sponsorless first-timer). The site never
+        # reads committed for membership and shows invited_by only under
+        # ?admin=1; a Field row stays the one and only meaning of
+        # "committed" (A1). Sample values for both columns stay BLANK so
+        # the sample-row fingerprints (residue check) are unchanged.
+        "headers": ["year", "player", "invited", "responded", "status", "committed", "invited_by"],
         "rows": [
-            [2027, "Sully", "TRUE", "TRUE", "", ""],     # invited + responded
-            [2027, "Tex", "TRUE", "FALSE", "", ""],      # invited, no reply yet
-            [2027, "Bear", "FALSE", "FALSE", "out", ""], # not returning
+            [2027, "Sully", "TRUE", "TRUE", "", "", ""],     # invited + responded
+            [2027, "Tex", "TRUE", "FALSE", "", "", ""],      # invited, no reply yet
+            [2027, "Bear", "FALSE", "FALSE", "out", "", ""], # not returning
         ],
     },
     "Rooms": {

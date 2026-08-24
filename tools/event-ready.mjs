@@ -263,11 +263,46 @@ const NKEY=s=>String(s||"").trim().replace(/\s+/g," ").toLowerCase();
 const YES=v=>/^(y|yes|true|paid|in|1)$/i.test(String(v||"").trim());
 
 export function checkInvitesPromotion(invitesRows, fieldRows){
-  const committed=(invitesRows||[]).filter(r=>String(r.player||"").trim()&&YES(r.committed));
-  if(!committed.length) return [{level:"PASS", detail:"invites: no committed rows awaiting promotion"}];
-  const field=new Set((fieldRows||[]).filter(r=>String(r.player||"").trim())
-    .map(r=>String(r.year)+"|"+NKEY(r.player)));
+  const rows=(invitesRows||[]).filter(r=>String(r.player||"").trim());
+  const fieldRealRows=(fieldRows||[]).filter(r=>String(r.player||"").trim());
+  const field=new Set(fieldRealRows.map(r=>String(r.year)+"|"+NKEY(r.player)));
   const out=[];
+
+  // Sponsor accountability (Riley 2026-08-24: track who invited who) — a
+  // FIRST-TIME invitee should carry invited_by. Review-hardened (F2/F7/F8):
+  // "first-timer" = no Field row EARLIER than the scope year — a SAME-year
+  // row is just the promote having run first and must not launder the
+  // missing sponsor. Scope = the LATEST sane Invites year (2000-2100; one
+  // fat-fingered 20277 must not hijack the scope and silence the season).
+  // Judged per-PERSON, not per-row: a sponsor on any duplicate row
+  // satisfies, mirroring how mergeNextRows resolves the site's view.
+  const saneYear=y=>y>2000&&y<2100;
+  const fieldMinYear=new Map();
+  fieldRealRows.forEach(r=>{
+    const y=parseInt(r.year,10); if(!saneYear(y)) return;
+    const k=NKEY(r.player);
+    if(!fieldMinYear.has(k)||y<fieldMinYear.get(k)) fieldMinYear.set(k,y);
+  });
+  const years=rows.map(r=>parseInt(r.year,10)).filter(saneYear);
+  const latest=years.length?Math.max(...years):null;
+  if(latest!==null){
+    const persons=new Map();
+    rows.forEach(r=>{
+      if(parseInt(r.year,10)!==latest) return;
+      const k=NKEY(r.player);
+      const cur=persons.get(k)||{name:String(r.player).trim(), year:r.year, sponsored:false};
+      if(String(r.invited_by||"").trim()!=="") cur.sponsored=true;
+      persons.set(k,cur);
+    });
+    persons.forEach((p,k)=>{
+      const min=fieldMinYear.get(k);
+      if(min!==undefined&&min<latest) return;                 // returning: an EARLIER season's Field row
+      if(!p.sponsored)
+        out.push({level:"WARN", detail:`invites: "${p.name}" (${p.year}) is a first-time invitee with no invited_by — record the sponsor`});
+    });
+  }
+
+  const committed=rows.filter(r=>YES(r.committed));
   committed.forEach(r=>{
     const status=String(r.status||"").trim();
     if(/^(out|declined)$/i.test(status)){
@@ -277,7 +312,10 @@ export function checkInvitesPromotion(invitesRows, fieldRows){
     if(!field.has(String(r.year)+"|"+NKEY(r.player)))
       out.push({level:"WARN", detail:`invites: "${String(r.player).trim()}" (${r.year}) committed but has no Field row — run GFY → Promote committed → Field on the sheet`});
   });
-  if(!out.length) out.push({level:"PASS", detail:`invites: ${committed.length} committed row(s) all have Field rows`});
+
+  if(!out.length) out.push(committed.length
+    ? {level:"PASS", detail:`invites: ${committed.length} committed row(s) all have Field rows`}
+    : {level:"PASS", detail:"invites: no committed rows awaiting promotion"});
   return out;
 }
 
