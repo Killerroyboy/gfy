@@ -5897,6 +5897,38 @@ const nowW = Date.now();
       " contra=" + JSON.stringify(contra));
 }
 
+/* ===== §25a broadcast-core checks ===== */
+{ // T1: score tiers + tokens + mechanical contrast
+  const idx = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  // token presence
+  check("S25a-T1a: five semantic score tokens on :root",
+    /--score-under:\s*#D08A76/.test(idx) && /--score-even:\s*#C8A24A/.test(idx)
+    && /--score-over:\s*#E9E3D3/.test(idx) && /--score-bogey:\s*#8A9B8C/.test(idx)
+    && /--score-blowup:\s*#B0705E/.test(idx));
+  // tier boundaries via the page's own scoreClass (jsdom window from the suite's dom —
+  // index.html's scripts are plain non-module <script> tags run with runScripts:
+  // "dangerously", so a top-level `function scoreClass(...)` attaches directly to
+  // dom.window, same as any other global in this suite's main `dom`)
+  const scoreClass = dom.window.scoreClass;
+  check("S25a-T1b: scoreClass tiers — eagle additive, boundaries exact",
+    scoreClass(2,4) === " under eagle" && scoreClass(3,4) === " under"
+    && scoreClass(4,4) === "" && scoreClass(5,4) === " bogey"
+    && scoreClass(6,4) === " blowup" && scoreClass(9,4) === " blowup"
+    && scoreClass(3,0) === "" && scoreClass(3,null) === "");
+  // mechanical WCAG contrast — no eyeballs gate color
+  const lum = (hex) => { const c=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255)
+    .map(x=>x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4);
+    return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2]; };
+  const ratio = (f,b) => { const [hi,lo]=[Math.max(lum(f),lum(b)),Math.min(lum(f),lum(b))];
+    return (hi+0.05)/(lo+0.05); };
+  const pines = ["#0E2019","#132B21","#0A1712"];
+  const text = ["#D08A76","#C8A24A","#E9E3D3","#8A9B8C"];      // text tokens: 4.5 floor
+  const rings = ["#B0705E"];                                     // ring-only: 3.0 floor
+  check("S25a-T1c: contrast — text tokens ≥4.5, ring tokens ≥3.0 on every pine",
+    text.every(f=>pines.every(b=>ratio(f,b)>=4.5))
+    && rings.every(f=>pines.every(b=>ratio(f,b)>=3.0)));
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */

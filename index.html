@@ -15,6 +15,9 @@
   :root{
     --pine:#0E2019; --pine-2:#132B21; --pine-3:#0A1712;
     --bone:#E9E3D3; --sage:#8A9B8C; --brass:#C8A24A; --brass-dim:#6F5A26; --rust:#B0705E;
+    /* §25a B-CONV — semantic score tokens (spec rev 2 table; contrast measured in suite) */
+    --score-under:#D08A76; --score-even:#C8A24A; --score-over:#E9E3D3;
+    --score-bogey:#8A9B8C; --score-blowup:#B0705E;
     --display:"Bodoni Moda", Didot, Georgia, serif;
     --ui:"Jost", Futura, "Helvetica Neue", Arial, sans-serif;
   }
@@ -1695,6 +1698,7 @@ function renderBoardScoreBtn(){
 function scoreClass(score,par){
   if(!par) return "";
   const d=score-par;
+  if(d<=-2) return " under eagle";   // §25a B-GLYPH: additive tier — every .includes("under") consumer unaffected
   if(d<0) return " under";
   if(d===1) return " bogey";
   if(d>=2) return " blowup";
