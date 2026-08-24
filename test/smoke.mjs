@@ -5967,6 +5967,60 @@ const nowW = Date.now();
       " glyph=" + JSON.stringify(cell8?.querySelector(".sc-glyph")?.textContent ?? null));
   domG.window.close();
 }
+{ // T2: color flip + rings + legend
+  const idx = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const t2a = {
+    hcellUnder: /\.hcell\.under \.hs\{[^}]*var\(--score-under\)/.test(idx),
+    sgUnder: /\.sg-t td\.under\{[^}]*var\(--score-under\)/.test(idx),
+    scCellUnder: /\.sc-cell\.under \.sc-score\{[^}]*var\(--score-under\)/.test(idx),
+  };
+  check("S25a-T2a: under/even/over/bogey cells style from tokens, not raw brass",
+    Object.values(t2a).every(Boolean),
+    "found=" + JSON.stringify(t2a));
+
+  // T2b: the brief's own draft strips `border...;` declarations from the
+  // WHOLE file before checking that no `.sg-t td.blowup{...}` literal rule
+  // contains --rust — brittle against reordering/reformatting. The intent
+  // (binding) is: no CSS rule that targets the .sg-t td.blowup selector, in
+  // ANY of its forms (base rule, a combined ::after selector list, or its
+  // own ::after override), may color anything with the raw var(--rust)
+  // literal — the blowup tier's color must come from a --score-* token.
+  // Asserted structurally: extract every CSS block whose selector list
+  // contains the literal token `td.blowup` (optionally `::after`) and
+  // confirm none of THEIR bodies use var(--rust).
+  const blowupBlocks = [...idx.matchAll(/([^{}]*\btd\.blowup\b(?:::after)?[^{}]*)\{([^}]*)\}/g)];
+  const t2bNoRust = blowupBlocks.length > 0 && blowupBlocks.every(([, , body]) => !/var\(--rust\)/.test(body));
+  check("S25a-T2b: blowup TEXT is bone; rust survives only as ring color",
+    /\.hcell\.blowup \.hs\{[^}]*var\(--score-over\)/.test(idx)
+    && /\.sg-t td\.blowup\{[^}]*var\(--score-over\)/.test(idx)
+    && t2bNoRust,
+    "blowupBlocks=" + JSON.stringify(blowupBlocks.map(b => b[0].trim())));
+
+  check("S25a-T2c: ring vocabulary present (circle under, double eagle, square bogey, double-square blowup)",
+    /\.sg-t td\.under\b[^{]*\{[^}]*border-radius:\s*50%/.test(idx)
+    && /\.sg-t td\.under\.eagle\b[^{]*\{[^}]*box-shadow/.test(idx)
+    && /\.sg-t td\.bogey\b[^{]*\{[^}]*border(?![^}]*radius:\s*50%)/.test(idx)
+    && /\.sg-t td\.blowup\b[^{]*\{[^}]*box-shadow/.test(idx),
+    "ring CSS checked against index.html");
+
+  // NOTE: the file-scope `dom` was already `.window.close()`d earlier in the
+  // suite (lines ~1546/5081) — jsdom nulls out `.document` on a closed
+  // window, so reusing it here would throw. Static markup like the legend
+  // needs no route/fetch state, so a fresh throwaway dom is used, guarded in
+  // try/catch (idiom per task-1-report.md) so a missing symbol/DOM shape
+  // FAILs the check instead of crashing the whole suite.
+  let legend = null, legendErr = null;
+  try {
+    const domLg = makeDom("");
+    legend = domLg.window.document.querySelector("#sgLegend");
+    domLg.window.close();
+  } catch (e) { legendErr = e.message; }
+  const t2dLabels = ["Eagle", "Birdie", "Par", "Bogey", "Double or worse"];
+  check("S25a-T2d: legend — five labels verbatim",
+    !!legend && !legendErr && t2dLabels.every(t => legend.textContent.includes(t)),
+    "legend=" + JSON.stringify(legend ? legend.textContent.replace(/\s+/g, " ").trim() : null) +
+      (legendErr ? " err=" + legendErr : ""));
+}
 
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.

@@ -189,9 +189,42 @@
   .hcell .hs{font-family:var(--display);font-size:1rem;color:var(--bone);
              font-variant-numeric:tabular-nums;display:block;margin-top:2px}
   .hcell.sum{border-color:var(--brass-dim);background:rgba(200,162,74,.07)}
-  .hcell.under .hs{color:var(--brass);font-weight:700}
-  .hcell.bogey .hs{color:var(--sage)}
-  .hcell.blowup .hs{color:var(--rust)}
+  /* §25a B-CONV: five-token golf convention (K3/L2 class vocab unchanged — colors only) */
+  .hcell.under .hs{color:var(--score-under);font-weight:700}
+  .hcell.bogey .hs{color:var(--score-bogey)}
+  .hcell.blowup .hs{color:var(--score-over)}   /* rust TEXT fails 4.5 floor — ring carries the tier */
+  .sg-t td.under{color:var(--score-under);font-weight:700}
+  .sg-t td.bogey{color:var(--score-bogey)}
+  .sg-t td.blowup{color:var(--score-over)}
+  .sc-tile-v.under{color:var(--score-under)}
+  .sc-cell.under .sc-score{color:var(--score-under)}
+  .sc-cell.bogey .sc-score{color:var(--score-bogey)}
+  .sc-cell.blowup .sc-score{color:var(--score-over)}
+  /* §25a B-GLYPH: broadcast scorecard rings — pure CSS on existing tier classes */
+  .sg-t td.under,.sg-t td.bogey,.sg-t td.blowup{position:relative}
+  .sg-t td.under::after,.sg-t td.bogey::after,.sg-t td.blowup::after{
+    content:"";position:absolute;inset:15%;pointer-events:none;border:1px solid var(--score-under)}
+  .sg-t td.under::after{border-radius:50%}
+  .sg-t td.under.eagle::after{box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-under)}
+  .sg-t td.bogey::after{border-color:var(--score-bogey)}
+  .sg-t td.blowup::after{border-color:var(--score-blowup);
+    box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-blowup)}
+  .hcell.under .hs,.hcell.bogey .hs,.hcell.blowup .hs,
+  .sc-cell.under .sc-score,.sc-cell.bogey .sc-score,.sc-cell.blowup .sc-score{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:1.6em;min-height:1.6em;border:1px solid var(--score-under)}
+  .hcell.under .hs,.sc-cell.under .sc-score{border-radius:50%}
+  .hcell.under.eagle .hs,.sc-cell.under.eagle .sc-score{
+    box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-under)}
+  .hcell.bogey .hs,.sc-cell.bogey .sc-score{border-color:var(--score-bogey)}
+  .hcell.blowup .hs,.sc-cell.blowup .sc-score{border-color:var(--score-blowup);
+    box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-blowup)}
+  .sg-legend{display:flex;flex-wrap:wrap;gap:22px;align-items:center;margin-top:14px;
+    padding-top:12px;border-top:1px solid rgba(200,162,74,.2)}
+  .sg-legend .lg{display:flex;align-items:center;gap:9px;font-size:.62rem;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--sage)}
+  .sg-legend .gl{display:inline-flex;width:26px;height:26px;align-items:center;
+    justify-content:center;font-family:var(--display)}
 
   /* v2.3 scorecard grid (G-GRID/G-SCROLL): page never scrolls sideways —
      .sg-scroll owns the overflow. Headers are the tap targets (≥44px). */
@@ -207,9 +240,6 @@
   .sg-t tbody th.sg-team{font-weight:300}
   .sg-t tr.sg-par td,.sg-t tr.sg-par th{font-size:.8rem;color:var(--bone);font-weight:400;border-color:transparent;padding:6px 3px}
   .sg-t tr.sg-yds td,.sg-t tr.sg-yds th{font-size:.7rem;color:var(--sage);border-color:transparent;padding:2px 3px 8px}
-  .sg-t td.under{color:var(--brass);font-weight:700}
-  .sg-t td.bogey{color:var(--sage)}
-  .sg-t td.blowup{color:var(--rust)}
   .sg-t th[data-hole="10"],.sg-t td[data-hole="10"]{border-left:2px solid var(--brass-dim)}
   .sg-t tr.sg-par td[data-hole="10"],.sg-t tr.sg-yds td[data-hole="10"]{border-left:2px solid var(--brass-dim)}
   .sg-controls{display:flex;gap:8px;margin-bottom:10px}
@@ -521,7 +551,6 @@
   .sc-tile-k{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--sage)}
   .sc-tile-v{font-family:var(--display);font-size:21px;line-height:1.1;margin-top:2px;
     font-variant-numeric:tabular-nums;color:var(--bone)}
-  .sc-tile-v.under{color:var(--brass)}
   .sc-tile-par{border-color:var(--brass-dim)}
   .sc-tally-lab{font-size:13px;letter-spacing:.02em;text-transform:none;margin-left:4px;color:var(--sage)}
   /* Rev-3 UI wave, task 1 (SC-UI-V/SC-SKIN) — vertical Out|In card,
@@ -567,9 +596,6 @@
   .sc-score .sc-dash{color:var(--sage);font-size:18px}
   .sc-glyph{font-size:13px;line-height:1;font-style:normal;color:var(--sage)}
   .sc-mark{flex:none;width:16px;font-size:13px;line-height:1;font-style:normal;text-align:center;color:var(--sage)}
-  .sc-cell.under .sc-score{color:var(--brass)}
-  .sc-cell.bogey .sc-score{color:var(--sage)}
-  .sc-cell.blowup .sc-score{color:var(--rust)}
   /* SC-HONEST/SC-NOCLOBBER truth-state marks (rev 2's four states + conflict
      + rejected, rev 3's dress only): ▮ on-sheet · ⇡ queued/sending ·
      ▲ conflict · ! rejected — the class combines with the scoreClass ones
@@ -957,6 +983,13 @@
       <div class="sg-controls" id="sgRounds" hidden></div>
       <div class="sg-scroll" id="sgScroll"><table class="sg-t" id="sgTable"></table></div>
       <div class="sg-panel card-drop" id="sgPanel" hidden></div>
+      <div class="sg-legend" id="sgLegend" aria-label="Scorecard legend">
+        <span class="lg"><span class="gl" style="color:var(--score-under);border:1px solid var(--score-under);border-radius:50%;box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-under)">3</span>Eagle</span>
+        <span class="lg"><span class="gl" style="color:var(--score-under);border:1px solid var(--score-under);border-radius:50%">3</span>Birdie</span>
+        <span class="lg"><span class="gl" style="color:var(--score-over)">4</span>Par</span>
+        <span class="lg"><span class="gl" style="color:var(--score-bogey);border:1px solid var(--score-bogey)">5</span>Bogey</span>
+        <span class="lg"><span class="gl" style="color:var(--score-over);border:1px solid var(--score-blowup);box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-blowup)">7</span>Double or worse</span>
+      </div>
     </div>
     <p class="sync" id="lbSync"></p>
   </div>
