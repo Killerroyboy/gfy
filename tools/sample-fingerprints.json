@@ -444,6 +444,7 @@
    "Sully",
    "TRUE",
    "TRUE",
+   "",
    ""
   ],
   [
@@ -451,6 +452,7 @@
    "Tex",
    "TRUE",
    "FALSE",
+   "",
    ""
   ],
   [
@@ -458,7 +460,8 @@
    "Bear",
    "FALSE",
    "FALSE",
-   "out"
+   "out",
+   ""
   ]
  ],
  "rooms": [

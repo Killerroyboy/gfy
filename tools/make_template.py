@@ -8,16 +8,19 @@ Each sheet gets its exact header row (row 1, bold, frozen) plus a few rows of
 sample data showing the expected shape. Replace the samples with real data.
 
 Field.deposit, Ledger.settled, Calcutta.collected, and Invites.invited /
-Invites.responded are checkbox columns on the site. xlsx has no Google
-Sheets checkbox type, so the samples below hold the literal strings
-TRUE/FALSE; the README documents the one-time conversion step (select the
-column > Insert > Checkbox) after "Save as Google Sheets".
+Invites.responded / Invites.committed are checkbox columns on the site.
+xlsx has no Google Sheets checkbox type, so the samples below hold the
+literal strings TRUE/FALSE; the README documents the one-time conversion
+step (select the column > Insert > Checkbox) after "Save as Google Sheets".
 
 Invites has NO email column (v2.2 P-VAULT: all email addresses live in a
 separate, never-published admin vault sheet — outside this template, and
 outside this codebase entirely). Invites.status accepts "out" (not
 returning, silently suppressed) or "declined" (this season only, shown
 under the site's ?admin=1 view, reappears next season) — see F-DECLINED.
+Invites.committed marks an accepted invite; the GFY menu on the sheet
+(tools/gfy-promote.gs) turns committed ticks into Field rows — the SITE
+never reads the column (Field rows stay the sole committed source, A1).
 """
 import json
 from pathlib import Path
@@ -153,11 +156,17 @@ SHEETS = {
         # row is otherwise ignored, flagged); status=out silently suppresses
         # everyone, status=declined shows under the site's ?admin=1 view and
         # comes back into consideration next season on its own.
-        "headers": ["year", "player", "invited", "responded", "status"],
+        # committed = they said yes. Tick it, then Sheet menu GFY → Promote
+        # committed → Field appends their Field row (team blank — the draft
+        # pool — since carried from their latest prior Field row, status In).
+        # The site never reads this column; a Field row stays the one and
+        # only meaning of "committed" (A1). Sample values stay BLANK so the
+        # sample-row fingerprints (residue check) are unchanged by the column.
+        "headers": ["year", "player", "invited", "responded", "status", "committed"],
         "rows": [
-            [2027, "Sully", "TRUE", "TRUE", ""],     # invited + responded
-            [2027, "Tex", "TRUE", "FALSE", ""],      # invited, no reply yet
-            [2027, "Bear", "FALSE", "FALSE", "out"], # not returning
+            [2027, "Sully", "TRUE", "TRUE", "", ""],     # invited + responded
+            [2027, "Tex", "TRUE", "FALSE", "", ""],      # invited, no reply yet
+            [2027, "Bear", "FALSE", "FALSE", "out", ""], # not returning
         ],
     },
     "Rooms": {

@@ -254,6 +254,33 @@ export function checkCrossTab({scores,calcutta,rooms,field}, year){
   return out;
 }
 
+// F-NKEY: trim + collapse internal whitespace + casefold — mirrors nkey in
+// index.html and NORM in tools/sheet-triggers.gs / pcNorm_ in
+// tools/gfy-promote.gs (LOCKSTEP). checkCrossTab predates this and matches
+// exact trimmed strings; this check matches the way the SITE merges people.
+const NKEY=s=>String(s||"").trim().replace(/\s+/g," ").toLowerCase();
+// Mirrors index.html's yes() exactly — a checkbox publishes as TRUE/FALSE.
+const YES=v=>/^(y|yes|true|paid|in|1)$/i.test(String(v||"").trim());
+
+export function checkInvitesPromotion(invitesRows, fieldRows){
+  const committed=(invitesRows||[]).filter(r=>String(r.player||"").trim()&&YES(r.committed));
+  if(!committed.length) return [{level:"PASS", detail:"invites: no committed rows awaiting promotion"}];
+  const field=new Set((fieldRows||[]).filter(r=>String(r.player||"").trim())
+    .map(r=>String(r.year)+"|"+NKEY(r.player)));
+  const out=[];
+  committed.forEach(r=>{
+    const status=String(r.status||"").trim();
+    if(/^(out|declined)$/i.test(status)){
+      out.push({level:"WARN", detail:`invites: "${String(r.player).trim()}" (${r.year}) is committed AND status "${status}" — contradictory row, fix one`});
+      return;
+    }
+    if(!field.has(String(r.year)+"|"+NKEY(r.player)))
+      out.push({level:"WARN", detail:`invites: "${String(r.player).trim()}" (${r.year}) committed but has no Field row — run GFY → Promote committed → Field on the sheet`});
+  });
+  if(!out.length) out.push({level:"PASS", detail:`invites: ${committed.length} committed row(s) all have Field rows`});
+  return out;
+}
+
 function extractCfgFirstTee(configText){
   const code=String(configText).replace(/\/\/[^\n]*/g,"");
   const m=code.match(/FIRST_TEE:\s*"([^"]*)"/);
@@ -415,6 +442,14 @@ export async function main(){
 
   // (i) fallback parity
   push(checkFallbackParity(configText, indexHtml, infoRows));
+
+  // (j) invites→Field promotion — committed ticks whose promotion (GFY menu
+  // on the sheet) hasn't been run yet. An unconfigured invites gid is the
+  // legitimate pre-invites layout (skipped, same as the residue scan treats
+  // it); a configured-but-unfetchable invites tab already FAILed there.
+  const inv=fetched.invites;
+  if(inv && inv.configured && inv.ok && field)
+    push(checkInvitesPromotion(inv.rows, field.rows));
 
   finish();
 }

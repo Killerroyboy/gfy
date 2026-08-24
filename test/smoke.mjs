@@ -24,6 +24,7 @@ import jsdom from "jsdom";
 import {
   checkFirstTee, checkResidue, checkSchedule, checkPairings, checkPars,
   checkScorer, checkField, checkAnnounce, checkCrossTab, checkFallbackParity,
+  checkInvitesPromotion,
 } from "../tools/event-ready.mjs";
 
 const { JSDOM, VirtualConsole, requestInterceptor } = jsdom;
@@ -1813,9 +1814,9 @@ dom.window.close();
   const cbCols = [...cbBody.matchAll(/:\s*\[([^\]]*)\]/g)]
     .flatMap(m => m[1].split(",").map(s => s.trim().replace(/^"|"$/g, "")).filter(Boolean))
     .sort();
-  check("P4: checkbox columns are the closed list — exactly {deposit, collected, invited, responded, settled}, no extras",
+  check("P4: checkbox columns are the closed list — exactly {deposit, collected, invited, responded, committed, settled}, no extras",
     gs.includes('const CHECKBOX_COLS')
-    && JSON.stringify(cbCols) === JSON.stringify(["collected","deposit","invited","responded","settled"])
+    && JSON.stringify(cbCols) === JSON.stringify(["collected","committed","deposit","invited","responded","settled"])
     && !/CHECKBOX_COLS[^;]*handicap/s.test(gs));
   // P5 sibling: tools/make_template.py holds the SECOND copy of the course
   // truth (the xlsx-template rows). Regex the Course dict's rows out of the
@@ -5860,6 +5861,40 @@ const nowW = Date.now();
     "drift=" + JSON.stringify(drift) + " clean=" + JSON.stringify(clean) +
       " missingEmpty=" + JSON.stringify(missingEmpty) + " staleFact=" + JSON.stringify(staleFact) +
       " realShapeStale=" + JSON.stringify(realShapeStale));
+}
+
+// EV11: checkInvitesPromotion — a committed Invites row with no same-year
+// Field row WARNs naming the player + the sheet menu ("promotion not yet
+// run"); a committed row whose player HAS a same-year Field row (F-NKEY
+// name matching: trim + collapse internal whitespace + casefold) PASSes; a
+// prior-YEAR Field row never satisfies it; committed AND status out/declined
+// WARNs as a contradictory row (and is NOT also flagged as unpromoted);
+// unticked rows never flag; zero committed rows is a quiet PASS.
+{
+  const fieldEV11 = [
+    { year: "2027", player: "Duck  Jones" },            // internal double space — NKEY must still match
+    { year: "2026", player: "Tex" },                    // prior-year row only
+  ];
+  const none = checkInvitesPromotion(
+    [{ year: "2027", player: "Sully", invited: "TRUE", responded: "TRUE", committed: "" }], fieldEV11);
+  const pending = checkInvitesPromotion(
+    [{ year: "2027", player: "Wade Johnson", committed: "TRUE" }], fieldEV11);
+  const promoted = checkInvitesPromotion(
+    [{ year: "2027", player: "duck jones", committed: "TRUE" }], fieldEV11);
+  const priorYear = checkInvitesPromotion(
+    [{ year: "2027", player: "Tex", committed: "TRUE" }], fieldEV11);
+  const contra = checkInvitesPromotion(
+    [{ year: "2027", player: "Bear", committed: "TRUE", status: "declined" }], fieldEV11);
+  check("EV11: checkInvitesPromotion — committed w/o same-year Field row WARNs (names player + menu); committed with NKEY-matched same-year Field row PASSes; a prior-year Field row never satisfies; committed+out/declined WARNs as contradictory only; unticked/zero committed rows PASS quietly",
+    none.length === 1 && none[0].level === "PASS" &&
+      pending.some(r => r.level === "WARN" && /"Wade Johnson" \(2027\) committed but has no Field row/.test(r.detail) && /Promote committed/.test(r.detail)) &&
+      promoted.length === 1 && promoted[0].level === "PASS" &&
+      priorYear.some(r => r.level === "WARN" && /"Tex" \(2027\) committed but has no Field row/.test(r.detail)) &&
+      contra.some(r => r.level === "WARN" && /contradictory/.test(r.detail)) &&
+      !contra.some(r => /no Field row/.test(r.detail)),
+    "none=" + JSON.stringify(none) + " pending=" + JSON.stringify(pending) +
+      " promoted=" + JSON.stringify(promoted) + " priorYear=" + JSON.stringify(priorYear) +
+      " contra=" + JSON.stringify(contra));
 }
 
 /* ---------------------------------------------------------------------

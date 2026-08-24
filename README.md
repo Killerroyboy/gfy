@@ -33,14 +33,21 @@ tab has its own deep link (`yoursite.com/#calcutta`, `#nextyear`, `#rooms`,
    from the function dropdown and click **Run**. Authorize when prompted.
    `polish()` **applies checkbox validation** to the checkbox columns — the
    `deposit` column on Field, the `settled` column on Ledger, the
-   `collected` column on Calcutta, and the `invited`/`responded` columns on
-   Invites (**NOT `handicap`** — that column is a typed number, not a
+   `collected` column on Calcutta, and the `invited`/`responded`/`committed`
+   columns on Invites (**NOT `handicap`** — that column is a typed number, not a
    checkbox; the polish script repairs it if a broad column-conversion swept
    it up by mistake) — **without changing any cell values**. It also sets up
    the warn-mode status dropdowns, Field/Rooms coloring, and builds the
    START HERE tab, all in the same run. (Rooms has no checkbox columns —
    no checkbox step needed there.) Safe to re-run any time (see **Polish script**,
    below, for re-running after edits).
+
+   While you're in the script editor, also add the **GFY menu**: **File >
+   New > Script file** (do **not** paste over `Code.gs`), paste in
+   `tools/gfy-promote.gs`, save, and reload the sheet's browser tab — a
+   **GFY** menu appears with **Promote committed → Field** (the one-click
+   accept flow — see **The invite list**, below) and a shortcut to
+   `polish()`.
 
    **If the boxes come in unticked after `polish()` runs** — whether Sheets
    renders an imported TRUE/FALSE string as a ticked box depends on the
@@ -522,7 +529,9 @@ Each line comes back as one of three levels:
   that looks like last year's date, a Field row missing a handicap, an
   announcement dated more than 24h out, a Rooms row whose player doesn't
   match any Field player (skipped when the cell is empty or `guest:`-prefixed —
-  Rooms is allowed to hold names Field doesn't track).
+  Rooms is allowed to hold names Field doesn't track), an Invites row with
+  `committed` ticked but no Field row for that year (the GFY-menu promotion
+  hasn't been run — see **The invite list**).
 - **INFO** — context, not a problem. Examples: which schedule-coverage basis
   it used, the Announce tab not being wired up yet, `form_url` intentionally
   left unset.
@@ -631,7 +640,7 @@ entirely: it only changes how someone shows on the Field tab itself (a
 The Invites tab tracks next season's *outreach* — who was emailed, who
 wrote back, who still needs a nudge — separate from who's actually paid
 (that's the Field tab, above). Its columns: `year, player, invited,
-responded, status`.
+responded, status, committed`.
 
 > **⚠ NEVER put email addresses (or anything sensitive) in this
 > spreadsheet — every published tab is publicly fetchable.** Emails live in
@@ -646,6 +655,10 @@ The workflow:
    never hold the addresses).
 3. Tick `invited` for everyone you emailed.
 4. Tick `responded` as replies land.
+5. When someone says **yes**, tick `committed`.
+6. Sheet menu **GFY → Promote committed → Field** — every committed person
+   who doesn't already have a Field row for that year gets one, in a single
+   click. No re-typing anybody. (Details below.)
 
 The Next Year board turns this into a funnel — paid, responded, invited,
 still needs an invite — so you can see at a glance who's stuck and where
@@ -668,6 +681,30 @@ good.
 If you leave the Invites tab unconfigured or empty, the Next Year board just
 runs the plain paid/owing view with no funnel line — nothing else changes.
 
+### Committed → Field, one click
+
+**Promote committed → Field** (the GFY sheet menu, from `tools/gfy-promote.gs`
+— pasted during setup, step 3) is the accept flow's only moving part. For
+every Invites row with `committed` ticked it appends a Field row with:
+
+- `team` **blank** — they land in the draft pool; teams are drafted Friday
+  night, and nothing on the site or sheet needs a team before that.
+- `since` carried from their most recent prior Field row; a first-timer
+  gets the promoted year (their rookie year, by definition — they'll show
+  the ROOKIE badge and the gold tint).
+- `status` = `In`, `deposit` unchecked, `handicap` left blank for you.
+
+Safe to run as often as you like: someone who already has a Field row for
+that year is never duplicated or touched, and a row that's `committed` but
+also `out`/`declined` is contradictory — it's reported in the summary and
+never promoted; fix one or the other. The summary popup lists exactly who
+was promoted, who was already there, and what was skipped.
+
+The site itself never reads `committed` — a Field row remains the one and
+only meaning of "committed" everywhere (the owing list, the funnel's paid
+stage, the draft pool). The `npm run event-ready` preflight nudges you with
+a WARN if committed ticks are sitting unpromoted.
+
 ### Adding the Invites tab to a sheet you already built
 
 If your GFY sheet predates this feature (it only has the original 11 tabs),
@@ -676,9 +713,10 @@ add the 12th tab yourself — no need to rebuild from the template:
 1. In the Google Sheet, click **+** at the bottom to add a sheet, and name
    it exactly **Invites**.
 2. Paste the header row into row 1: `year, player, invited, responded,
-   status`.
-3. Select the `invited` and `responded` columns, one at a time: **Insert >
-   Checkbox** (same one-time step as Field.deposit).
+   status, committed`.
+3. Select the `invited`, `responded`, and `committed` columns, one at a
+   time: **Insert > Checkbox** (same one-time step as Field.deposit) — or
+   just re-run `polish()`, which applies all three.
 4. Click the new tab, copy its gid from the address bar (`#gid=…`, same as
    step 4 above), and paste it into `config.js` as `GID.invites`.
 
@@ -819,6 +857,7 @@ tools/make_template.py        regenerates tools/gfy-template.xlsx
 tools/make_admin_template.py  regenerates tools/gfy-admin-template.xlsx (the never-published vault template)
 tools/sheet-polish.gs         Apps Script sheet hygiene — checkboxes, dropdowns, Course autofill (see above)
 tools/sheet-triggers.gs       Apps Script live-scoring triggers — form writer + paid_date stamp (see above)
+tools/gfy-promote.gs          Apps Script GFY menu — one-click Promote committed → Field (see The invite list)
 tools/presend-check.mjs       the pre-send checker — vault diff, DNI check, email-leak watchdog (see above)
 tools/check_template.py       drift check: xlsx templates vs their generators (npm run check-template)
 tools/gid-check.mjs           drift check: config.js gids vs the live published sheet (npm run check-gids)
