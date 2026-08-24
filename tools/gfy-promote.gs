@@ -49,6 +49,20 @@ function pcHeaderMap_(sh){
   return m;
 }
 
+// First sheet row a new append should land on. NEVER getLastRow()+1: a
+// whole-column Insert > Checkbox pass (the README's own setup step) leaves
+// FALSE in every cell to row ~1000, getLastRow() counts those, and the
+// append lands invisibly below ~995 blank-looking rows (pre-push review
+// finding 1). A row counts as content only if some cell holds something
+// besides ""/FALSE checkbox fill. vals = the 2..getLastRow read.
+function pcAppendRow_(vals){
+  for (let i = vals.length - 1; i >= 0; i--){
+    const real = vals[i].some(v => !(v === "" || v === null || v === false || v === "FALSE"));
+    if (real) return i + 3;                                  // vals[i] is sheet row i+2
+  }
+  return 2;
+}
+
 function promoteCommitted(){
   const ui = SpreadsheetApp.getUi();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -69,6 +83,7 @@ function promoteCommitted(){
 
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(10000)){ ui.alert("GFY promote", "Sheet is busy — try again in a moment.", ui.ButtonSet.OK); return; }
+  let lines;
   try {
     const invVals = inv.getLastRow() > 1 ? inv.getRange(2, 1, inv.getLastRow() - 1, inv.getLastColumn()).getValues() : [];
     const fldVals = fld.getLastRow() > 1 ? fld.getRange(2, 1, fld.getLastRow() - 1, fld.getLastColumn()).getValues() : [];
@@ -123,24 +138,27 @@ function promoteCommitted(){
     });
 
     if (newRows.length){
-      const start = fld.getLastRow() + 1;
+      const start = pcAppendRow_(fldVals);
       const over = start + newRows.length - 1 - fld.getMaxRows();
       if (over > 0) fld.insertRowsAfter(fld.getMaxRows(), over); // getRange past maxRows throws
       fld.getRange(start, 1, newRows.length, width).setValues(newRows);
     }
 
-    const lines = [
+    lines = [
       newRows.length ? "Promoted " + newRows.length + ": " + promoted.join(", ") : "Promoted 0.",
       already ? already + " already in Field (untouched)." : "",
       contradicted.length ? "NOT promoted — committed but status says no: " + contradicted.join(", ") + ". Fix one or the other." : "",
       malformed.length ? "Skipped malformed: " + malformed.join(", ") + "." : "",
       newRows.length ? "Next: fill handicaps on Field; deposits tick as money lands." : "",
     ].filter(Boolean);
-    Logger.log("promoteCommitted: " + lines.join(" | "));
-    ui.alert("GFY promote", lines.join("\n\n"), ui.ButtonSet.OK);
   } finally {
     lock.releaseLock();
   }
+  // Alert AFTER release (pre-push review finding 2): a modal held inside
+  // the lock blocks applyScore_'s tryLock — captains would see "busy —
+  // resubmit" for as long as the dialog sat open.
+  Logger.log("promoteCommitted: " + lines.join(" | "));
+  ui.alert("GFY promote", lines.join("\n\n"), ui.ButtonSet.OK);
 }
 
 function seedInvites(){
@@ -234,7 +252,7 @@ function seedInvites(){
       return row;
     });
     if (rows.length){
-      const start = inv.getLastRow() + 1;
+      const start = pcAppendRow_(invVals);
       const over = start + rows.length - 1 - inv.getMaxRows();
       if (over > 0) inv.insertRowsAfter(inv.getMaxRows(), over); // getRange past maxRows throws
       inv.getRange(start, 1, rows.length, width).setValues(rows);
