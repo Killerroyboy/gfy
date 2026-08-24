@@ -4370,9 +4370,15 @@ async function cellSettledOk(doc, hole) {
   const note = docX35.querySelector("#sgNote");
   const noteShown = note && !note.hidden && /needs all 18 holes/i.test(note.textContent);
   const scrollHiddenX35 = docX35.querySelector("#sgScroll")?.hidden === true;
+  // Fix round 1, §25a FIX1: renderScoreGrid's !pars early return used to
+  // leave #sgLegend visible underneath this exact note (the legend has no
+  // meaning when there's no grid to key it to). Mirrors how note/scroll are
+  // already asserted here — same real fixture, same render pass.
+  const legendHiddenX35 = docX35.querySelector("#sgLegend")?.hidden === true;
   domX35.window.close();
-  check("X35: SC-PAR-VALID — blank par cell hides the score grid behind the 'needs all 18 holes' note (same degrade as a missing row; no Par-0 header row can render)",
-    !!noteShown && scrollHiddenX35, `note=${note && note.textContent} hidden=${note && note.hidden} scrollHidden=${scrollHiddenX35}`);
+  check("X35: SC-PAR-VALID — blank par cell hides the score grid behind the 'needs all 18 holes' note (same degrade as a missing row; no Par-0 header row can render); the legend hides with it (fix round 1, FIX1 — a legend with nothing to key it to must not linger)",
+    !!noteShown && scrollHiddenX35 && legendHiddenX35,
+    `note=${note && note.textContent} hidden=${note && note.hidden} scrollHidden=${scrollHiddenX35} legendHidden=${legendHiddenX35}`);
 }
 
 /* ---------------------------------------------------------------------
@@ -5969,39 +5975,99 @@ const nowW = Date.now();
 }
 { // T2: color flip + rings + legend
   const idx = readFileSync(path.join(ROOT, "index.html"), "utf8");
-  const t2a = {
-    hcellUnder: /\.hcell\.under \.hs\{[^}]*var\(--score-under\)/.test(idx),
-    sgUnder: /\.sg-t td\.under\{[^}]*var\(--score-under\)/.test(idx),
-    scCellUnder: /\.sc-cell\.under \.sc-score\{[^}]*var\(--score-under\)/.test(idx),
+
+  // Fix round 1 (§25a review) shared helper: a real (if minimal) CSS-rule
+  // parser over ONLY the <style> block, splitting each rule's selector list
+  // on commas so lookups are by EXACT selector token, not loose substring —
+  // the original draft's `.test(idx)` regexes were satisfied by finding ANY
+  // matching occurrence anywhere in the file, which is exactly the blind
+  // spot review finding FIX2/M9 exploited (a LATER duplicate rule with the
+  // wrong color still lets a `.test()` scan succeed via the earlier correct
+  // one). Every fix-round check below instead collects ALL rule bodies for
+  // an exact selector and asserts across ALL of them, so a later duplicate
+  // or a reverted single occurrence both fail closed.
+  // CSS comments MUST be stripped before rule-parsing: a comment sitting on
+  // its own line right before a selector (very common in this file, incl.
+  // pre-existing comments unrelated to this task) has no {}s of its own, so
+  // the naive [^{}]+ selector-scan swallows it INTO the next rule's
+  // "selector" text — e.g. "/* §25a B-CONV: ... */\n  .hcell.under .hs" as
+  // one combined string, which then silently fails an exact-match lookup
+  // for the clean ".hcell.under .hs" token. Caught this the hard way: T2a
+  // false-FAILed on real, correct CSS on the first run of the fix-round
+  // checks until this strip was added.
+  const styleBlock = (idx.match(/<style>([\s\S]*?)<\/style>/) || [, ""])[1].replace(/\/\*[\s\S]*?\*\//g, "");
+  const cssRules = [...styleBlock.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map(([, sel, body]) => ({ selectors: sel.split(",").map(s => s.trim()).filter(Boolean), body }));
+  const rulesFor = (selector) => cssRules.filter(r => r.selectors.includes(selector)).map(r => r.body);
+
+  // T2a (fix round 1: renamed + extended to match its own name — the
+  // original only asserted the "under" tier on three selectors, which is
+  // narrower than "under/even/over/bogey cells" claimed). Now covers every
+  // TEXT-color binding across all four selector families x all three tiers,
+  // and — the M9/M3 guard — asserts NO occurrence of that exact selector
+  // anywhere in the file (a later duplicate included) binds its color to a
+  // raw --brass/--sage/--rust literal.
+  const tierTextSelectors = {
+    ".hcell.under .hs": "--score-under", ".hcell.bogey .hs": "--score-bogey", ".hcell.blowup .hs": "--score-over",
+    ".sg-t td.under": "--score-under", ".sg-t td.bogey": "--score-bogey", ".sg-t td.blowup": "--score-over",
+    ".sc-tile-v.under": "--score-under",
+    ".sc-cell.under .sc-score": "--score-under", ".sc-cell.bogey .sc-score": "--score-bogey", ".sc-cell.blowup .sc-score": "--score-over",
   };
-  check("S25a-T2a: under/even/over/bogey cells style from tokens, not raw brass",
-    Object.values(t2a).every(Boolean),
-    "found=" + JSON.stringify(t2a));
+  const t2aDetail = {};
+  const t2aOK = Object.entries(tierTextSelectors).every(([sel, tok]) => {
+    const bodies = rulesFor(sel);
+    const hasToken = bodies.some(b => new RegExp("color:\\s*var\\(" + tok + "\\)").test(b));
+    const noRawLeak = bodies.every(b => !/color:\s*var\(--(brass|sage|rust)\)/.test(b));
+    t2aDetail[sel] = { count: bodies.length, hasToken, noRawLeak };
+    return hasToken && noRawLeak;
+  });
+  check("S25a-T2a: every tier TEXT-color binding (hcell .hs / sg-t td / sc-tile-v.under / sc-cell .sc-score, all applicable tiers) uses its --score-* token, and NO occurrence of that exact selector anywhere in the file — including a later duplicate rule — binds color to raw --brass/--sage/--rust",
+    t2aOK, "detail=" + JSON.stringify(t2aDetail));
 
-  // T2b: the brief's own draft strips `border...;` declarations from the
-  // WHOLE file before checking that no `.sg-t td.blowup{...}` literal rule
-  // contains --rust — brittle against reordering/reformatting. The intent
-  // (binding) is: no CSS rule that targets the .sg-t td.blowup selector, in
-  // ANY of its forms (base rule, a combined ::after selector list, or its
-  // own ::after override), may color anything with the raw var(--rust)
-  // literal — the blowup tier's color must come from a --score-* token.
-  // Asserted structurally: extract every CSS block whose selector list
-  // contains the literal token `td.blowup` (optionally `::after`) and
-  // confirm none of THEIR bodies use var(--rust).
-  const blowupBlocks = [...idx.matchAll(/([^{}]*\btd\.blowup\b(?:::after)?[^{}]*)\{([^}]*)\}/g)];
-  const t2bNoRust = blowupBlocks.length > 0 && blowupBlocks.every(([, , body]) => !/var\(--rust\)/.test(body));
-  check("S25a-T2b: blowup TEXT is bone; rust survives only as ring color",
-    /\.hcell\.blowup \.hs\{[^}]*var\(--score-over\)/.test(idx)
-    && /\.sg-t td\.blowup\{[^}]*var\(--score-over\)/.test(idx)
-    && t2bNoRust,
-    "blowupBlocks=" + JSON.stringify(blowupBlocks.map(b => b[0].trim())));
+  // T2b (fix round 1: extended from td.blowup-only to every selector that
+  // mentions "blowup" — hcell/sg-t td/sc-cell alike, text AND ring rules —
+  // so a reverted .sc-cell.blowup .sc-score (review finding M3) dies here
+  // too, independently of T2a).
+  const blowupRules = cssRules.filter(r => r.selectors.some(s => /\bblowup\b/.test(s)));
+  const t2bNoRust = blowupRules.length > 0 && blowupRules.every(r => !/var\(--rust\)/.test(r.body));
+  check("S25a-T2b: blowup styling (text AND ring, hcell/sg-t td/sc-cell alike) never uses the raw --rust literal anywhere — the blowup tier's color must come from --score-over/--score-blowup tokens only",
+    t2bNoRust,
+    "blowupRules=" + JSON.stringify(blowupRules.map(r => r.selectors.join(",") + "{" + r.body + "}")));
 
-  check("S25a-T2c: ring vocabulary present (circle under, double eagle, square bogey, double-square blowup)",
-    /\.sg-t td\.under\b[^{]*\{[^}]*border-radius:\s*50%/.test(idx)
-    && /\.sg-t td\.under\.eagle\b[^{]*\{[^}]*box-shadow/.test(idx)
-    && /\.sg-t td\.bogey\b[^{]*\{[^}]*border(?![^}]*radius:\s*50%)/.test(idx)
-    && /\.sg-t td\.blowup\b[^{]*\{[^}]*box-shadow/.test(idx),
-    "ring CSS checked against index.html");
+  // T2c (fix round 1: extended from .sg-t td-only to ALSO cover .hcell .hs
+  // / .sc-cell .sc-score — review findings M5 (eagle double-ring dropped)
+  // and M7 (entire hcell/sc-cell ring block deleted) both survived the
+  // original .sg-t td-only checks untouched. The hcell blowup ring is
+  // explicitly load-bearing: .hcell.blowup .hs's TEXT color is
+  // --score-over, which is the IDENTICAL hex to --bone (the default,
+  // untiered .hs color) — with no ring, a blowup score on the hole strip
+  // is pixel-identical to a plain par score, a real "never color-only"
+  // violation, not just a cosmetic gap.) Gets a real `detail` arg (was a
+  // static string before).
+  const ringSpecs = [
+    { sel: ".sg-t td.under::after", must: [/border-radius:\s*50%/] },
+    { sel: ".sg-t td.under.eagle::after", must: [/box-shadow/] },
+    { sel: ".sg-t td.bogey::after", must: [/border-color/], mustNotRadius: true },
+    { sel: ".sg-t td.blowup::after", must: [/box-shadow/] },
+    { sel: ".hcell.under .hs", must: [/border-radius:\s*50%/] },
+    { sel: ".sc-cell.under .sc-score", must: [/border-radius:\s*50%/] },
+    { sel: ".hcell.under.eagle .hs", must: [/box-shadow/] },
+    { sel: ".sc-cell.under.eagle .sc-score", must: [/box-shadow/] },
+    { sel: ".hcell.bogey .hs", must: [/border-color/], mustNotRadius: true },
+    { sel: ".sc-cell.bogey .sc-score", must: [/border-color/], mustNotRadius: true },
+    { sel: ".hcell.blowup .hs", must: [/box-shadow/] },
+    { sel: ".sc-cell.blowup .sc-score", must: [/box-shadow/] },
+  ];
+  const ringDetail = {};
+  const ringOK = ringSpecs.every(spec => {
+    const bodies = rulesFor(spec.sel);
+    const hasAll = spec.must.every(re => bodies.some(b => re.test(b)));
+    const noRadiusLeak = !spec.mustNotRadius || bodies.every(b => !/border-radius:\s*50%/.test(b));
+    ringDetail[spec.sel] = { count: bodies.length, hasAll, noRadiusLeak };
+    return hasAll && noRadiusLeak;
+  });
+  check("S25a-T2c: ring vocabulary present on BOTH the grid table (.sg-t td) AND the hole-strip/scorer-card (.hcell .hs / .sc-cell .sc-score) — circle under, double eagle, square bogey, double-square blowup",
+    ringOK, "detail=" + JSON.stringify(ringDetail));
 
   // NOTE: the file-scope `dom` was already `.window.close()`d earlier in the
   // suite (lines ~1546/5081) — jsdom nulls out `.document` on a closed
@@ -6020,6 +6086,37 @@ const nowW = Date.now();
     !!legend && !legendErr && t2dLabels.every(t => legend.textContent.includes(t)),
     "legend=" + JSON.stringify(legend ? legend.textContent.replace(/\s+/g, " ").trim() : null) +
       (legendErr ? " err=" + legendErr : ""));
+}
+{ // T2e (fix round 1, §25a FIX1): legend visibility mirrors note/scroll on
+  // BOTH of renderScoreGrid's early-return note paths. X35 (extended above)
+  // already grounds the !pars branch on a real fixture. The SECOND branch
+  // (!rounds.length, "No hole-by-hole cards yet — totals only so far.") has
+  // no existing real-fixture test to extend — building one would mean
+  // crafting a whole alternate players/rounds fixture set just for this.
+  // renderScoreGrid is reachable directly instead (confirmed top-level,
+  // non-closure via grep, same idiom as scoreClass — see task-1-report.md):
+  // it takes `players` as a plain argument and reads its DOM refs via $(),
+  // so calling it with a synthetic totals-only players array on a dom
+  // that's already completed one REAL load exercises the branch precisely,
+  // and — bonus — that same real load's own prior render proves the
+  // positive case (legend shown after a genuine successful grid render) in
+  // the same check. Guarded in try/catch per the established idiom.
+  let normalLegendHidden = null, notePath2LegendHidden = null, notePath2Text = null, t2eErr = null;
+  try {
+    const domE = makeDom("");
+    await until(() => domE.window.document.querySelectorAll("#sgTable tr.sg-teamrow").length > 0);
+    normalLegendHidden = domE.window.document.querySelector("#sgLegend")?.hidden;
+    domE.window.renderScoreGrid([{ key: "ZZ", name: "ZZ Totals-Only", rounds: { "1": { total: 70 } } }]);
+    const noteE = domE.window.document.querySelector("#sgNote");
+    notePath2Text = noteE && noteE.textContent;
+    notePath2LegendHidden = domE.window.document.querySelector("#sgLegend")?.hidden;
+    domE.window.close();
+  } catch (e) { t2eErr = e.message; }
+  check("S25a-T2e: legend shown after a real successful grid render, and hides again on renderScoreGrid's OTHER early-return note path ('No hole-by-hole cards yet') — not the same branch X35 exercises",
+    normalLegendHidden === false && notePath2LegendHidden === true
+    && !!notePath2Text && /totals only so far/i.test(notePath2Text) && !t2eErr,
+    "normalLegendHidden=" + normalLegendHidden + " notePath2LegendHidden=" + notePath2LegendHidden +
+      " notePath2Text=" + JSON.stringify(notePath2Text) + (t2eErr ? " err=" + t2eErr : ""));
 }
 
 /* ---------------------------------------------------------------------

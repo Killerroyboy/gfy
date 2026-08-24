@@ -187,7 +187,11 @@
   .hcell .hn{font-size:.5rem;letter-spacing:.08em;color:var(--sage);display:block}
   .hcell .hp{font-size:.5rem;color:var(--brass-dim);display:block}
   .hcell .hs{font-family:var(--display);font-size:1rem;color:var(--bone);
-             font-variant-numeric:tabular-nums;display:block;margin-top:2px}
+             font-variant-numeric:tabular-nums;margin-top:2px;
+             display:inline-flex;align-items:center;justify-content:center;
+             min-width:1.6em;min-height:1.6em}   /* box shape UNCONDITIONAL — fix round 1, FIX4:
+             every hole cell (tiered or not) gets the same box, so the ring border below
+             (tier-conditional only) never shifts the column's alignment */
   .hcell.sum{border-color:var(--brass-dim);background:rgba(200,162,74,.07)}
   /* §25a B-CONV: five-token golf convention (K3/L2 class vocab unchanged — colors only) */
   .hcell.under .hs{color:var(--score-under);font-weight:700}
@@ -209,10 +213,14 @@
   .sg-t td.bogey::after{border-color:var(--score-bogey)}
   .sg-t td.blowup::after{border-color:var(--score-blowup);
     box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-blowup)}
+  /* fix round 1, FIX4: this block is now border/border-radius/box-shadow
+     ONLY — box shape (display/min-width/min-height/align/justify) moved to
+     the UNCONDITIONAL .hcell .hs / .sc-cell .sc-score rules above, so a
+     par/blank cell's box never differs in shape from a tiered one, only in
+     whether it grows a ring border. */
   .hcell.under .hs,.hcell.bogey .hs,.hcell.blowup .hs,
   .sc-cell.under .sc-score,.sc-cell.bogey .sc-score,.sc-cell.blowup .sc-score{
-    display:inline-flex;align-items:center;justify-content:center;
-    min-width:1.6em;min-height:1.6em;border:1px solid var(--score-under)}
+    border:1px solid var(--score-under)}
   .hcell.under .hs,.sc-cell.under .sc-score{border-radius:50%}
   .hcell.under.eagle .hs,.sc-cell.under.eagle .sc-score{
     box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-under)}
@@ -591,8 +599,16 @@
   @media (max-width:400px){
     .sc-hole-yds{display:none}
   }
-  .sc-score{font-family:var(--display);font-size:22px;font-variant-numeric:tabular-nums;min-width:36px;
+  .sc-score{font-family:var(--display);font-size:22px;font-variant-numeric:tabular-nums;
     text-align:right;color:var(--bone)}
+  /* fix round 1, FIX4: box shape UNCONDITIONAL on .sc-cell .sc-score (every
+     score — tiered, par, or blank "–" — gets the identical box; only the
+     ring border below stays tier-conditional). min-width:1.6em at 22px is
+     within 1px of the old flat 36px min-width it replaces, so untiered
+     cells keep the same footprint in the Out|In row (D1-hardened flex:1 on
+     .sc-hole-par already absorbs any residual slack either way). */
+  .sc-cell .sc-score{display:inline-flex;align-items:center;justify-content:center;
+    min-width:1.6em;min-height:1.6em}
   .sc-score .sc-dash{color:var(--sage);font-size:18px}
   .sc-glyph{font-size:13px;line-height:1;font-style:normal;color:var(--sage)}
   .sc-mark{flex:none;width:16px;font-size:13px;line-height:1;font-style:normal;text-align:center;color:var(--sage)}
@@ -653,9 +669,14 @@
      transcribed from tools/scorer-rev3-prototype.html's .veil/.sheet/
      .sheet-head/.replace-line/.pad/.key/.numrow rules into .sc-`-prefixed
      site equivalents (same token-reuse discipline as task 1: no --under/
-     --line/second :root — eagle/birdie/parkey reuse the site's existing
-     --brass "under-par" signal; bogey reuses --sage, matching the score-
-     cell convention task 1 already established, NOT the prototype's own
+     --line/second :root — eagle/birdie tint their label with --score-under,
+     the site's live under-par signal (fix round 1, §25a FIX3: was raw
+     --brass, now the token so this pad never drifts from the scorecard's
+     own convention again); parkey stays --brass, which is ceremony here
+     (the ONE primary key's emphasis tint), not a score-tier signal, so it
+     is deliberately untouched; bogey reuses --sage, matching the score-
+     cell convention task 1 already established (--score-bogey is the same
+     hex as --sage — still true post-token-swap), NOT the prototype's own
      --rust bogey-key tint). #scSheet/#scVeil keep the native `hidden`
      attribute when closed (STATE.scPadHole==null) IN ADDITION to the `.on`
      class used when open: every state change here does a full innerHTML
@@ -724,7 +745,7 @@
      climbs further, to the biggest text on the pad. */
   .sc-key b{font-family:var(--display);font-size:23px;font-weight:400}
   .sc-key-lab{font-size:13px;color:var(--sage);text-transform:uppercase;letter-spacing:.04em}
-  .sc-key.sc-eagle .sc-key-lab,.sc-key.sc-birdie .sc-key-lab{color:var(--brass)}
+  .sc-key.sc-eagle .sc-key-lab,.sc-key.sc-birdie .sc-key-lab{color:var(--score-under)}
   .sc-key.sc-parkey{border-color:var(--brass);background:var(--pine-3)}
   .sc-key.sc-parkey b{color:var(--brass);font-size:29px}
   .sc-key.sc-parkey .sc-key-lab{color:var(--brass);font-size:13px}
@@ -776,10 +797,16 @@
     background:var(--pine-2);color:var(--bone);font-family:var(--ui);cursor:pointer;padding:10px}
   .sc-con-btn b{font-family:var(--display);font-size:22px;display:block}
   .sc-con-btn small{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--sage)}
-  /* Keep = the safe default — reuses Task 1/2's --brass "under-par"
-     convention (this site has no --under, the prototype's own token for
-     this button). Replace-with-mine = the more assertive override, --rust,
-     matching the conflict cell's own rust tint. */
+  /* Keep = the safe default — reuses the site's --brass identity color
+     (this site has no --under, the prototype's own token for this button).
+     Fix round 1, §25a FIX3 audit: this brass use is ceremony (the site's
+     general "safe default" tint), NOT the score-tier under-par signal —
+     "Keep"/"Replace" describe which VALUE to trust in a conflict, they
+     carry no over/under-par meaning, so this stays brass unchanged; only
+     the COMMENT'S framing is corrected here (it used to imply a live link
+     to the under-par convention, which now lives at --score-under instead).
+     Replace-with-mine = the more assertive override, --rust, matching the
+     conflict cell's own rust tint (also ceremony, not a score-tier color). */
   .sc-con-btn.sc-con-keep{border-color:var(--brass)} .sc-con-btn.sc-con-keep b{color:var(--brass)}
   .sc-con-btn.sc-con-mine{border-color:var(--rust)} .sc-con-btn.sc-con-mine b{color:var(--rust)}
   .sc-con-btn:focus-visible{outline:2px solid var(--brass)}
@@ -986,7 +1013,7 @@
       <div class="sg-legend" id="sgLegend" aria-label="Scorecard legend">
         <span class="lg"><span class="gl" style="color:var(--score-under);border:1px solid var(--score-under);border-radius:50%;box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-under)">3</span>Eagle</span>
         <span class="lg"><span class="gl" style="color:var(--score-under);border:1px solid var(--score-under);border-radius:50%">3</span>Birdie</span>
-        <span class="lg"><span class="gl" style="color:var(--score-over)">4</span>Par</span>
+        <span class="lg"><span class="gl" style="color:var(--bone)">4</span>Par</span>
         <span class="lg"><span class="gl" style="color:var(--score-bogey);border:1px solid var(--score-bogey)">5</span>Bogey</span>
         <span class="lg"><span class="gl" style="color:var(--score-over);border:1px solid var(--score-blowup);box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-blowup)">7</span>Double or worse</span>
       </div>
@@ -1847,7 +1874,7 @@ function renderLeaderboard(){
 
 /* ---------- v2.3 hole-by-hole grid (G-GRID) ---------- */
 function renderScoreGrid(players){
-  const wrap=$("#sgWrap"), note=$("#sgNote"), scroll=$("#sgScroll"), table=$("#sgTable");
+  const wrap=$("#sgWrap"), note=$("#sgNote"), scroll=$("#sgScroll"), table=$("#sgTable"), legend=$("#sgLegend");
   if(!wrap) return;
   // G-PANEL: any re-render (refresh, round toggle, or a fresh fetch that
   // no longer matches) closes a stale open hole panel — it must not survive
@@ -1862,9 +1889,9 @@ function renderScoreGrid(players){
   const pars=courseMap();
   if(!pars){
     note.textContent="Hole-by-hole view needs all 18 holes on the Course tab.";
-    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return;
+    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; legend.hidden=true; return;
   }
-  note.hidden=true; scroll.hidden=false;
+  note.hidden=true; scroll.hidden=false; legend.hidden=false;
   // G-ROUND: only rounds with an actual hole-by-hole card count toward the
   // grid/toggle. A round that exists solely as a {total} entry (no .holes)
   // must not be selectable — there's no hole-by-hole card to show for it —
@@ -1872,7 +1899,7 @@ function renderScoreGrid(players){
   const rounds=[...new Set(players.flatMap(p=>Object.keys(p.rounds).filter(r=>p.rounds[r].holes)))].sort();
   if(!rounds.length){
     note.textContent="No hole-by-hole cards yet — totals only so far.";
-    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return;
+    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; legend.hidden=true; return;
   }
   const rd=(STATE.gridRound&&rounds.includes(STATE.gridRound))?STATE.gridRound:rounds[0];
   const prevRd=table.dataset.round;   // captured before this render's mutations, for G-FOCUS's same-round guard
@@ -3610,11 +3637,16 @@ function scPadNumbers(hole){
 // Task 2 (rev 3, SC-PAD-SHEET) — maps a preset key's scParLabel() text back
 // to its visual-emphasis class, purely a render concern (scParLabel/
 // scPadNumbers themselves are untouched). Par is the ONE primary key
-// (.sc-parkey); eagle/birdie tint their label brass (this site's existing
-// "under-par" signal — task 1 established there's no separate --under
-// token); bogey is left at .sc-key-lab's own default --sage, matching task
-// 1's bogey-score-cell color exactly (a deliberate departure from the
-// prototype's own rust-tinted bogey key, for site-wide consistency).
+// (.sc-parkey, stays brass — ceremony/emphasis, not a score-tier signal);
+// eagle/birdie tint their label --score-under (fix round 1, §25a FIX3: was
+// raw --brass — this site has no separate --under token, so the pad used
+// to just borrow --brass directly; now it borrows the real under-par
+// TOKEN instead, so it can never silently drift from the scorecard's own
+// convention again); bogey is left at .sc-key-lab's own default --sage,
+// matching task 1's bogey-score-cell color exactly (--score-bogey is the
+// same hex as --sage, so this still holds post-token-swap — a deliberate
+// departure from the prototype's own rust-tinted bogey key, for site-wide
+// consistency).
 function scKeyExtraClass(label){
   if(label==="Eagle") return " sc-eagle";
   if(label==="Birdie") return " sc-birdie";
