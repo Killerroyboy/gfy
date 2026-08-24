@@ -73,12 +73,15 @@ function promoteCommitted(){
     const invVals = inv.getLastRow() > 1 ? inv.getRange(2, 1, inv.getLastRow() - 1, inv.getLastColumn()).getValues() : [];
     const fldVals = fld.getLastRow() > 1 ? fld.getRange(2, 1, fld.getLastRow() - 1, fld.getLastColumn()).getValues() : [];
 
-    // Existing Field membership (NOCLOBBER key) + each player's latest since.
+    // Existing Field membership (NOCLOBBER key), each player's latest since,
+    // and who has ANY Field row at all (first-timer detection).
     const existing = new Set();
     const latestSince = {};                                 // pcNorm(player) -> {year, since}
+    const fieldAnyYear = new Set();
     fldVals.forEach(r => {
       const p = String(r[fh.player] || "").trim(); if (!p) return;
       existing.add(String(r[fh.year]).trim() + "|" + pcNorm_(p));
+      fieldAnyYear.add(pcNorm_(p));
       const y = parseInt(r[fh.year], 10), s = String(r[fh.since] == null ? "" : r[fh.since]).trim();
       if (s && !isNaN(y)){
         const k = pcNorm_(p);
@@ -105,15 +108,26 @@ function promoteCommitted(){
       row[fh.player] = player;
       row[fh.status] = "In";                                // FIELD_STATUS vocab (E-VOCAB)
       row[fh.team] = "";                                    // E-TEAM: blank until the Friday draft
-      const prior = latestSince[pcNorm_(player)];
-      row[fh.since] = prior ? prior.since : parseInt(yearKey, 10); // first-timer: rookie year by definition
+      const k2 = pcNorm_(player);
+      const prior = latestSince[k2];
+      const returning = fieldAnyYear.has(k2);
+      // TRUE first-timer (no Field row anywhere): since = the promoted year,
+      // his rookie year by definition. A RETURNING player whose rows never
+      // recorded a since gets BLANK — defaulting the invite year would badge
+      // a veteran ROOKIE on the site, a fabricated rookie-ness (S12).
+      row[fh.since] = prior ? prior.since : (returning ? "" : parseInt(yearKey, 10));
       if ("deposit" in fh) row[fh.deposit] = false;         // unchecked checkbox
       newRows.push(row);
       existing.add(key);                                    // a duplicate committed row can't double-append
-      promoted.push(player + (prior ? "" : " (rookie)"));
+      promoted.push(player + (returning ? (prior ? "" : " (since unknown — fill it)") : " (rookie)"));
     });
 
-    if (newRows.length) fld.getRange(fld.getLastRow() + 1, 1, newRows.length, width).setValues(newRows);
+    if (newRows.length){
+      const start = fld.getLastRow() + 1;
+      const over = start + newRows.length - 1 - fld.getMaxRows();
+      if (over > 0) fld.insertRowsAfter(fld.getMaxRows(), over); // getRange past maxRows throws
+      fld.getRange(start, 1, newRows.length, width).setValues(newRows);
+    }
 
     const lines = [
       newRows.length ? "Promoted " + newRows.length + ": " + promoted.join(", ") : "Promoted 0.",
@@ -219,7 +233,12 @@ function seedInvites(){
       if ("committed" in ih) row[ih.committed] = false;
       return row;
     });
-    if (rows.length) inv.getRange(inv.getLastRow() + 1, 1, rows.length, width).setValues(rows);
+    if (rows.length){
+      const start = inv.getLastRow() + 1;
+      const over = start + rows.length - 1 - inv.getMaxRows();
+      if (over > 0) inv.insertRowsAfter(inv.getMaxRows(), over); // getRange past maxRows throws
+      inv.getRange(start, 1, rows.length, width).setValues(rows);
+    }
 
     lines = [
       rows.length ? "Seeded " + rows.length + " for " + seedYear + " (veterans first): " + picks.map(k => latest[k].name).join(", ")
