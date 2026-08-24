@@ -5901,32 +5901,71 @@ const nowW = Date.now();
 { // T1: score tiers + tokens + mechanical contrast
   const idx = readFileSync(path.join(ROOT, "index.html"), "utf8");
   // token presence
+  const tokPresentT1a = {
+    under: /--score-under:\s*#D08A76/.test(idx), even: /--score-even:\s*#C8A24A/.test(idx),
+    over: /--score-over:\s*#E9E3D3/.test(idx), bogey: /--score-bogey:\s*#8A9B8C/.test(idx),
+    blowup: /--score-blowup:\s*#B0705E/.test(idx),
+  };
   check("S25a-T1a: five semantic score tokens on :root",
-    /--score-under:\s*#D08A76/.test(idx) && /--score-even:\s*#C8A24A/.test(idx)
-    && /--score-over:\s*#E9E3D3/.test(idx) && /--score-bogey:\s*#8A9B8C/.test(idx)
-    && /--score-blowup:\s*#B0705E/.test(idx));
+    Object.values(tokPresentT1a).every(Boolean),
+    "found=" + JSON.stringify(tokPresentT1a));
   // tier boundaries via the page's own scoreClass (jsdom window from the suite's dom —
   // index.html's scripts are plain non-module <script> tags run with runScripts:
   // "dangerously", so a top-level `function scoreClass(...)` attaches directly to
   // dom.window, same as any other global in this suite's main `dom`)
   const scoreClass = dom.window.scoreClass;
+  const scT1b = {
+    eagle: scoreClass(2,4), under: scoreClass(3,4), even: scoreClass(4,4),
+    bogey: scoreClass(5,4), blowup1: scoreClass(6,4), blowup2: scoreClass(9,4),
+    par0: scoreClass(3,0), parNull: scoreClass(3,null),
+  };
   check("S25a-T1b: scoreClass tiers — eagle additive, boundaries exact",
-    scoreClass(2,4) === " under eagle" && scoreClass(3,4) === " under"
-    && scoreClass(4,4) === "" && scoreClass(5,4) === " bogey"
-    && scoreClass(6,4) === " blowup" && scoreClass(9,4) === " blowup"
-    && scoreClass(3,0) === "" && scoreClass(3,null) === "");
-  // mechanical WCAG contrast — no eyeballs gate color
+    scT1b.eagle === " under eagle" && scT1b.under === " under"
+    && scT1b.even === "" && scT1b.bogey === " bogey"
+    && scT1b.blowup1 === " blowup" && scT1b.blowup2 === " blowup"
+    && scT1b.par0 === "" && scT1b.parNull === "",
+    "got=" + JSON.stringify(scT1b));
+  // mechanical WCAG contrast — no eyeballs gate color. Fix round 1 (review
+  // finding 2): the five hex values are PARSED out of index.html's own
+  // --score-* tokens (not hardcoded literals) so this gate tracks the page —
+  // if a token's hex ever drifts, this check fails against the REAL value,
+  // not a frozen copy of it.
   const lum = (hex) => { const c=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255)
     .map(x=>x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4);
     return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2]; };
   const ratio = (f,b) => { const [hi,lo]=[Math.max(lum(f),lum(b)),Math.min(lum(f),lum(b))];
     return (hi+0.05)/(lo+0.05); };
   const pines = ["#0E2019","#132B21","#0A1712"];
-  const text = ["#D08A76","#C8A24A","#E9E3D3","#8A9B8C"];      // text tokens: 4.5 floor
-  const rings = ["#B0705E"];                                     // ring-only: 3.0 floor
-  check("S25a-T1c: contrast — text tokens ≥4.5, ring tokens ≥3.0 on every pine",
-    text.every(f=>pines.every(b=>ratio(f,b)>=4.5))
-    && rings.every(f=>pines.every(b=>ratio(f,b)>=3.0)));
+  const tok = (n) => (idx.match(new RegExp("--score-" + n + ":\\s*(#[0-9A-Fa-f]{6})")) || [])[1];
+  const text = ["under","even","over","bogey"].map(tok);   // text tokens: 4.5 floor
+  const rings = ["blowup"].map(tok);                       // ring-only: 3.0 floor
+  const allParsedT1c = text.every(Boolean) && rings.every(Boolean);
+  check("S25a-T1c: contrast — text tokens ≥4.5, ring tokens ≥3.0 on every pine (values parsed live from index.html's --score-* tokens)",
+    allParsedT1c
+    && text.every(f=>pines.every(b=>ratio(f,b)>=4.5))
+    && rings.every(f=>pines.every(b=>ratio(f,b)>=3.0)),
+    "text=" + JSON.stringify(text) + " rings=" + JSON.stringify(rings));
+}
+{ // T1d: eagle scores keep the ▾ glyph — fix round 1 (review finding 1)
+  // regression guard for scCellHTML's glyph derivation (index.html ~4326):
+  // strict equality (scoreCls==="under") let " under eagle" fall through to
+  // no glyph at all, making the best score on the scorer card color-only —
+  // the exact thing the comment directly above that line forbids. The fix
+  // is scoreCls.includes("under"); this check fails again if that reverts.
+  const domG = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docG = await openScorer(domG, { noSheet: true });
+  docG.querySelector('.sc-cell[data-hole="8"]').click();   // hole 8, par 4 (course fixture)
+  await until(() => !docG.querySelector("#scSheet")?.hidden);
+  [...docG.querySelectorAll("#scSheet .sc-key[data-score]")]
+    .find(b => b.dataset.score === "2").click();            // par4-2 = eagle (X8 confirms "2" labels "Eagle" on hole 8)
+  await until(() => docG.querySelector('.sc-cell[data-hole="8"] .sc-score')?.textContent === "2");
+  const cell8 = docG.querySelector('.sc-cell[data-hole="8"]');
+  check("S25a-T1d: eagle score (2 on a par-4) still carries the ▾ glyph, same as any other under-par score — never color-only",
+    !!cell8 && cell8.classList.contains("under") && cell8.classList.contains("eagle")
+    && cell8.querySelector(".sc-glyph")?.textContent === "▾",
+    "class=" + (cell8 ? cell8.className : "no cell") +
+      " glyph=" + JSON.stringify(cell8?.querySelector(".sc-glyph")?.textContent ?? null));
+  domG.window.close();
 }
 
 /* ---------------------------------------------------------------------

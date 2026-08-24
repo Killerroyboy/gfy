@@ -4323,7 +4323,7 @@ function scCellHTML(h,nextHole){
   // Over/under is never color-only: a ▾/▴ glyph rides alongside the color
   // class, as a SIBLING of .sc-score (never nested inside it) so anything
   // reading .sc-score's textContent keeps seeing the bare score digits.
-  const glyph=scoreCls==="under"?"▾":(scoreCls==="bogey"||scoreCls==="blowup")?"▴":"";
+  const glyph=scoreCls.includes("under")?"▾":(scoreCls==="bogey"||scoreCls==="blowup")?"▴":"";
   const cls=[scoreCls,extraCls].filter(Boolean).join(" ");
   const scoreHTML=label!=null
     ? `<span class="sc-score${scoreCls?" "+scoreCls:""}">${label}</span>${glyph?`<i class="sc-glyph" aria-hidden="true">${glyph}</i>`:""}`
