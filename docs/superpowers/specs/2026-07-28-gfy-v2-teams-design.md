@@ -951,7 +951,8 @@ future-guard, cross-tab referential preflight check, static jump chips (matching
   results export (offered separately, Riley to rule), course-map pin portability (cut —
   YAGNI until the venue changes).
 
-## §25 — broadcast-finish wave: PGA-caliber presentation (Riley brainstormed + canvas-approved 2026-08-24)
+
+## §25 — broadcast-finish wave: PGA-caliber presentation (Riley brainstormed + canvas-approved 2026-08-24; **rev 2** after 4-lens pressure test same day)
 
 Provenance. Riley 2026-08-24: "we want this to look like it's a PGA tournament caliber."
 Brainstorm rulings, all his: reference = Augusta prestige + TV broadcast graphics + full
@@ -959,86 +960,146 @@ event kit (explicitly NOT a modern sports-app pivot); tone = STRAIGHT FACE, hidd
 (full ceremonial seriousness — the deadpan is the joke); formal name = THE GOOD FRIENDS
 YEARLY (GFY stays the monogram); domain = keep killerroyboy.github.io/gfy (no purchase).
 Direction boards published as design canvas artifact c7f7775e-2462-4398-9f31-4a7a72662e04
-(registered in ~/mc-gallery/ARTIFACTS.md; 6 boards: Identity, Broadcast Board, The Card —
-Glyphs, Lodge TV, Lodge Poster, Captain Card; built from exact site tokens + real
-MeadowCreek data). Riley approved THE WHOLE CANVAS same day: "I like all those… I like the
+(registered in ~/mc-gallery/ARTIFACTS.md; 6 boards built from exact site tokens + real
+MeadowCreek data). Riley approved THE WHOLE CANVAS: "I like all those… I like the
 leaderboard with the movement, and the scorecard. I like it all. Now we just have to make
-sure everything works the way its supposed to" — that last sentence is this wave's quality
-bar: verification-heavy, no surface ships without its cycle test and render proof.
+sure everything works the way its supposed to" — that last sentence is the quality bar.
+**REV 2 (same day): 4-lens pressure test (design-fidelity / technical vs codebase /
+honesty / ops-scope, ~40 findings).** Material changes: the canvas is declared the
+NORMATIVE visual referent; the score palette is honestly FIVE tokens, with contrast
+measured mechanically (rust TEXT fails the floor — fixed below); TV mode becomes its own
+route (the hash router strips query params, index.html:1261); movement arrows gain a
+staleness rule; §25 splits into §25a (core) + §25b (finish polish); acceptance baseline
+corrected to the moving suite count (247/247 at review time — the concurrent
+accept→Field wave added 7).
 
-Requirements (§25 = site wave; §26 = kit wave; both inherit every standing honesty rule —
-§20/§21 par-suppression, S12 label honesty, D3 degradation):
+**CANVAS-NORMATIVE CLAUSE.** For §25/§26 visual details not restated in text — board
+kicker/heading/subtitle copy ("Live from the course" / "Leaderboard" / "Gross decides The
+Bird…"), the round-context chip ("Round 2 · Saturday", brass border, masthead right),
+footer conventions, legend layout, TV rotation indicator (labeled dots + "Rotates every
+20 seconds"), print framing (double hairline: brass .55 outer / .25 inner) and print copy
+— the approved canvas artifact is NORMATIVE. A deviation ships only with a named reason
+recorded in the plan (rev 2 contains one: blowup-tier numeral color, below). The canvas
+copy is the approved tone exemplar; NEW copy is proposed to Riley in the plan, never
+invented silently (content-semantics are his).
+
+**Wave split (rev 2).** §25a = B-NAME, B-CONV, B-GLYPH, B-MV, B-HOME, B-LT (the core
+Riley named). §25b = B-FIN (finish polish; ships after §25a proves out). §26 = kit,
+independent, may trail.
+
+Requirements (both waves inherit every standing honesty rule — §20/§21 par-suppression,
+S12 label honesty, §24 stamps, D3 degradation):
 
 - **B-NAME — ceremonial masthead system.** Per the Identity board: crest + THE GOOD
   FRIENDS YEARLY (Bodoni letterspaced caps) + "McCall, Idaho · Est. 2019" + the double
-  hairline rule (brass .45 over .2) becomes the masthead treatment on the Board view and
-  the compact masthead bar (small crest + full name) on data views. Nav keeps the GFY
-  monogram; the Home hero's existing big-GFY mark stays (identity, not scope). Copy pass
-  site-wide through the straight-face filter — copy CHANGES are proposed to Riley in the
-  plan, not invented silently (content-semantics are his).
-- **B-HOME — leaderboard on the front page.** Riley singled this out ("you can see the
-  leaderboard on the front page and the score"). During the §24 event phase, Home embeds a
-  compact top-5 leaderboard (Pos, team, thru, to-par in the B-CONV colors) under the
-  Now/Next strip, linking to the full Board; it carries the same honest "checked h:mm"
-  stamp and disappears off-phase. Off-season Home unchanged. Degrades per §20: pars
-  invalid ⇒ same suppression the Board applies (order without Pos/to-par claims).
-- **B-CONV — golf score-color convention, site-wide switch.** New semantic tokens:
-  --score-under #D08A76 (new tint, validated on the canvas), --score-even = brass,
-  --score-over = bone. Applied everywhere a score-vs-par value renders: Board to-par,
-  grid/hole cells, scorer card tallies and to-par tile, B-HOME, §26 TV. This REPLACES the
-  current gold=under idiom (.hcell.under/.sg-t td.under brass). Brass narrows to ceremony:
-  leader Pos, crowns, rules, EVEN. Cell tiers render exactly as the approved
-  Card board does: bogey square = sage, double-or-worse = rust. Contrast
-  floor 4.5:1 against pine surfaces for every new pairing (§24 banner lesson). One token
-  set, no per-view forks — a mismatch between two views is a defect.
-- **B-GLYPH — scorecard glyph vocabulary.** Per the approved Card board, drawn CSS-only on
-  the hole-by-hole grid and hole panels: diff ≤ −2 double circle, −1 circle, 0 plain, +1
-  square, ≥ +2 double square; ring color follows B-CONV/sage/rust as approved. Legend
-  renders once under the grid (five samples, as on the board). Glyphs render ONLY where
-  par is valid for that hole (courseMap null ⇒ no glyph, no ring — §20 honesty); pure
-  glyph-mapping function, unit-tested at the boundaries (−2, −1, 0, +1, +2).
+  hairline rule (brass .45 over .2) becomes the Board masthead; data views get the
+  compact masthead bar (small crest + full name + view-specific context line). The Board
+  masthead carries the round-context chip per the canvas. Nav keeps the GFY monogram; the
+  Home hero's big-GFY mark stays.
+- **B-HOME — leaderboard on the front page.** Riley singled this out. During the §24
+  event phase, Home embeds a compact leaderboard under the Now/Next strip that is a
+  LITERAL TOP-SLICE OF THE BOARD'S RENDER — same row markup, same B-CONV colors, same
+  §20/§21 suppression states, same honest "checked h:mm" stamp, ties included (a tie at
+  5th renders every tied row; the slice may exceed 5) — restyled compact by CSS only, and
+  linking to the full Board. No second ranking implementation exists: a semantic
+  difference between Home's slice and the Board is a defect. Off-season Home unchanged.
+- **B-CONV — golf score-color convention (five tokens, measured).** New semantic tokens,
+  replacing the current gold=under idiom (blast radius measured: index.html:189/190/191,
+  207/208/209, 524, 570 CSS + scoreClass() 1698-1706 + call sites 1725/1865/4349 +
+  board to-par render):
+
+  | token | value | role | measured contrast (pine/pine-2/pine-3) |
+  |---|---|---|---|
+  | --score-under | #D08A76 | under-par text + birdie/eagle rings | 6.12 / 5.43 / 6.62 |
+  | --score-even  | #C8A24A (brass) | EVEN text | 7.04 / 6.25 / 7.62 |
+  | --score-over  | #E9E3D3 (bone) | over-par text | 13.2 / 11.8 / 14.3 |
+  | --score-bogey | #8A9B8C (sage) | bogey text + square ring | 5.77 / 5.12 / 6.25 |
+  | --score-blowup | #B0705E (rust) | double+ RINGS ONLY (non-text, ≥3:1 floor: 4.30/3.82/4.65) | — |
+
+  **Blowup-tier NUMERALS render in bone, not rust** — rust text fails the 4.5:1 floor
+  (measured above; a pre-existing marginal the wave FIXES site-wide). This is rev 2's one
+  named deviation from the canvas Card board. Brass keeps its ceremony role (leader Pos,
+  crowns, rules) alongside EVEN — acceptable because EVEN is always the literal glyph
+  "E", never color-only. Applied everywhere a score-vs-par value renders: Board to-par,
+  grid/hole cells, scorer tallies and to-par tile, B-HOME, §26 TV. The build ships a
+  MECHANICAL contrast unit test (WCAG relative-luminance, the rev-2 formula) asserting
+  every token/background pairing ≥4.5:1 text and ≥3:1 rings — eyeballs don't gate color.
+  Same task updates smoke K3/L2 (they assert the old class vocabulary,
+  smoke.mjs:1656-1726) mutation-preservingly, and audits README/help/legend copy for any
+  documented gold=under language (updated in the same commit — no stale doc ships).
+- **B-GLYPH — scorecard glyph vocabulary.** Nested-span rings (not pseudo-elements),
+  drawn CSS-only on the hole-by-hole grid and hole panels (panels REUSE the grid cell
+  markup — one implementation): diff ≤ −2 double circle, −1 circle, 0 plain, +1 square,
+  ≥ +2 double square; ring colors per the B-CONV table. Legend renders once under the
+  grid, labels verbatim: "Eagle" (−2 or better), "Birdie" (−1), "Par" (0), "Bogey" (+1),
+  "Double or worse" (+2 or more). Glyphs render ONLY where par is valid for that hole
+  (courseMap null ⇒ no glyph, no ring — §20 honesty; the existing 1851-1860 seam). The
+  Leaderboard carries NO glyphs — colors only. Pure glyph-mapping function, unit-tested
+  at −2/−1/0/+1/+2 and the par-invalid case.
 - **B-MV — movement arrows, honestly based.** Board rows show ▲n/▼n/— computed
-  client-side against the standings order at the PREVIOUS successful refresh (in-page
-  state only — never persisted, so no fabricated overnight movement; first paint shows no
-  arrows). Footer labels the basis verbatim: "Movement since h:mm". Arrows are inline SVG
-  (no dingbats), brass up / sage down; aria-label "moved up N". Pure diff function,
-  unit-tested (new team appears, tie shuffle, unchanged, first-load).
-- **B-LT — lower-third treatment.** The §24 Now/Next strip and event banner restyle to the
-  broadcast lower-third language (kicker + brass rule, per the canvas boards). Visual
-  only: §24 logic, timing, watermark and honesty stamps byte-untouched.
-- **B-FIN — finish pass.** font-variant-numeric: tabular-nums everywhere numerals column
-  or tick; hairline double-rules per Identity board replace heavier borders on mastheads
-  and table heads; gold-as-metal audit (brass never body text); course-map/hole photos get
-  the hairline frame treatment; empty/degraded states restyled to the same ceremony with
-  their COPY unchanged (honest wording is ruled, §20-§23). Motion: score-change flash and
-  arrow entrance only, both under prefers-reduced-motion (rev-3 discipline).
-- **Frozen surface.** The scorer write path (applyScore_, doPost, journal/queue fns) and
-  all §24 logic stay byte-frozen — B-CONV/B-FIN touch scorer CSS only. Whole-branch review
-  proves the frozen set by function-hash, per rev-3/§22 convention.
+  client-side against the standings order at the PREVIOUS successful refresh — in-page
+  state only, never persisted (no fabricated overnight movement; first paint shows "—"
+  everywhere; the canvas board depicts a mid-round state, not first paint). **Staleness
+  rule (rev 2): if the previous successful refresh is older than 10 minutes, arrows
+  SUPPRESS to "—" and the footer reads "Movement paused — last refresh h:mm"**; otherwise
+  the footer reads "Movement since h:mm" (device-local, §24 stamp discipline). Arrows are
+  inline SVG, brass up / sage down; aria-label "moved up N" / "moved down N". Pure diff
+  function, unit-tested: new team appears, tie shuffle, unchanged, first-load, stale-basis.
+- **B-LT — lower-third treatment.** The §24 Now/Next strip and event banner restyle to
+  the broadcast lower-third language per the canvas. Visual only: §24 logic, timing,
+  watermark and honesty stamps byte-untouched.
+- **B-FIN (§25b) — finish pass.** font-variant-numeric: tabular-nums everywhere numerals
+  column; hairline double-rules replace heavier borders on mastheads/table heads;
+  gold-as-metal audit (brass never body text); course-map/hole photos get the hairline
+  frame treatment; empty/degraded states restyled with COPY unchanged; score-change flash
+  + arrow entrance motion, both under prefers-reduced-motion. Deferred behind §25a by
+  design — polish never blocks the core.
+- **Frozen surface.** The scorer write path — index.html scQueue()/scDrain() (3959-4120
+  region) and tools/sheet-triggers.gs applyScore_() (:54) / doPost() (:190) — plus all
+  §24 logic stays byte-frozen; B-CONV touches scorer CSS only. Function-hash proof
+  computed at the worktree base and RE-PROVEN at reconciliation merge.
 
-## §26 — event-kit wave: lodge TV, poster, captain cards (same rulings; builds on §25 tokens)
+## §26 — event-kit wave: lodge TV, poster, captain cards (same rulings; rev 2 aligned)
 
-- **K-TV — lodge television mode.** `?tv=1` renders the chrome-less rotation per the Lodge
-  TV board: Leaderboard → The Card → Schedule, 20 s per panel, large-type scale, cursor
-  hidden, reusing the existing 60 s refresh loop and §24 phase logic; honest "checked
-  h:mm" stamp on every panel; prefers-reduced-motion ⇒ hard cuts, no fades. Degrades per
-  §20/§21 exactly as the Board does.
-- **K-PRINT — print generator.** tools/print/ (node, zero new deps; fetches the published CSVs) emits the
-  Lodge Poster and per-team Captain Cards as print-fixed HTML pages from config.js + the
-  published Field/Info CSVs — same tokens, same crest asset. Dates render from Info;
-  absent ⇒ bracketed placeholder exactly like the approved board (never a fabricated
-  date). One page per artifact; captain cards one per Field team for the season.
-- **K-QR — real codes, vendored encoder.** A minimal MIT QR encoder is VENDORED into
-  tools/print/ (committed, unit-tested against known vectors — no CDN, repo discipline).
-  Poster QR → the live site root; captain-card QR → that team's #score?team=X link;
-  github.io URLs per the domain ruling. The design-canvas QRs stay labeled samples.
-- **Riley items (named, not assumed):** poster/card print vendor + paper; 2027 dates when
-  set; proof eyeball of one printed sample; TV hardware at the lodge.
+- **K-TV — lodge television mode, own route.** `#tv` (NOT a query param — the router
+  strips them, index.html:1261): chrome-less rotation Leaderboard → The Card → Schedule,
+  20 s per panel, large-type per the Lodge TV board, cursor hidden, labeled-dot rotation
+  indicator per the canvas, reusing the 60 s refresh loop + §24 phase logic. EVERY panel
+  carries the honest "Checked h:mm" stamp; **if the last successful fetch is older than
+  5 minutes the stamp escalates visibly ("Checked h:mm — data stale") and never silently
+  freezes on last-good data**; fetch-dead-with-no-cache renders the honest empty state,
+  never the sample-weekend fallback. prefers-reduced-motion ⇒ hard cuts. Degrades per
+  §20/§21 exactly as the Board. Render close at a 1280-wide headless viewport; the
+  on-hardware eyeball at the lodge is Riley's.
+- **K-PRINT — print generator.** tools/print/ (node, zero new deps; fetches the published
+  CSVs via config.js gids, anonymous endpoints ONLY — an auth-demanding response is a
+  loud abort) emits the Lodge Poster and per-team Captain Cards as print-fixed HTML from
+  Field/Info — same tokens, same crest. **Honesty (rev 2): every printed artifact carries
+  "Generated YYYY-MM-DD h:mm" in its footer margin; blank/unparseable cells render [TBD],
+  never a default; dates absent ⇒ the board's bracketed "[ 2027 DATES ]" verbatim.**
+  Captain-card copy per the canvas: "TEAM <NAME>" + "Captain · <name>" + the two-line
+  field note ("Scores post to the live board. No service on the course? It saves and
+  sends later."). **Vault guard: the tool reads ONLY the public gids named in config.js;
+  it refuses to run if a fetched header row contains email-like columns (email,
+  email_alt, do_not_invite, reason) — §12 P-VAULT structural containment.**
+- **K-QR — real codes, vendored encoder.** A minimal MIT QR encoder VENDORED into
+  tools/print/ (committed with license header, unit-tested against known vectors — no
+  CDN). Poster QR → https://killerroyboy.github.io/gfy/ exactly; captain-card QR → that
+  team's #score?team=<NAME> link. The design-canvas QRs stay labeled samples.
+- **Riley items (named, not assumed):** poster/card print vendor + paper; **Info-tab 2027
+  dates/course/lodging filled before K-PRINT proofing**; proof eyeball of one printed
+  sample; TV hardware at the lodge (and its eyeball); push gates as ever.
 - **Out of scope (ruled or standing):** custom domain (declined 2026-08-24); sports-app
-  restyle (rejected in brainstorm); any new sheet columns or data requirements; auto-email
-  (standing non-goal); scorer ARMING (BACKLOG #1); the §24 push runbook (unchanged).
-- **Acceptance, both waves:** suite green (240/240 + new unit tests, each failing alone
-  under reversion); fable whole-branch review with frozen-set hash proof; S11 render close
-  at 390 w + desktop (+ 1280 TV frame for K-TV); npm run event-ready unaffected; build in
-  a worktree off v2.1-invites (concurrent-session discipline — verify HEAD before every
-  commit); Riley push gate unchanged.
+  restyle; new sheet columns; auto-email; scorer ARMING (BACKLOG #1); the §24 push
+  runbook (unchanged).
+- **Acceptance, all waves:** suite green at the MERGED baseline (247/247 at rev-2 time;
+  the count moves with the concurrent accept→Field wave — assert "no FAIL", never a
+  stale absolute) + new unit tests each failing alone under reversion; fable whole-branch
+  review with frozen-set hash proof; S11 render close at 390 w + desktop (+ 1280 for
+  K-TV); npm run event-ready unaffected; **build in a worktree off dd7c79d — the
+  concurrent session's dirty regions (renderField/nextYearModel/fld-strip CSS +
+  smoke-append tail) are DISJOINT from §25a's surfaces (renderLeaderboard/renderScoreGrid
+  /board CSS/tokens), verified by diff — with a reconciliation merge at the end (v2.6/§19
+  precedent), verify-HEAD-before-every-commit, and §25a's smoke additions in their own
+  uniquely-anchored block to keep the append-append merge clean**; Riley push gate
+  unchanged.
