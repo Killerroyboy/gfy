@@ -6119,6 +6119,36 @@ const nowW = Date.now();
       " notePath2Text=" + JSON.stringify(notePath2Text) + (t2eErr ? " err=" + t2eErr : ""));
 }
 
+{ // T3: ceremonial mastheads (S25a B-NAME) — fresh throwaway dom (the suite's
+  // shared `dom` is closed by this point; same hazard T2d hit, same fix).
+  const domT3 = makeDom("");
+  const d = domT3.window.document;
+  const idxT3 = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const bar = d.querySelector("#mastBar");
+  check("S25a-T3a: compact masthead bar — full ceremonial name + single-authority #mark use + hidden-on-home CSS",
+    !!bar && /THE GOOD FRIENDS YEARLY/.test(bar.textContent || "")
+    && !!bar.querySelector('svg use[href="#mark"]')
+    && /body\[data-view="home"\] #mastBar\{[^}]*display:\s*none/.test(idxT3),
+    "bar=" + !!bar + " mark=" + !!(bar && bar.querySelector('svg use[href="#mark"]')));
+  const board = d.querySelector('[data-view="board"]');
+  check("S25a-T3b: Board masthead — existing copy intact + double rule + chip slot",
+    !!board && /Live from the course/.test(board.textContent || "")
+    && /Gross decides The Bird/.test(board.textContent || "")
+    && !!board.querySelector(".mast-rule") && !!board.querySelector("#mastChip"),
+    "rule=" + !!(board && board.querySelector(".mast-rule")) + " chip=" + !!(board && board.querySelector("#mastChip")));
+  let chipText = null, t3Err = "";
+  const t3Ready = await until(() => typeof domT3.window.renderMastChip === "function");
+  try {
+    if (!t3Ready) throw new Error("page scripts never exposed renderMastChip");
+    domT3.window.eval("renderMastChip()"); chipText = (d.querySelector("#mastChip") || {}).textContent;
+  }
+  catch (e) { t3Err = String((e && e.message) || e); }
+  domT3.window.close();
+  check("S25a-T3c: chip honest off-phase — est line verbatim, never a fabricated round/day (fixture first_tee 2026-08-15 window has passed)",
+    chipText === "McCall, Idaho \u00b7 Est. 2019" && !/Round \d/.test(chipText || "") && !t3Err,
+    "chip=" + JSON.stringify(chipText) + (t3Err ? " err=" + t3Err : ""));
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */

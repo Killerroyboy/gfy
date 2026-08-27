@@ -34,6 +34,19 @@
        backdrop-filter:blur(8px);border-bottom:1px solid rgba(200,162,74,.25)}
   .nav-inner{max-width:1100px;margin:0 auto;padding:11px 24px;display:flex;align-items:center;gap:14px;position:relative}
   .nav-mark{width:19px;height:25px;color:var(--brass);flex:none}
+  /* S25a B-NAME: ceremonial masthead bar + Board masthead (canvas-normative) */
+  #mastBar{display:flex;align-items:center;gap:12px;justify-content:center;
+    padding:8px 24px;background:rgba(10,23,18,.6);border-bottom:1px solid rgba(200,162,74,.2)}
+  body[data-view="home"] #mastBar{display:none}
+  .mast-mark{width:15px;height:20px;color:var(--brass);flex:none}
+  .mast-name{font-family:var(--display);font-weight:700;font-size:.72rem;
+    letter-spacing:.3em;text-indent:.3em;color:var(--bone);white-space:nowrap}
+  .mast-ctx,.mast-chip{font-size:.6rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage)}
+  .mast-chip{margin-left:auto;color:var(--brass);border:1px solid rgba(200,162,74,.45);
+    padding:5px 12px;white-space:nowrap;align-self:center}
+  .mast-head{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+  .mast-rule{border-top:1px solid rgba(200,162,74,.45);padding-top:3px;margin:10px 0 6px}
+  .mast-rule::after{content:"";display:block;border-top:1px solid rgba(200,162,74,.2)}
   .nav-name{font-family:var(--display);font-weight:700;font-size:1.05rem;
             letter-spacing:.34em;margin-right:auto;padding-left:2px}
   .nav-links{display:flex;gap:19px;align-items:center;overflow-x:auto;scrollbar-width:none}
@@ -886,6 +899,13 @@
     </div>
   </div>
 </nav>
+<!-- S25a B-NAME: compact ceremonial masthead bar — every view except Home
+     (CSS below); the mark reuses the #mark symbol (single authority, Y4). -->
+<div id="mastBar">
+  <svg class="mast-mark" aria-hidden="true"><use href="#mark"/></svg>
+  <span class="mast-name">THE GOOD FRIENDS YEARLY</span>
+  <span class="mast-ctx" id="mastCtx"></span>
+</div>
 
 <section class="hero view" data-view="home" id="home">
   <div class="wrap">
@@ -989,8 +1009,12 @@
 
 <section class="band band-alt view" data-view="board" id="leaderboard">
   <div class="wrap">
-    <p class="eyebrow">Live from the course</p>
-    <h2>Leaderboard</h2>
+    <div class="mast-head">
+      <p class="eyebrow">Live from the course</p>
+      <h2>Leaderboard</h2>
+      <span class="mast-chip" id="mastChip"></span>
+    </div>
+    <div class="mast-rule" aria-hidden="true"></div>
     <p class="lede">Gross decides The Bird. Tap a team for the full card.</p>
     <div class="sc-board-row">
       <div class="years" id="years" role="group" aria-label="Tournament year"></div>
@@ -3027,7 +3051,7 @@ function renderChampions(){
 }
 
 function renderAll(){
-  renderYears(); renderLeaderboard(); renderBoardScoreBtn(); renderField(); renderDraft(); renderPairings();
+  renderYears(); renderLeaderboard(); renderBoardScoreBtn(); renderField(); renderDraft(); renderPairings(); renderMastChip();
   renderCalcutta(); renderNextYear(); renderRooms(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
 }
 
@@ -3098,6 +3122,27 @@ function seasonPhase(){
   if(isNaN(tee.getTime())) return "off";
   const win=3*86400000, t=tee.getTime(), now=Date.now();
   return (now>=t-win && now<=t+win) ? "event" : "off";
+}
+
+/* S25a B-NAME: honest round-context chip. Event phase only; Round = highest
+   round with any posted score this season (data, never the clock); weekday
+   from the tee offset (ONE owner, S24). Anything underivable falls back to
+   the est line — never a guessed round or day. Board chip + bar share it. */
+function renderMastChip(){
+  const chip=document.querySelector("#mastChip"), ctx=document.querySelector("#mastCtx");
+  if(!chip&&!ctx) return;
+  let label="McCall, Idaho \u00b7 Est. 2019";
+  if(seasonPhase()==="event"){
+    const off=teeOffsetMs();
+    const rds=[...new Set(buildPlayers(activeSeason()).flatMap(p=>Object.keys(p.rounds)))]
+      .map(Number).filter(n=>!isNaN(n));
+    if(off!==null&&rds.length){
+      const wd=WEEKDAYS[new Date(Date.now()+off).getUTCDay()];
+      label="Round "+Math.max(...rds)+" \u00b7 "+wd[0].toUpperCase()+wd.slice(1);
+    }
+  }
+  if(chip) chip.textContent=label;
+  if(ctx) ctx.textContent=label;
 }
 
 /* §24 H-NOWNEXT. Truth rule: compare INSTANTS only. A schedule row's instant is
