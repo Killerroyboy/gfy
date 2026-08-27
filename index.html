@@ -563,6 +563,12 @@
     .countdown{gap:16px}
     .cd-unit{min-width:52px}
     .photo-frame{height:420px}
+    /* Final fix wave (F3, ratified S11 ruling): #mastCtx wraps into 3 ragged
+       lines at 390w — a "finished" failure to a cold viewer. The bar keeps
+       crest + name only below this width; the Board's own #mastChip (a
+       DIFFERENT element, .mast-chip — untouched here) already carries the
+       same context on the Board's own h2, so nothing is lost. */
+    .mast-ctx{display:none}
   }
 
   /* §18 scorer shell — Task 1 (picker/confirm) + Task 3 (card/pad/round chip). */
@@ -2015,12 +2021,17 @@ function renderLeaderboard(){
   // year's fabricates movement (an archive-year switch showed "moved up 2"
   // with nothing actually moved). A year mismatch renders exactly like a
   // first paint (dashes, empty footer), never "paused".
-  const yearMatch = STATE.prevBoard && STATE.prevBoard.year===STATE.year;
+  // Final fix wave (F1, RULED): suppression suppresses movement — a
+  // par-suppressed board (courseMap()===null, Pos already showing "—")
+  // must not still show rank-delta arrows or a "since"/"paused" footer.
+  // Gated at the SAME parsSuppressed derived above, right alongside the
+  // basisFresh/mv computation it protects.
+  const yearMatch = !parsSuppressed && STATE.prevBoard && STATE.prevBoard.year===STATE.year;
   const basisFresh = yearMatch && (Date.now()-STATE.prevBoard.at) <= STALE_BASIS_MS;
   const mv = basisFresh ? movementFor(STATE.prevBoard.order, players.map(p=>p.key)) : null;
   const mvBasis=$("#lbMvBasis");
-  if(mvBasis) mvBasis.textContent = basisFresh ? "Movement since "+fmtClock(STATE.prevBoard.at)
-    : (yearMatch ? "Movement paused — last refresh "+fmtClock(STATE.prevBoard.at) : "");
+  if(mvBasis) mvBasis.textContent = parsSuppressed ? "" : (basisFresh ? "Movement since "+fmtClock(STATE.prevBoard.at)
+    : (yearMatch ? "Movement paused — last refresh "+fmtClock(STATE.prevBoard.at) : ""));
   $("#lbBody").innerHTML=players.map(p=>
     lbRowHTML(p,{parsSuppressed,wdKeys,mv,open:STATE.open===p.key,interactive:true})
   ).join("");

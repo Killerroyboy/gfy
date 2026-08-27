@@ -6274,6 +6274,24 @@ const nowW = Date.now();
     && chipTextG2 === "McCall, Idaho · Est. 2019" && !/Round/.test(chipTextG2 || "") && !t3g2Err,
     "bogusPlusValid=" + JSON.stringify(chipTextG1) + (t3g1Err ? " err1=" + t3g1Err : "")
       + " allBogus=" + JSON.stringify(chipTextG2) + (t3g2Err ? " err2=" + t3g2Err : ""));
+
+  // S25a-T3h (final fix wave, F3 — ratified S11 ruling): #mastCtx wrapped
+  // into 3 ragged lines at 390w in the render-close eyeball pass
+  // (progress.md 08-24) — a "finished"-test failure to a cold viewer. Ruled:
+  // hide it below 560px (the Board's own #mastChip, a DIFFERENT element,
+  // already carries the same context on phones). Same anchor-and-slice
+  // idiom T4i/T4j use for this exact media block, rather than a bare
+  // substring .test() that could match a stray duplicate anywhere else in
+  // the file.
+  const narrowMqAnchorT3h = idxT3.indexOf("@media (max-width:560px)");
+  // window sized to the WHOLE block (measured ~1640 chars incl. braces) —
+  // the rule sits at the block's tail end, after every pre-existing
+  // narrow-width override, not up front where it would shift T4j's own
+  // (independently sized) slice window over the .lb-head/.lb-row rule.
+  const narrowMqSliceT3h = narrowMqAnchorT3h >= 0 ? idxT3.slice(narrowMqAnchorT3h, narrowMqAnchorT3h + 1800) : "";
+  check("S25a-T3h: final fix wave (F3, ratified S11 ruling) — .mast-ctx{display:none} present inside the @media (max-width:560px) block, so the top bar's context line never wraps into ragged lines on a phone",
+    /\.mast-ctx\{display:\s*none\}/.test(narrowMqSliceT3h),
+    "slice=" + JSON.stringify(narrowMqSliceT3h.slice(0, 200)));
 }
 
 { // T4: movement arrows + honest staleness basis (S25a B-MV) — fresh
@@ -6484,6 +6502,89 @@ const nowW = Date.now();
   check("S25a-T4k: lb-head/lb-row column parity — head and a rendered row carry the SAME number of grid children (deleting the mv head cell must not pass silently)",
     !!headChildrenT4k && headChildrenT4k === rowChildrenT4k,
     "head=" + headChildrenT4k + " row=" + rowChildrenT4k);
+
+  // S25a-T4m (final fix wave, F1 — RULED: suppression suppresses movement):
+  // every T4 check above hand-primes STATE.prevBoard against the DEFAULT
+  // (non-suppressed) course fixture — none of them exercise parsSuppressed
+  // at all. courseMap()===null already forces Pos to the dash (X34/X37); the
+  // ▲/▼ rank-delta arrows and the "since"/"paused" footer must be suppressed
+  // right alongside it, not keep showing a diff the Pos column itself can't
+  // honestly back. Reuses T4e's exact fresh-basis precondition (hand-primed
+  // STATE.prevBoard, same year, reversed live order, well under the 10-min
+  // cap) — the ONE thing T4e proves DOES render real up/down arrows when NOT
+  // suppressed — plus X34/X37's blank-hole-7 course-fixture idiom to force
+  // parsSuppressed=true. Must FAIL if the parsSuppressed gate on mv/basis is
+  // removed from renderLeaderboard.
+  const courseBlank7T4m = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l).join("\n");
+  const domT4m = makeDom("", withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7T4m }),
+  }));
+  await until(() => domT4m.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearT4m = domT4m.window.eval("STATE.year");
+  const liveOrderT4m = [...domT4m.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
+  domT4m.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4m].reverse(), year: yearT4m, at: Date.now() }) + "; renderLeaderboard();");
+  const mvCellsT4m = [...domT4m.window.document.querySelectorAll("#lbBody .lb-mv")];
+  const allDashT4m = mvCellsT4m.length > 0 && mvCellsT4m.every(el => el.textContent.trim() === "—");
+  const noUpDownT4m = mvCellsT4m.every(el => !el.classList.contains("up") && !el.classList.contains("down"));
+  const basisT4m = domT4m.window.document.querySelector("#lbMvBasis")?.textContent ?? "";
+  domT4m.window.close();
+  check("S25a-T4m (final fix wave, F1, RULED): par-suppressed board — a fresh, same-year, hand-primed STATE.prevBoard (T4e's exact precondition, which DOES render real arrows when NOT suppressed) still renders every .lb-mv as the plain dash (no up/down class) and #lbMvBasis stays empty (neither 'since' nor 'paused') — suppression suppresses movement",
+    mvCellsT4m.length > 0 && allDashT4m && noUpDownT4m && basisT4m === "",
+    "cells=" + mvCellsT4m.length + " allDash=" + allDashT4m + " noUpDown=" + noUpDownT4m + " basis=" + JSON.stringify(basisT4m));
+
+  // S25a-T4l (final fix wave, F2b — paint()-capture seam): every T4 check
+  // above primes STATE.prevBoard BY HAND — none of them drive the REAL
+  // paint()/load() capture path, so dropping `year:` (or the whole capture
+  // line) from paint() would kill B-MV in production while this whole suite
+  // stayed green. Drives the page's actual load() entry point (the SAME
+  // top-level `function load(){}` X26 already established becomes a window
+  // property in a classic script, and is the exact path the 60s auto-refresh
+  // timer uses) TWICE: the dom's own automatic initial load() (first paint,
+  // captures STATE.prevBoard from a 3-team custom totals fixture) then a
+  // second explicit `window.load()` after flipping a mutable phase flag the
+  // fetch stub reads live (a "dyn fixture override" — same withOverride
+  // wrapper every other variant dom uses, but the returned Response's text()
+  // depends on a variable this test mutates BETWEEN the two load() calls) so
+  // Duck and Tex swap 1st/last. Asserts real up/down arrows render on the
+  // SECOND paint, and that STATE.prevBoard — inspected AFTER that same
+  // second paint — holds {order, year, at} matching what that render
+  // actually produced. Fails if paint() drops `year:` (prevBoard.year !==
+  // STATE.year) or drops the whole capture line entirely (prevBoard.order
+  // would stay stale at phase-1's order instead of matching the live DOM).
+  let phaseT4l = 1;
+  const scoresHeaderT4l = FIXTURES.scores.split(/\r\n|\n/)[0];
+  const totalsRowT4l = (team, r1, r2) => [2026, team, "", ...Array(18).fill(""), r1, r2].join(",");
+  const scoresPhase1T4l = scoresHeaderT4l + "\n"
+    + totalsRowT4l("Duck", 70, 70) + "\n"
+    + totalsRowT4l("Sully", 75, 75) + "\n"
+    + totalsRowT4l("Tex", 80, 80);
+  const scoresPhase2T4l = scoresHeaderT4l + "\n"
+    + totalsRowT4l("Duck", 80, 80) + "\n"
+    + totalsRowT4l("Sully", 75, 75) + "\n"
+    + totalsRowT4l("Tex", 70, 70);
+  const domT4l = makeDom("", withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => phaseT4l === 1 ? scoresPhase1T4l : scoresPhase2T4l }),
+  }));
+  await until(() => domT4l.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  phaseT4l = 2;
+  await domT4l.window.load(); // second REAL paint — the same load() path X26 exercises
+  const liveOrderT4l = [...domT4l.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
+  const rowForT4l = (k) => domT4l.window.document.querySelector('#lbBody .lb-row[data-player="' + k + '"]');
+  const duckMvT4l = rowForT4l("duck")?.querySelector(".lb-mv");
+  const texMvT4l = rowForT4l("tex")?.querySelector(".lb-mv");
+  const arrowsOkT4l = !!duckMvT4l && !!texMvT4l
+    && duckMvT4l.classList.contains("down") && texMvT4l.classList.contains("up");
+  const prevBoardT4l = domT4l.window.eval("STATE.prevBoard");
+  const yearNowT4l = domT4l.window.eval("STATE.year");
+  domT4l.window.close();
+  const shapeOkT4l = !!prevBoardT4l && Array.isArray(prevBoardT4l.order)
+    && JSON.stringify(prevBoardT4l.order) === JSON.stringify(liveOrderT4l)
+    && prevBoardT4l.year === yearNowT4l && typeof prevBoardT4l.at === "number";
+  check("S25a-T4l (final fix wave, F2b): end-to-end paint()-capture seam — driving the REAL load()/paint() path TWICE (X26's window.load() idiom) with team order changed between paints via a mutable fetch-stub phase flag (dyn fixture override) renders real up/down arrows on the second paint, AND leaves STATE.prevBoard — read AFTER that same second paint — holding {order,year,at} matching that paint's own rendered order/year, not stale from the first paint",
+    arrowsOkT4l && shapeOkT4l,
+    "duckClass=" + (duckMvT4l && duckMvT4l.className) + " texClass=" + (texMvT4l && texMvT4l.className) +
+      " liveOrder=" + JSON.stringify(liveOrderT4l) + " prevBoard=" + JSON.stringify(prevBoardT4l) + " year=" + yearNowT4l);
 }
 
 { // T5: event-phase Home leaderboard top-slice (S25a B-HOME) — a literal
@@ -6750,6 +6851,27 @@ const nowW = Date.now();
       + " homeBefore=" + JSON.stringify(homeNamesBeforeT5k)
       + " homeAfter=" + JSON.stringify(homeNamesAfterT5k)
       + " boardAfter=" + JSON.stringify(boardNamesAfterT5k));
+
+  // S25a-T5l (final fix wave, F2a — Home mv-cell alignment): T5j strips
+  // .lb-mv before comparing home/board innerHTML (by design — Home always
+  // passes ctx.mv=null while the Board may show a real arrow), which means
+  // a regression where lbRowHTML only builds the mv cell for the
+  // interactive path (e.g. `${interactive?mvHtml:""}`) would pass T5j/T5b/
+  // T5e untouched while silently misaligning Home's grid columns against
+  // the Board's own 8-track template (T4i/T4k's column-count contract).
+  // Asserted directly instead: a rendered Home row must CONTAIN a .lb-mv
+  // span, in its dash form (ctx.mv is always null on Home).
+  const domT5l = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5l.window.document.querySelectorAll("#homeBoard .lb-row").length > 0);
+  const homeRowT5l = domT5l.window.document.querySelector("#homeBoard .lb-row");
+  const mvSpanT5l = homeRowT5l?.querySelector(".lb-mv");
+  const dashOkT5l = !!mvSpanT5l && mvSpanT5l.textContent.trim() === "—";
+  domT5l.window.close();
+  check("S25a-T5l (final fix wave, F2a): Home row renders a .lb-mv span (dash form) — lbRowHTML must fill the mv cell on BOTH render paths so Home's grid stays column-aligned with the Board's (T4i/T4k contract), even though Home always passes ctx.mv=null",
+    dashOkT5l,
+    "hasSpan=" + !!mvSpanT5l + " text=" + JSON.stringify(mvSpanT5l && mvSpanT5l.textContent));
 }
 
 { // T6: broadcast lower-third restyle of the §24 strip + announce banner
