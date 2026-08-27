@@ -145,7 +145,7 @@
   .year-btn[aria-pressed="true"]{color:var(--pine);background:var(--brass);border-color:var(--brass)}
 
   /* leaderboard */
-  .lb-head,.lb-row{display:grid;grid-template-columns:2.4rem 1fr 4rem 3.2rem 3.2rem 4rem 4rem;
+  .lb-head,.lb-row{display:grid;grid-template-columns:2.4rem 2.2rem 1fr 4rem 3.2rem 3.2rem 4rem 4rem;
                    gap:10px;align-items:baseline;padding:13px 6px;text-align:left}
   .lb-head{font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);
            border-bottom:1px solid var(--brass-dim);padding-bottom:9px}
@@ -161,6 +161,16 @@
   .lb-thru{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
   .lb-num{text-align:right;font-variant-numeric:tabular-nums;font-size:.95rem;color:var(--sage)}
   .lb-tot{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
+  /* §25a B-MV: movement arrows column. Same-width dash renders in every row
+     so the grid stays aligned whether or not there's real movement to show. */
+  .lb-mv{font-size:.7rem;color:var(--sage);display:flex;align-items:center;gap:3px}
+  .lb-mv.up{color:var(--brass)}
+  .lb-mv.down{color:var(--sage)}
+  /* §25a B-CONV (ruled scope addition): Board to-par cell tier coloring —
+     reuses the same semantic tokens the scorecard glyphs already use. */
+  .lb-under{color:var(--score-under)}
+  .lb-even{color:var(--score-even)}
+  .lb-over{color:var(--score-over)}
   .lb-empty,.sched-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
   /* SC-PAR-LABEL (§20 amendment 2): courseMap() null means the second
      .lb-tot column is honestly relabeled "Total" (renderLeaderboard) — at
@@ -185,7 +195,7 @@
      narrow suppressed board must keep using the narrow 4-track template. */
   @media (min-width:561px){
     #leaderboard.lb-suppressed .lb-head,#leaderboard.lb-suppressed .lb-row{
-      grid-template-columns:2.4rem 1fr 4rem 3.2rem 3.2rem 4rem}
+      grid-template-columns:2.4rem 2.2rem 1fr 4rem 3.2rem 3.2rem 4rem}
   }
 
   /* per-player card */
@@ -474,7 +484,11 @@
     .band{padding:54px 0}
     .slot{grid-template-columns:1fr;gap:2px;padding:16px 0}
     .slot-where{text-align:left}
-    .lb-head,.lb-row{grid-template-columns:1.9rem 1fr 3.4rem 4rem;gap:8px}
+    /* §25a B-MV: mv column added narrow too (2rem, second track) — if this
+       overflows at the narrowest widths, Task 7's 390w measurement is the
+       place to drop it back out (e.g. a ≤390px override hiding .lb-mv and
+       re-collapsing this template to the 4 surviving tracks). */
+    .lb-head,.lb-row{grid-template-columns:1.9rem 2rem 1fr 3.4rem 4rem;gap:8px}
     .lb-r1,.lb-r2,.lb-total{display:none}
     .mn-head,.mn-row{grid-template-columns:1fr 4rem 5rem}
     .mn-won{display:none}
@@ -1021,13 +1035,14 @@
       <div id="scBoardBtnWrap"></div>
     </div>
     <div class="lb-head">
-      <div>Pos</div><div>Team</div><div>Thru</div>
+      <div>Pos</div><div class="lb-mv" aria-hidden="true"></div><div>Team</div><div>Thru</div>
       <div class="lb-num lb-r1">R1</div><div class="lb-num lb-r2">R2</div>
       <div class="lb-tot lb-total">Total</div><div class="lb-tot" id="lbToParHead">To par</div>
     </div>
     <div id="lbBody">
       <div class="lb-empty">No cards posted yet. Scores appear here as the sheet fills in.</div>
     </div>
+    <p class="sync" id="lbMvBasis"></p>
     <div class="sg" id="sgWrap" hidden>
       <p class="nine-lab">Hole by hole</p>
       <div class="lb-empty" id="sgNote" hidden>Hole-by-hole view needs all 18 holes on the Course tab.</div>
@@ -1381,7 +1396,7 @@ const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,
   17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
 let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null,
   scTeam:null, scSeason:null, scPadHole:null, scRoundOverride:null,
-  scPadOtherOpen:false, scConfirmPending:null, scPickerOpen:null };
+  scPadOtherOpen:false, scConfirmPending:null, scPickerOpen:null, prevBoard:null };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -1779,6 +1794,21 @@ function renderBoardScoreBtn(){
     : "";
 }
 
+/* §25a B-MV: standings movement vs the previous successful paint — in-page only,
+   never persisted (no fabricated overnight movement). */
+const STALE_BASIS_MS = 10*60*1000;
+function movementFor(prevOrder, keys){
+  const out = new Map();
+  if(!prevOrder){ keys.forEach(k=>out.set(k,{dir:"same",n:0})); return out; }
+  const prev = new Map(prevOrder.map((k,i)=>[k,i]));
+  keys.forEach((k,i)=>{
+    if(!prev.has(k)){ out.set(k,{dir:"new",n:0}); return; }
+    const d = prev.get(k)-i;
+    out.set(k, d>0?{dir:"up",n:d}:d<0?{dir:"down",n:-d}:{dir:"same",n:0});
+  });
+  return out;
+}
+
 function scoreClass(score,par){
   if(!par) return "";
   const d=score-par;
@@ -1866,10 +1896,21 @@ function renderLeaderboard(){
     // quiet and let stale cards keep looking current.
     $("#lbBody").innerHTML='<div class="lb-empty">No cards posted yet. Scores appear here as the sheet fills in.</div>';
     STATE.open=null;
+    const mvBasisEmpty=$("#lbMvBasis"); if(mvBasisEmpty) mvBasisEmpty.textContent="";
     renderScoreGrid([]);
     return;
   }
   const wdKeys=wdKeySet();
+  // §25a B-MV: movement diffs against the PREVIOUS successful paint only,
+  // and only within the honest staleness window — an older basis suppresses
+  // to the dash + a "paused" footer rather than silently keep showing a
+  // stale diff as current (STATE.prevBoard is captured in paint(), AFTER
+  // this render fan-out, so it always lags one paint behind on purpose).
+  const basisFresh = STATE.prevBoard && (Date.now()-STATE.prevBoard.at) <= STALE_BASIS_MS;
+  const mv = basisFresh ? movementFor(STATE.prevBoard.order, players.map(p=>p.key)) : null;
+  const mvBasis=$("#lbMvBasis");
+  if(mvBasis) mvBasis.textContent = basisFresh ? "Movement since "+fmtClock(STATE.prevBoard.at)
+    : (STATE.prevBoard ? "Movement paused — last refresh "+fmtClock(STATE.prevBoard.at) : "");
   $("#lbBody").innerHTML=players.map(p=>{
     const pos=p.pos;
     const lead=(!parsSuppressed && pos===1)?" lead":"";
@@ -1877,15 +1918,23 @@ function renderLeaderboard(){
     const open=STATE.open===p.key;
     const thru=thruLabel(p);
     const wdMarker=wdKeys.has(p.key)?" WD":"";
+    const m=mv?mv.get(p.key):null;
+    const mvHtml=!m||m.dir==="same"||m.dir==="new"
+      ? '<span class="lb-mv">—</span>'
+      : m.dir==="up"
+        ? `<span class="lb-mv up" aria-label="moved up ${m.n}"><svg width="8" height="7" viewBox="0 0 9 8"><path d="M4.5 0 L9 8 L0 8 Z" fill="currentColor"></path></svg>${m.n}</span>`
+        : `<span class="lb-mv down" aria-label="moved down ${m.n}"><svg width="8" height="7" viewBox="0 0 9 8"><path d="M4.5 8 L0 0 L9 0 Z" fill="currentColor"></path></svg>${m.n}</span>`;
+    const relCls=p.rel===null?"":(p.rel<0?" lb-under":(p.rel===0?" lb-even":" lb-over"));
     return `<button class="lb-row${lead}" type="button" data-player="${esc(p.key)}"
               aria-expanded="${open}" aria-controls="card-${id}">
         <span class="lb-pos">${parsSuppressed ? "—" : (pos??"—")}</span>
+        ${mvHtml}
         <span class="lb-name">${captainLabel(p.key, p.name).html}</span>
         <span class="lb-thru">${thru}${wdMarker}</span>
         <span class="lb-num lb-r1">${p.roundTotals["1"]??"—"}</span>
         <span class="lb-num lb-r2">${p.roundTotals["2"]??"—"}</span>
         <span class="lb-tot lb-total">${p.total??"—"}</span>
-        <span class="lb-tot">${p.rel!==null?toPar(p.rel):(p.total??"—")}</span>
+        <span class="lb-tot${relCls}">${p.rel!==null?toPar(p.rel):(p.total??"—")}</span>
       </button>` + (open?cardHTML(p):"");
   }).join("");
 
@@ -4917,6 +4966,10 @@ function paint(data,results){
   renderInfo(data.info);
   normalizeYears(data);
   renderAll();
+  // §25a B-MV: captured AFTER the render fan-out above, so this paint's own
+  // renderLeaderboard() diffed against the PREVIOUS paint's order — never
+  // its own just-rendered board (which would always show zero movement).
+  STATE.prevBoard = { order: rankedPlayers("gross").map(p=>p.key), at: Date.now() };
   $("#lbSync").textContent=stampFor("scores",results);
   $("#schedSync").textContent=stampFor("schedule",results);
   $("#calSync").textContent=stampFor("calcutta",results);

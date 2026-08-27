@@ -4502,22 +4502,24 @@ async function cellSettledOk(doc, hole) {
   const narrowRuleStructuralX37 = /@media \(max-width:560px\)/.test(cssTextX37) &&
     /\.lb-r1,\.lb-r2,\.lb-total\{display:none\}/.test(cssTextX37);
   // STRUCTURAL (whole-branch review Imp-1 fix): hiding the Total column out
-  // of the explicit 7-track grid without redefining the template leaves a
-  // dead 7th track — the surviving 6 columns must get their own template,
-  // and it MUST be scoped to widths ABOVE the ≤560px breakpoint (an
-  // unscoped id-selector rule would out-specify — id beats class — the
-  // ≤560px 4-track rule above and regress phones, since .lb-suppressed is a
-  // viewport-independent state class). Sliced from the media query's own
-  // start (same index-based technique K5 already established for this
-  // file's CSS-source checks) so the assert is scoped to THIS rule, not
-  // just "these tokens appear somewhere in the file"; the closing
-  // `\s*[};]` after the 6th value guards against a regression that leaves
-  // a stray 7th track back in (must be EXACTLY 6 tracks, not 6-then-more).
+  // of the explicit 8-track grid (§25a Task 4 added the mv column as track 2)
+  // without redefining the template leaves a dead 8th track — the surviving
+  // 7 columns (pos, mv, name, thru, r1, r2, to-par-or-fallback) must get
+  // their own template, and it MUST be scoped to widths ABOVE the ≤560px
+  // breakpoint (an unscoped id-selector rule would out-specify — id beats
+  // class — the ≤560px 4-track rule above and regress phones, since
+  // .lb-suppressed is a viewport-independent state class). Sliced from the
+  // media query's own start (same index-based technique K5 already
+  // established for this file's CSS-source checks) so the assert is scoped
+  // to THIS rule, not just "these tokens appear somewhere in the file"; the
+  // closing `\s*[};]` after the 7th value guards against a regression that
+  // leaves a stray 8th track back in (must be EXACTLY 7 tracks, not
+  // 7-then-more).
   const mqStartX37 = cssTextX37.indexOf("@media (min-width:561px)");
   const mqSliceX37 = mqStartX37 >= 0 ? cssTextX37.slice(mqStartX37, mqStartX37 + 300) : "";
   const gridTemplateRuleStructuralX37 =
     /#leaderboard\.lb-suppressed\s*\.lb-head\s*,\s*#leaderboard\.lb-suppressed\s*\.lb-row/.test(mqSliceX37) &&
-    /grid-template-columns:\s*2\.4rem\s+1fr\s+4rem\s+3\.2rem\s+3\.2rem\s+4rem\s*[};]/.test(mqSliceX37);
+    /grid-template-columns:\s*2\.4rem\s+2\.2rem\s+1fr\s+4rem\s+3\.2rem\s+3\.2rem\s+4rem\s*[};]/.test(mqSliceX37);
   domBX37.window.close();
 
   check("X37: SC-PAR-LABEL — board label honesty (§20 amendment 2): complete course => #lbToParHead reads 'To par', #leaderboard NOT .lb-suppressed, real to-par form rendered; blank-par-7 course => header flips to 'Total', #leaderboard IS .lb-suppressed, the To-par-column span holds the IDENTICAL plain-digit gross the Total column holds (never a differently-valued or mislabeled figure); STRUCTURAL: the wide-width collapse rule, the pre-existing ≤560px rule that hides the redundant Total column, AND a min-width:561px-scoped 6-track grid-template-columns redefinition for #leaderboard.lb-suppressed .lb-head/.lb-row (no dangling 7th track/dead gutter at wide widths, correctly NOT applying at ≤560px so the narrow 4-track template stays governing there) are all present in the page's own CSS source (whole-branch review Imp-1)",
@@ -6261,6 +6263,131 @@ const nowW = Date.now();
     && chipTextG2 === "McCall, Idaho · Est. 2019" && !/Round/.test(chipTextG2 || "") && !t3g2Err,
     "bogusPlusValid=" + JSON.stringify(chipTextG1) + (t3g1Err ? " err1=" + t3g1Err : "")
       + " allBogus=" + JSON.stringify(chipTextG2) + (t3g2Err ? " err2=" + t3g2Err : ""));
+}
+
+{ // T4: movement arrows + honest staleness basis (S25a B-MV) — fresh
+  // throwaway doms per scenario (the shared `dom` is closed by this point,
+  // same hazard T2d/T3 hit).
+  const domT4 = makeDom("");
+  await until(() => typeof domT4.window.movementFor === "function");
+  const mv = domT4.window.movementFor;
+  check("S25a-T4a: movement diff — first load, up, down, tie-shuffle, new team",
+    typeof mv === "function" && (() => {
+      const first = mv(null, ["a", "b"]);
+      const m = mv(["a", "b", "c", "d"], ["b", "a", "d", "c"]);
+      const n = mv(["a"], ["a", "z"]);
+      return first.get("a").dir === "same" && first.get("a").n === 0
+        && m.get("b").dir === "up" && m.get("b").n === 1
+        && m.get("a").dir === "down" && m.get("a").n === 1
+        && m.get("d").dir === "up" && m.get("d").n === 1
+        && n.get("z").dir === "new";
+    })(),
+    "movementFor typeof=" + typeof mv);
+  domT4.window.close();
+
+  const idxT4 = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const hasConstT4b = /STALE_BASIS_MS\s*=\s*10\*60\*1000/.test(idxT4);
+  const hasCopyT4b = idxT4.includes("Movement paused — last refresh");
+  check("S25a-T4b: staleness rule — 10-minute basis cap present with paused copy",
+    hasConstT4b && hasCopyT4b,
+    "const=" + hasConstT4b + " copy=" + hasCopyT4b);
+  const hasAriaT4c = idxT4.includes('aria-label="moved up');
+  const hasClassT4c = /lb-mv/.test(idxT4);
+  check("S25a-T4c: arrows are aria-labeled inline SVG in rows",
+    hasAriaT4c && hasClassT4c,
+    "aria=" + hasAriaT4c + " class=" + hasClassT4c);
+
+  // S25a-T4d: FIRST paint (no prior STATE.prevBoard yet) — every row's mv
+  // cell reads the dash (never a fabricated arrow before a prior paint
+  // exists to diff against) and the basis footer is honestly empty.
+  const domT4d = makeDom("");
+  await until(() => domT4d.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const mvCellsT4d = [...domT4d.window.document.querySelectorAll("#lbBody .lb-mv")];
+  const allDashT4d = mvCellsT4d.length > 0 && mvCellsT4d.every(el => el.textContent.trim() === "—");
+  const basisT4d = domT4d.window.document.querySelector("#lbMvBasis")?.textContent ?? null;
+  domT4d.window.close();
+  check("S25a-T4d: first paint — every row shows the mv dash, basis footer empty (no fabricated movement before a prior paint exists)",
+    mvCellsT4d.length > 0 && allDashT4d && basisT4d === "",
+    "cells=" + mvCellsT4d.length + " allDash=" + allDashT4d + " basis=" + JSON.stringify(basisT4d));
+
+  // S25a-T4e: a FRESH basis (STATE.prevBoard just captured, well under the
+  // 10-minute cap) with the live order reversed forces real up/down
+  // movement — proves the mechanism, not just source-text presence (T4b/c
+  // only prove the strings exist somewhere in the file).
+  const domT4e = makeDom("");
+  await until(() => domT4e.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const liveOrderT4e = [...domT4e.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
+  domT4e.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4e].reverse(), at: Date.now() }) + "; renderLeaderboard();");
+  const rowsT4e = [...domT4e.window.document.querySelectorAll("#lbBody .lb-row")];
+  const firstMvT4e = rowsT4e[0]?.querySelector(".lb-mv");
+  const lastMvT4e = rowsT4e[rowsT4e.length - 1]?.querySelector(".lb-mv");
+  const basisT4e = domT4e.window.document.querySelector("#lbMvBasis")?.textContent ?? "";
+  domT4e.window.close();
+  const multiRowT4e = liveOrderT4e.length > 1;
+  const movementOkT4e = !multiRowT4e || (
+    firstMvT4e?.classList.contains("up") && /^moved up \d+$/.test(firstMvT4e.getAttribute("aria-label") || "") &&
+    lastMvT4e?.classList.contains("down") && /^moved down \d+$/.test(lastMvT4e.getAttribute("aria-label") || ""));
+  check("S25a-T4e: fresh basis — reversing the live order produces real aria-labeled up/down arrows + 'Movement since h:mm' footer",
+    liveOrderT4e.length > 0 && movementOkT4e && /^Movement since \d{1,2}:\d{2}/.test(basisT4e),
+    "teams=" + liveOrderT4e.length + " firstClass=" + (firstMvT4e && firstMvT4e.className) +
+      " firstAria=" + (firstMvT4e && firstMvT4e.getAttribute("aria-label")) +
+      " lastClass=" + (lastMvT4e && lastMvT4e.className) + " basis=" + JSON.stringify(basisT4e));
+
+  // S25a-T4f: a STALE basis (captured >10 minutes ago) suppresses every
+  // arrow back to the dash and swaps the footer to the honest paused copy —
+  // never keep showing an old diff as if it were current.
+  const domT4f = makeDom("");
+  await until(() => domT4f.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const liveOrderT4f = [...domT4f.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
+  const staleAtT4f = Date.now() - 11 * 60 * 1000;
+  domT4f.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4f].reverse(), at: staleAtT4f }) + "; renderLeaderboard();");
+  const mvCellsT4f = [...domT4f.window.document.querySelectorAll("#lbBody .lb-mv")];
+  const allDashT4f = mvCellsT4f.length > 0 && mvCellsT4f.every(el => el.textContent.trim() === "—");
+  const basisT4f = domT4f.window.document.querySelector("#lbMvBasis")?.textContent ?? "";
+  domT4f.window.close();
+  check("S25a-T4f: stale basis (>10min old) suppresses every arrow to the dash and shows 'Movement paused — last refresh h:mm'",
+    mvCellsT4f.length > 0 && allDashT4f && /^Movement paused — last refresh \d{1,2}:\d{2}/.test(basisT4f),
+    "cells=" + mvCellsT4f.length + " allDash=" + allDashT4f + " basis=" + JSON.stringify(basisT4f));
+
+  // S25a-T4g (ruled scope addition, B-CONV, controller ruling): the Board's
+  // to-par cell (renderLeaderboard's last span) gains tier coloring — under,
+  // even, over, and the suppressed/null fallback all asserted from a
+  // rendered board (fixture teams spanning all four cases).
+  const scoresT4g = "year,team,round,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12,h13,h14,h15,h16,h17,h18,r1,r2\n"
+    + "2026,Duck,,,,,,,,,,,,,,,,,,,,,68,68\n"    // total 136, par 144 -> rel -8 (under)
+    + "2026,Sully,,,,,,,,,,,,,,,,,,,,,72,72\n"   // total 144, par 144 -> rel 0 (even)
+    + "2026,Tex,,,,,,,,,,,,,,,,,,,,,80,80\n";    // total 160, par 144 -> rel +16 (over)
+  const domT4g = makeDom("", withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresT4g }),
+  }));
+  await until(() => domT4g.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const byTeamT4g = {};
+  domT4g.window.document.querySelectorAll("#lbBody .lb-row").forEach(r => {
+    const toParSpan = r.querySelectorAll(".lb-tot")[1];
+    byTeamT4g[r.dataset.player] = toParSpan ? toParSpan.className : null;
+  });
+  domT4g.window.close();
+  const clsListT4g = (s) => (s || "").split(" ");
+  const underOkT4g = clsListT4g(byTeamT4g.duck).includes("lb-under");
+  const evenOkT4g = clsListT4g(byTeamT4g.sully).includes("lb-even");
+  const overOkT4g = clsListT4g(byTeamT4g.tex).includes("lb-over");
+
+  const courseBlank7T4g = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l).join("\n");
+  const domT4g2 = makeDom("", withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7T4g }),
+  }));
+  await until(() => domT4g2.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const rowT4g2 = domT4g2.window.document.querySelector("#lbBody .lb-row");
+  const toParSpanT4g2 = rowT4g2 && rowT4g2.querySelectorAll(".lb-tot")[1];
+  const nullClassT4g2 = toParSpanT4g2 ? toParSpanT4g2.className : null;
+  domT4g2.window.close();
+  const nullOkT4g = !!toParSpanT4g2 && !/lb-under|lb-even|lb-over/.test(nullClassT4g2 || "");
+
+  check("S25a-T4g: ruled scope addition (B-CONV) — Board to-par cell tier coloring: rel<0 -> lb-under, rel===0 -> lb-even, rel>0 -> lb-over, suppressed/null -> no tier class",
+    underOkT4g && evenOkT4g && overOkT4g && nullOkT4g,
+    "duck=" + JSON.stringify(byTeamT4g.duck) + " sully=" + JSON.stringify(byTeamT4g.sully) +
+      " tex=" + JSON.stringify(byTeamT4g.tex) + " nullCase=" + JSON.stringify(nullClassT4g2));
 }
 
 /* ---------------------------------------------------------------------
