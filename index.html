@@ -410,6 +410,14 @@
   .mn-net{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
   .mn-net.up{color:var(--brass)}
   .mn-net.down{color:var(--rust)}
+  /* Polish 2026-08-28: NAME lists are not money columns — .mn-net's
+     text-align:right orphaned every funnel/rooms name at the far right edge
+     (live defect since v2.2). Names read left; color modifiers preserved. */
+  .name-list{list-style-position:inside;font-size:1rem;color:var(--bone)}
+  .name-list.up{color:var(--brass)}
+  .name-list.down{color:var(--rust)}
+  .draft-lab{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);margin:0 0 4px}
+  .draft-sub{font-size:.58rem;letter-spacing:.14em;text-transform:none;color:var(--sage);margin-left:10px;font-weight:400}
   .mn-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
   /* calcutta */
   .auc-head,.auc-row{display:grid;grid-template-columns:1fr 1fr 5rem 5.5rem;gap:10px;
@@ -1091,7 +1099,7 @@
 <section class="band band-alt view" data-view="board" id="leaderboard">
   <div class="wrap">
     <div class="mast-head">
-      <p class="eyebrow">Live from the course</p>
+      <p class="eyebrow" id="boardEyebrow">Final standings</p>
       <h2>Leaderboard</h2>
       <span class="mast-chip" id="mastChip"></span>
     </div>
@@ -1135,8 +1143,8 @@
     <p class="lede">Captains pick from the pool. Drafting someone = filling their team cell on the Field tab — this board follows the sheet live.</p>
     <div id="draftBody">
       <div class="draft-cols">
-        <div><h3 class="draft-h">Pool</h3><div id="draftPool"></div></div>
-        <div><h3 class="draft-h">Drafted</h3><div id="draftTeams"></div></div>
+        <div><h3 class="draft-h">Pool <span class="draft-sub">low handicap first</span></h3><div id="draftPool"></div></div>
+        <div><h3 class="draft-h">Drafted <span class="draft-sub">captain first</span></h3><div id="draftTeams"></div></div>
       </div>
     </div>
   </div>
@@ -2330,8 +2338,8 @@ function renderDraft(){
     return;
   }
   if(!body.querySelector("#draftPool")){                    // restore columns after an empty-state render
-    body.innerHTML='<div class="draft-cols"><div><h3 class="draft-h">Pool</h3><div id="draftPool"></div></div>'+
-      '<div><h3 class="draft-h">Drafted</h3><div id="draftTeams"></div></div></div>';
+    body.innerHTML='<div class="draft-cols"><div><h3 class="draft-h">Pool <span class="draft-sub">low handicap first</span></h3><div id="draftPool"></div></div>'+
+      '<div><h3 class="draft-h">Drafted <span class="draft-sub">captain first</span></h3><div id="draftTeams"></div></div></div>';
   }
   // U-POOL: blank team AND status not in {out, wd, declined}. Blank team is
   // NORMAL here (E-TEAM) — the pool is the point; never flag it.
@@ -2361,12 +2369,15 @@ function renderDraft(){
   // vanish, and nothing here flags (E-TEAM; rosterMap owns roster health).
   const byTeam=new Map();
   drafted.forEach(r=>{ const k=nkey(r.team);
-    if(!byTeam.has(k)) byTeam.set(k,{captain:null,members:[]});
+    if(!byTeam.has(k)) byTeam.set(k,{label:String(r.team).trim(),captain:null,members:[]});
     const t=byTeam.get(k);
     if(nkey(r.player)===k&&!t.captain) t.captain=r; else t.members.push(r);
   });
+  // Polish 2026-08-28: a captainless group is headed by its RAW team label —
+  // never a headerless cluster (the live sheet's orphan labels rendered
+  // exactly that). Captained groups need no label; the captain row IS it.
   const teamsHTML=[...byTeam.values()].map(t=>
-    `<div class="draft-team">${[...(t.captain?[t.captain]:[]),...t.members].map(rowHTML).join("")}</div>`).join("");
+    `<div class="draft-team">${t.captain?"":`<div class="draft-lab">${esc(t.label)}</div>`}${[...(t.captain?[t.captain]:[]),...t.members].map(rowHTML).join("")}</div>`).join("");
   $("#draftTeams").innerHTML = teamsHTML || '<div class="lb-empty">Nobody drafted yet.</div>';
 }
 
@@ -2967,7 +2978,7 @@ function renderNextYear(){
     : "";
   // S-structure: owing renders as real <ul><li> items, not a comma-joined
   // blob — one name per row, same as the paid list next to it.
-  const owingHTML=ny.owing.length ? nameListHTML(ny.owing,"mn-net down") : "";
+  const owingHTML=ny.owing.length ? nameListHTML(ny.owing,"name-list down") : "";
   const handle=String(INFO.payment_handle||"").trim();
   const handleHTML=/^https?:\/\//i.test(handle)
     ? `<a href="${esc(handle)}">${esc(handle)}</a>`
@@ -2995,15 +3006,15 @@ function renderNextYear(){
   let adminHTML="";
   if(ADMIN){
     const respondedHTML=ny.stages.responded.length
-      ? `<h3 class="subhead">Responded</h3>`+nameListHTML(ny.stages.responded,"mn-net",true) : "";
+      ? `<h3 class="subhead">Responded</h3>`+nameListHTML(ny.stages.responded,"name-list",true) : "";
     const invitedHTML=ny.stages.invited.length
-      ? `<h3 class="subhead">Invited</h3>`+nameListHTML(ny.stages.invited,"mn-net",true) : "";
+      ? `<h3 class="subhead">Invited</h3>`+nameListHTML(ny.stages.invited,"name-list",true) : "";
     const needsHTML=ny.stages.needs.length
-      ? `<h3 class="subhead">Needs an invite</h3>`+nameListHTML(ny.stages.needs,"mn-net down",true) : "";
+      ? `<h3 class="subhead">Needs an invite</h3>`+nameListHTML(ny.stages.needs,"name-list down",true) : "";
     const declinedHTML=ny.declined.length
-      ? `<h3 class="subhead">Declined</h3>`+nameListHTML(ny.declined,"mn-net down",true) : "";
+      ? `<h3 class="subhead">Declined</h3>`+nameListHTML(ny.declined,"name-list down",true) : "";
     const refundHTML=ny.refunds.length
-      ? `<h3 class="subhead">Paid — refund owed</h3><ul class="mn-net down">`+
+      ? `<h3 class="subhead">Paid — refund owed</h3><ul class="name-list down">`+
         ny.refunds.map(r=>`<li>${esc(r.name)} — paid, ${esc(r.status)} — refund owed</li>`).join("")+`</ul>`
       : "";
     if(respondedHTML||invitedHTML||needsHTML||declinedHTML||refundHTML){
@@ -3052,7 +3063,7 @@ function renderRooms(){
     </div>`).join("");
 
   queueEl.innerHTML = rm.queue.length
-    ? "<ul class=\"mn-net down\">"+rm.queue.map(p=>`<li>${esc(p.name)}</li>`).join("")+"</ul>"
+    ? "<ul class=\"name-list down\">"+rm.queue.map(p=>`<li>${esc(p.name)}</li>`).join("")+"</ul>"
       +'<p class="basis">Paid order; same-day ties keep sheet order.</p>'
     : '<p class="basis">Nobody paid and unplaced right now.</p>';
   applyRoomsFilter();
@@ -3268,7 +3279,7 @@ function renderChampions(){
 
 function renderAll(){
   renderYears(); renderLeaderboard(); renderBoardScoreBtn(); renderField(); renderDraft(); renderPairings(); renderMastChip(); renderHomeBoard();
-  renderCalcutta(); renderNextYear(); renderRooms(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
+  renderCalcutta(); renderNextYear(); renderRooms(); renderMoney(); renderShame(); renderSchedule(); renderChampions(); renderIcsBtn();
 }
 
 function renderHealth(){
@@ -3357,6 +3368,10 @@ function teeOffsetMs(){
    the est line — never a guessed round or day. Board chip + bar share it. */
 function renderMastChip(){
   const chip=document.querySelector("#mastChip"), ctx=document.querySelector("#mastCtx");
+  // Polish 2026-08-28: the Board eyebrow only claims "Live from the course"
+  // inside the event window \u2014 same seasonPhase() as the chip, one model.
+  const eb=document.querySelector("#boardEyebrow");
+  if(eb) eb.textContent=seasonPhase()==="event"?"Live from the course":"Final standings";
   if(!chip&&!ctx) return;
   let label="McCall, Idaho \u00b7 Est. 2019";
   if(seasonPhase()==="event"){
@@ -3449,8 +3464,16 @@ const stamp=d=>d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+"T"
    boundaries. The pre-existing static ", McCall, Idaho" commas are not
    sheet-sourced and are left as-is (accepted residual). */
 const icsEsc=s=>String(s).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\r?\n/g,"\\n");
+/* Polish 2026-08-28: no "Add to calendar" for a finished event — hidden once
+   the effective first_tee (same INFO||CONFIG source seasonPhase uses) is >7
+   days past; back the moment a future first_tee is configured. */
+function renderIcsBtn(){
+  const b=$("#icsBtn"); if(!b) return;
+  const tee=new Date(INFO.first_tee||CONFIG.FIRST_TEE);
+  b.hidden=!isNaN(tee.getTime())&&(Date.now()-tee.getTime())>7*86400000;
+}
 $("#icsBtn").addEventListener("click",()=>{
-  const start=new Date(CONFIG.FIRST_TEE);
+  const start=new Date(INFO.first_tee||CONFIG.FIRST_TEE);   // same effective source as the hide rule
   if(isNaN(start)) return;
   const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//GFY//McCall//EN","BEGIN:VEVENT",
     "UID:gfy-"+start.getFullYear()+"@mccall","DTSTAMP:"+stamp(new Date()),

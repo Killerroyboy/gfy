@@ -770,7 +770,9 @@ check("H5: deposit amount and payment handle rendered",
   // who haven't paid. Hammer (2027,Hammer,,,,,, — blank deposit) is the sole
   // such person in the default fixture; still rendered as a real <ul><li>
   // list, not a comma-joined blob (S-structure carries forward).
-  const owingListEl = doc.querySelector("#nyBody ul.mn-net.down");
+  // 2026-08-28 polish: owing moved from .mn-net (money-column, right-aligned)
+  // to .name-list — the anchor follows; the A1 semantics asserted are unchanged.
+  const owingListEl = doc.querySelector("#nyBody ul.name-list.down");
   const owingItems = owingListEl ? [...owingListEl.querySelectorAll("li")].map(li => li.textContent) : [];
   check("H7: A1 — committed-only owing list renders as a real <ul><li> (1 item: Hammer), not a comma-joined blob",
     !!owingListEl && owingItems.length === 1 && owingItems[0] === "Hammer",
@@ -6357,8 +6359,11 @@ const nowW = Date.now();
     "bar=" + !!bar + " mark=" + !!(bar && bar.querySelector('svg use[href="#mark"]')));
   const board = d.querySelector('[data-view="board"]');
   const boardH2T3b = board && board.querySelector("h2");
-  check("S25a-T3b: Board masthead — existing copy intact + double rule + chip slot + Leaderboard heading (fix round 1, M7)",
-    !!board && /Live from the course/.test(board.textContent || "")
+  // 2026-08-28 polish (FV9): the eyebrow is now PHASE-AWARE — "Live from the
+  // course" only inside the event window (FV9 owns that behavior); this check
+  // keeps asserting the element + the rest of the copy verbatim.
+  check("S25a-T3b: Board masthead — copy intact (eyebrow phase-aware per FV9) + double rule + chip slot + Leaderboard heading (fix round 1, M7)",
+    !!board && !!board.querySelector("#boardEyebrow")
     && /Gross decides The Bird/.test(board.textContent || "")
     && !!board.querySelector(".mast-rule") && !!board.querySelector("#mastChip")
     && !!boardH2T3b && boardH2T3b.textContent.trim() === "Leaderboard",
@@ -7144,6 +7149,112 @@ const nowW = Date.now();
   check("S25a-T6c: announce banner (#announceBar) carries the same 2px solid left-rule family (in var(--pine), its own high-contrast partner) AND its pine-on-brass text contrast still holds the 4.5:1 floor, never regressed by this restyle",
     bannerRuleOK && bannerRatio >= 4.5,
     "ruleBodies=" + JSON.stringify(bannerBodies) + " pine=" + pineHexT6 + " brass=" + brassHexT6 + " ratio=" + bannerRatio.toFixed(3));
+}
+
+/* ---------------------------------------------------------------------
+   GROUP FV (cont.) — 2026-08-28 polish wave (Riley-approved):
+   FV7 name-list class split, FV8 stale-calendar CTA, FV9 phase-aware
+   board eyebrow, FV10 draft-list legibility.
+   --------------------------------------------------------------------- */
+
+// FV7: funnel/rooms NAME lists get .name-list (left-aligned) — .mn-net is a
+// right-aligned MONEY-COLUMN class (live defect: bullet far left, name far
+// right). Structural: source CSS defines .name-list without text-align:right
+// and keeps .down/.up color modifiers; the rendered lists carry .name-list
+// and NOT .mn-net; the money table's Net column keeps .mn-net untouched.
+{
+  const idxFV7 = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const nlCSS = (idxFV7.match(/\.name-list\{[^}]*\}/) || [""])[0];
+  const domFV7 = makeDom("?admin=1");
+  await until(() => (domFV7.window.document.querySelector("#nyBody")?.textContent || "").includes("paid"));
+  const d7 = domFV7.window.document;
+  const nyLists = [...d7.querySelectorAll("#nyBody ul")];
+  const roomsQ = d7.querySelector("#roomsQueue ul");
+  check("FV7: every Next Year name <ul> (owing + admin stages/declined/refunds) and the Rooms queue carry .name-list and never .mn-net; .name-list CSS exists w/o text-align:right (+ .down modifier); money Net column keeps .mn-net",
+    nyLists.length >= 3
+      && nyLists.every(u => u.classList.contains("name-list") && !u.classList.contains("mn-net"))
+      && !!roomsQ && roomsQ.classList.contains("name-list") && !roomsQ.classList.contains("mn-net")
+      && nlCSS.length > 0 && !/text-align:\s*right/.test(nlCSS)
+      && /\.name-list\.down\{/.test(idxFV7)
+      && /class="mn-net"/.test(idxFV7)                       // money table header cell untouched
+      && /mn-net\$\{cls\}/.test(idxFV7),                     // money net cell untouched
+    "lists=" + nyLists.map(u => u.className).join("|") + " rooms=" + (roomsQ && roomsQ.className) + " css=" + nlCSS);
+  domFV7.window.close();
+}
+
+// FV8: "Add to calendar" is honest about the calendar — hidden once the
+// effective first_tee is >7 days past (there is no upcoming event to add);
+// visible again the moment a future first_tee is configured. Default
+// fixtures (first_tee 2026-08-15, long past) = hidden.
+{
+  const domPast = makeDom("");
+  await until(() => (domPast.window.document.querySelectorAll("#lbBody .lb-row").length) > 0);
+  const btnPast = domPast.window.document.querySelector("#icsBtn");
+  // NO offsetParent here — jsdom does no layout, offsetParent is ALWAYS null
+  // (a vacuous pass, caught red-handed on this check's first run).
+  const hiddenPast = !btnPast || btnPast.hidden === true;
+  domPast.window.close();
+  const futureISO = new Date(Date.now() + 40 * 86400000).toISOString().slice(0, 10) + "T09:00:00-06:00";
+  const infoFuture = FIXTURES.info.replace("2026-08-15T09:00:00-06:00", futureISO);
+  const futFetch = withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoFuture }),
+  });
+  const domFut = makeDom("", futFetch);
+  await until(() => (domFut.window.document.querySelectorAll("#lbBody .lb-row").length) > 0);
+  const btnFut = domFut.window.document.querySelector("#icsBtn");
+  const shownFut = !!btnFut && btnFut.hidden !== true;
+  domFut.window.close();
+  check("FV8: stale-event calendar honesty — #icsBtn hidden when first_tee >7d past (default fixtures), visible with a future first_tee",
+    hiddenPast && shownFut,
+    "hiddenPast=" + hiddenPast + " shownFut=" + shownFut);
+}
+
+// FV9: the Board eyebrow only claims "Live from the course" inside the
+// event window; off-season it reads "Final standings" (phase-aware, same
+// seasonPhase() the masthead chip uses — never a second phase model).
+{
+  const domOff = makeDom("");
+  await until(() => (domOff.window.document.querySelectorAll("#lbBody .lb-row").length) > 0);
+  const offText = (domOff.window.document.querySelector('[data-view="board"] .eyebrow') || {}).textContent || "";
+  domOff.window.close();
+  const nowISO = new Date(Date.now() - 86400000).toISOString().slice(0, 10) + "T09:00:00-06:00"; // yesterday = inside ±3d window
+  const infoEvent = FIXTURES.info.replace("2026-08-15T09:00:00-06:00", nowISO);
+  const evFetch = withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoEvent }),
+  });
+  const domEv = makeDom("", evFetch);
+  await until(() => (domEv.window.document.querySelectorAll("#lbBody .lb-row").length) > 0);
+  const evText = (domEv.window.document.querySelector('[data-view="board"] .eyebrow') || {}).textContent || "";
+  domEv.window.close();
+  check("FV9: board eyebrow phase-aware — 'Final standings' off-season, 'Live from the course' only inside the event window",
+    offText.trim() === "Final standings" && evText.trim() === "Live from the course",
+    "off=" + JSON.stringify(offText) + " ev=" + JSON.stringify(evText));
+}
+
+// FV10: draft legibility — a drafted group whose team label matches no
+// captain shows the RAW team label as its header (never a headerless
+// cluster; the live sheet's orphan labels rendered exactly that); both
+// draft columns carry a small Hcp header.
+{
+  const orphanCSV = [
+    "year,player,team,since,handicap,status,deposit,paid_date,strengths",
+    "2026,Duck,Voss,2019,8,In,TRUE,,",
+    "2026,Hammer,Voss,2019,10,In,TRUE,,",
+    "2026,Sully,,2021,15,In,TRUE,,",
+  ].join("\n");
+  const orphanFetch = withOverride({
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => orphanCSV }),
+  });
+  const domFV10 = makeDom("", orphanFetch);
+  await until(() => (domFV10.window.document.querySelectorAll("#draftTeams .draft-team").length) > 0);
+  const d10 = domFV10.window.document;
+  const lab = d10.querySelector("#draftTeams .draft-team .draft-lab");
+  const subs = [...d10.querySelectorAll(".draft-h .draft-sub")].map(s => s.textContent || "");
+  check("FV10: orphan-label drafted group headed by its raw team label ('Voss'); both draft column headers carry explanatory subtitles (low-handicap-first / captain-first)",
+    !!lab && /Voss/.test(lab.textContent || "")
+      && subs.length === 2 && /handicap/i.test(subs[0]) && /captain/i.test(subs[1]),
+    "lab=" + JSON.stringify(lab && lab.textContent) + " subs=" + JSON.stringify(subs));
+  domFV10.window.close();
 }
 
 /* ---------------------------------------------------------------------
