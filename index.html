@@ -75,9 +75,16 @@
           font-variant-numeric:tabular-nums}
   .cd-lab{font-size:.56rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage);margin-top:7px}
   .cd-msg{font-family:var(--display);font-size:1.5rem;color:var(--brass);margin:30px 0 0}
-  /* §24 H-NOWNEXT strip — site tokens only, no new palette. */
+  /* §24 H-NOWNEXT strip — site tokens only, no new palette.
+     §25a B-LT: broadcast lower-third treatment. Keyed to :not(:empty) so
+     the rule only paints while paintHome (untouched JS) has actually set
+     content — off-event it still sets nn.innerHTML="", which already
+     satisfies CSS :empty on its own, no JS change needed to gate this. */
+  #nowNext:not(:empty){border-left:2px solid var(--brass);padding:2px 0 2px 16px;
+    margin:18px auto 0;max-width:36ch;text-align:left}
   .nn-row{font-size:.92rem;color:var(--bone);margin:8px 0 0}
-  .nn-row strong{color:var(--brass);font-weight:600}
+  .nn-row strong{display:block;color:var(--sage);font-weight:400;font-size:.63rem;
+    letter-spacing:.22em;text-transform:uppercase;margin:0 0 4px}
   .nn-chips{margin:14px 0 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
   .nn-chips a{color:var(--brass);text-decoration:none;font-size:.62rem;letter-spacing:.2em;
     text-transform:uppercase;border:1px solid rgba(200,162,74,.45);padding:6px 14px}
@@ -115,7 +122,14 @@
   .health-strip summary{cursor:pointer;color:var(--rust)}
   .health-strip div{padding:4px 0 0}
 
+  /* §25a B-LT: same lower-third rule family as #nowNext, but in var(--pine) —
+     the banner's OWN background is brass, so a brass rule would be
+     invisible; pine is the banner's already-established high-contrast
+     partner (the same color #annDismiss already borders itself in below),
+     so this echoes the family language without touching the pine-on-brass
+     text pairing (§24's measured ~7:1 contrast fix, preserved verbatim). */
   #announceBar{position:relative;background:var(--brass,#8a6d3b);color:var(--pine);
+    border-left:2px solid var(--pine);
     padding:10px 14px;font-size:.95rem;display:flex;gap:12px;align-items:baseline}
   /* review round 1: was position:sticky;top:0;z-index:60 — that painted over
      .nav (also sticky top:0) once the page scrolled, hiding the nav whenever
@@ -134,7 +148,10 @@
   #announceBar #annDismiss:hover,#announceBar #annDismiss:focus-visible{background:rgba(14,32,25,.12)}
   #annUpdates{margin:26px 0 0}
   #annUpdates .ann-row{display:flex;gap:10px;padding:4px 0;font-size:.9rem}
-  #annUpdates .ann-when{opacity:.6;white-space:nowrap}
+  /* §25a B-LT: kicker treatment (letterspaced sage caps) — the same
+     label-then-content reading order as the strip's .nn-row strong. */
+  #annUpdates .ann-when{color:var(--sage);font-size:.63rem;letter-spacing:.2em;
+    text-transform:uppercase;white-space:nowrap}
   .subhead{font-family:var(--display);font-size:1.4rem;margin:44px 0 16px;font-weight:400}
 
   .years{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 26px}

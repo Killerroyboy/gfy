@@ -6752,6 +6752,66 @@ const nowW = Date.now();
       + " boardAfter=" + JSON.stringify(boardNamesAfterT5k));
 }
 
+{ // T6: broadcast lower-third restyle of the §24 strip + announce banner
+  // (S25a B-LT). CSS-ONLY task — zero JS edits. Reuses T2's exact
+  // rule-parser idiom (strip comments, split each rule's selector list on
+  // commas, look up bodies by EXACT selector token) so a later duplicate
+  // or reverted rule fails closed instead of passing on an earlier stale
+  // match elsewhere in the file.
+  const idx = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const styleBlock = (idx.match(/<style>([\s\S]*?)<\/style>/) || [, ""])[1].replace(/\/\*[\s\S]*?\*\//g, "");
+  const cssRules = [...styleBlock.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map(([, sel, body]) => ({ selectors: sel.split(",").map(s => s.trim()).filter(Boolean), body }));
+  const rulesFor = (selector) => cssRules.filter(r => r.selectors.includes(selector)).map(r => r.body);
+  const letterSpacingEm = (body) => { const m = body.match(/letter-spacing:\s*([\d.]+)em/); return m ? parseFloat(m[1]) : null; };
+
+  // T6a: the strip container carries the 2px brass left rule, keyed to
+  // #nowNext:not(:empty) rather than bare #nowNext — paintHome's own
+  // nn.innerHTML="" off-event branch (untouched — no JS edited by this
+  // task) already leaves the container CSS-:empty, so the rule only paints
+  // while there's real content, with no JS class-toggle needed.
+  const nnBodies = rulesFor("#nowNext:not(:empty)");
+  const nnRuleOK = nnBodies.some(b => /border-left:\s*2px\s+solid\s+var\(--brass\)/.test(b));
+  check("S25a-T6a: strip container (#nowNext:not(:empty)) carries a 2px solid var(--brass) left rule",
+    nnRuleOK, "bodies=" + JSON.stringify(nnBodies));
+
+  // T6b: the strip's kicker (the Now:/Next: label, `.nn-row strong` in
+  // paintHome's existing template — untouched) is letterspaced (>=.2em)
+  // sage caps, the .eyebrow idiom; the row's own content stays bone
+  // (unchanged from §24 — this restyle must not regress that color).
+  const kickerBodies = rulesFor(".nn-row strong");
+  const kickerOK = kickerBodies.some(b => /color:\s*var\(--sage\)/.test(b)
+    && /text-transform:\s*uppercase/.test(b) && (letterSpacingEm(b) ?? 0) >= 0.2);
+  const rowBodies = rulesFor(".nn-row");
+  const rowBoneOK = rowBodies.some(b => /color:\s*var\(--bone\)/.test(b));
+  check("S25a-T6b: strip kicker (.nn-row strong) is letterspaced (>=.2em) sage caps, following the .eyebrow idiom; row content (.nn-row) stays bone, unregressed",
+    kickerOK && rowBoneOK, "kickerBodies=" + JSON.stringify(kickerBodies) + " rowBodies=" + JSON.stringify(rowBodies));
+
+  // T6c: the announce banner gets the same rule-family treatment — a 2px
+  // left rule — AND its §24 fix-round-1 contrast floor (comment on
+  // #announceBar: "#fff on brass was ~2.2:1; pine on brass is ~7.5:1") must
+  // not regress. The banner's OWN background is brass, so a brass rule
+  // would be invisible; var(--pine) is its already-established
+  // high-contrast partner (the same color #annDismiss already borders
+  // itself in), so the rule color differs from the strip's on purpose.
+  // Contrast is parsed LIVE from index.html's own --pine/--brass tokens
+  // (T1c's idiom), not a frozen literal, so a future token edit is caught
+  // here too.
+  const bannerBodies = rulesFor("#announceBar");
+  const bannerRuleOK = bannerBodies.some(b => /border-left:\s*2px\s+solid\s+var\(--pine\)/.test(b));
+  const lum = (hex) => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map(x => x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const ratio = (f, b) => { const [hi, lo] = [Math.max(lum(f), lum(b)), Math.min(lum(f), lum(b))];
+    return (hi + 0.05) / (lo + 0.05); };
+  const pineHexT6 = (idx.match(/--pine:\s*(#[0-9A-Fa-f]{6})/) || [])[1];
+  const brassHexT6 = (idx.match(/--brass:\s*(#[0-9A-Fa-f]{6})/) || [])[1];
+  const bannerRatio = pineHexT6 && brassHexT6 ? ratio(pineHexT6, brassHexT6) : 0;
+  check("S25a-T6c: announce banner (#announceBar) carries the same 2px solid left-rule family (in var(--pine), its own high-contrast partner) AND its pine-on-brass text contrast still holds the 4.5:1 floor, never regressed by this restyle",
+    bannerRuleOK && bannerRatio >= 4.5,
+    "ruleBodies=" + JSON.stringify(bannerBodies) + " pine=" + pineHexT6 + " brass=" + brassHexT6 + " ratio=" + bannerRatio.toFixed(3));
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
