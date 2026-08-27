@@ -4399,9 +4399,15 @@ async function cellSettledOk(doc, hole) {
   const note = docX35.querySelector("#sgNote");
   const noteShown = note && !note.hidden && /needs all 18 holes/i.test(note.textContent);
   const scrollHiddenX35 = docX35.querySelector("#sgScroll")?.hidden === true;
+  // Fix round 1, §25a FIX1: renderScoreGrid's !pars early return used to
+  // leave #sgLegend visible underneath this exact note (the legend has no
+  // meaning when there's no grid to key it to). Mirrors how note/scroll are
+  // already asserted here — same real fixture, same render pass.
+  const legendHiddenX35 = docX35.querySelector("#sgLegend")?.hidden === true;
   domX35.window.close();
-  check("X35: SC-PAR-VALID — blank par cell hides the score grid behind the 'needs all 18 holes' note (same degrade as a missing row; no Par-0 header row can render)",
-    !!noteShown && scrollHiddenX35, `note=${note && note.textContent} hidden=${note && note.hidden} scrollHidden=${scrollHiddenX35}`);
+  check("X35: SC-PAR-VALID — blank par cell hides the score grid behind the 'needs all 18 holes' note (same degrade as a missing row; no Par-0 header row can render); the legend hides with it (fix round 1, FIX1 — a legend with nothing to key it to must not linger)",
+    !!noteShown && scrollHiddenX35 && legendHiddenX35,
+    `note=${note && note.textContent} hidden=${note && note.hidden} scrollHidden=${scrollHiddenX35} legendHidden=${legendHiddenX35}`);
 }
 
 /* ---------------------------------------------------------------------
@@ -4517,33 +4523,46 @@ async function cellSettledOk(doc, hole) {
     totalCellBX37.textContent.trim() === toParCellBX37.textContent.trim() &&
     /^\d+$/.test(toParCellBX37.textContent.trim());
   // STRUCTURAL: the new wide-width collapse rule is present in source.
+  // Fix round 1 (§25a B-HOME Imp-1): the Board's #leaderboard.lb-suppressed
+  // .lb-total rule must carry Home's .home-board.lb-suppressed .lb-total
+  // as a SECOND selector on the very same declaration (never a duplicate
+  // rule elsewhere) — that's what keeps the two surfaces from drifting
+  // apart again. The regex now requires both selectors on one rule.
   const cssTextX37 = [...docBX37.querySelectorAll("style")].map(s => s.textContent).join("");
-  const wideRuleStructuralX37 = /#leaderboard\.lb-suppressed\s*\.lb-total\s*\{\s*display:\s*none/.test(cssTextX37);
+  const wideRuleStructuralX37 =
+    /#leaderboard\.lb-suppressed\s*\.lb-total\s*,\s*\.home-board\.lb-suppressed\s*\.lb-total\s*\{\s*display:\s*none/.test(cssTextX37);
   // STRUCTURAL: the pre-existing ≤560px rule that already hides the SAME
   // redundant column unconditionally is still present, untouched — the
   // narrow-width half of "both widths".
   const narrowRuleStructuralX37 = /@media \(max-width:560px\)/.test(cssTextX37) &&
     /\.lb-r1,\.lb-r2,\.lb-total\{display:none\}/.test(cssTextX37);
   // STRUCTURAL (whole-branch review Imp-1 fix): hiding the Total column out
-  // of the explicit 7-track grid without redefining the template leaves a
-  // dead 7th track — the surviving 6 columns must get their own template,
-  // and it MUST be scoped to widths ABOVE the ≤560px breakpoint (an
-  // unscoped id-selector rule would out-specify — id beats class — the
-  // ≤560px 4-track rule above and regress phones, since .lb-suppressed is a
-  // viewport-independent state class). Sliced from the media query's own
-  // start (same index-based technique K5 already established for this
-  // file's CSS-source checks) so the assert is scoped to THIS rule, not
-  // just "these tokens appear somewhere in the file"; the closing
-  // `\s*[};]` after the 6th value guards against a regression that leaves
-  // a stray 7th track back in (must be EXACTLY 6 tracks, not 6-then-more).
+  // of the explicit 8-track grid (§25a Task 4 added the mv column as track 2)
+  // without redefining the template leaves a dead 8th track — the surviving
+  // 7 columns (pos, mv, name, thru, r1, r2, to-par-or-fallback) must get
+  // their own template, and it MUST be scoped to widths ABOVE the ≤560px
+  // breakpoint (an unscoped id-selector rule would out-specify — id beats
+  // class — the ≤560px 4-track rule above and regress phones, since
+  // .lb-suppressed is a viewport-independent state class). Sliced from the
+  // media query's own start (same index-based technique K5 already
+  // established for this file's CSS-source checks) so the assert is scoped
+  // to THIS rule, not just "these tokens appear somewhere in the file"; the
+  // closing `\s*[};]` after the 7th value guards against a regression that
+  // leaves a stray 8th track back in (must be EXACTLY 7 tracks, not
+  // 7-then-more).
+  // Fix round 1 (§25a B-HOME Imp-1): .home-board.lb-suppressed .lb-row must
+  // join this SAME min-width:561px-scoped rule (third selector, after the
+  // pre-existing two) — a separate/unscoped .home-board-only rule would
+  // reopen exactly the id-beats-class narrow-width regression the comment
+  // above this block warns about.
   const mqStartX37 = cssTextX37.indexOf("@media (min-width:561px)");
   const mqSliceX37 = mqStartX37 >= 0 ? cssTextX37.slice(mqStartX37, mqStartX37 + 300) : "";
   const gridTemplateRuleStructuralX37 =
-    /#leaderboard\.lb-suppressed\s*\.lb-head\s*,\s*#leaderboard\.lb-suppressed\s*\.lb-row/.test(mqSliceX37) &&
-    /grid-template-columns:\s*2\.4rem\s+1fr\s+4rem\s+3\.2rem\s+3\.2rem\s+4rem\s*[};]/.test(mqSliceX37);
+    /#leaderboard\.lb-suppressed\s*\.lb-head\s*,\s*#leaderboard\.lb-suppressed\s*\.lb-row\s*,\s*\.home-board\.lb-suppressed\s*\.lb-row\s*\{/.test(mqSliceX37) &&
+    /grid-template-columns:\s*2\.4rem\s+2\.2rem\s+1fr\s+4rem\s+3\.2rem\s+3\.2rem\s+4rem\s*[};]/.test(mqSliceX37);
   domBX37.window.close();
 
-  check("X37: SC-PAR-LABEL — board label honesty (§20 amendment 2): complete course => #lbToParHead reads 'To par', #leaderboard NOT .lb-suppressed, real to-par form rendered; blank-par-7 course => header flips to 'Total', #leaderboard IS .lb-suppressed, the To-par-column span holds the IDENTICAL plain-digit gross the Total column holds (never a differently-valued or mislabeled figure); STRUCTURAL: the wide-width collapse rule, the pre-existing ≤560px rule that hides the redundant Total column, AND a min-width:561px-scoped 6-track grid-template-columns redefinition for #leaderboard.lb-suppressed .lb-head/.lb-row (no dangling 7th track/dead gutter at wide widths, correctly NOT applying at ≤560px so the narrow 4-track template stays governing there) are all present in the page's own CSS source (whole-branch review Imp-1)",
+  check("X37: SC-PAR-LABEL — board label honesty (§20 amendment 2): complete course => #lbToParHead reads 'To par', #leaderboard NOT .lb-suppressed, real to-par form rendered; blank-par-7 course => header flips to 'Total', #leaderboard IS .lb-suppressed, the To-par-column span holds the IDENTICAL plain-digit gross the Total column holds (never a differently-valued or mislabeled figure); STRUCTURAL: the wide-width collapse rule, the pre-existing ≤560px rule that hides the redundant Total column, AND a min-width:561px-scoped 7-track grid-template-columns redefinition for #leaderboard.lb-suppressed .lb-head/.lb-row (no dangling 8th track/dead gutter at wide widths, correctly NOT applying at ≤560px so the narrow 5-track template — §25a Task 4's mv column — stays governing there; fix round 1 m1: label corrected from the pre-§25a 6/7th/4-track counts) are all present in the page's own CSS source (whole-branch review Imp-1); Task 5 fix round 1 (§25a B-HOME Imp-1): both rules now also carry .home-board.lb-suppressed as a joint selector on the SAME declaration, never a separate Home-only rule",
     headOKX37 === "To par" && !!notSuppressedX37 && !!toParFormOKX37 &&
       headBX37 === "Total" && !!suppressedX37 && !!sameValueX37 && wideRuleStructuralX37 && narrowRuleStructuralX37 && gridTemplateRuleStructuralX37,
     `headOK=${headOKX37} notSuppressed=${!!notSuppressedX37} toParFormOK=${!!toParFormOKX37} headB=${headBX37} suppressed=${!!suppressedX37} sameValue=${!!sameValueX37} totalCell=${totalCellBX37 && totalCellBX37.textContent} toParCell=${toParCellBX37 && toParCellBX37.textContent} wideRule=${wideRuleStructuralX37} narrowRule=${narrowRuleStructuralX37} gridTemplateRule=${gridTemplateRuleStructuralX37}`);
@@ -6107,6 +6126,1024 @@ const nowW = Date.now();
     "strip=" + JSON.stringify(stripFV6?.textContent) +
       " rows=" + dFV6.querySelectorAll("#fldBody .fld").length);
   domFV6.window.close();
+}
+
+/* ===== §25a broadcast-core checks ===== */
+{ // T1: score tiers + tokens + mechanical contrast
+  const idx = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  // token presence
+  const tokPresentT1a = {
+    under: /--score-under:\s*#D08A76/.test(idx), even: /--score-even:\s*#C8A24A/.test(idx),
+    over: /--score-over:\s*#E9E3D3/.test(idx), bogey: /--score-bogey:\s*#8A9B8C/.test(idx),
+    blowup: /--score-blowup:\s*#B0705E/.test(idx),
+  };
+  check("S25a-T1a: five semantic score tokens on :root",
+    Object.values(tokPresentT1a).every(Boolean),
+    "found=" + JSON.stringify(tokPresentT1a));
+  // tier boundaries via the page's own scoreClass (jsdom window from the suite's dom —
+  // index.html's scripts are plain non-module <script> tags run with runScripts:
+  // "dangerously", so a top-level `function scoreClass(...)` attaches directly to
+  // dom.window, same as any other global in this suite's main `dom`)
+  const scoreClass = dom.window.scoreClass;
+  const scT1b = {
+    eagle: scoreClass(2,4), under: scoreClass(3,4), even: scoreClass(4,4),
+    bogey: scoreClass(5,4), blowup1: scoreClass(6,4), blowup2: scoreClass(9,4),
+    par0: scoreClass(3,0), parNull: scoreClass(3,null),
+  };
+  check("S25a-T1b: scoreClass tiers — eagle additive, boundaries exact",
+    scT1b.eagle === " under eagle" && scT1b.under === " under"
+    && scT1b.even === "" && scT1b.bogey === " bogey"
+    && scT1b.blowup1 === " blowup" && scT1b.blowup2 === " blowup"
+    && scT1b.par0 === "" && scT1b.parNull === "",
+    "got=" + JSON.stringify(scT1b));
+  // mechanical WCAG contrast — no eyeballs gate color. Fix round 1 (review
+  // finding 2): the five hex values are PARSED out of index.html's own
+  // --score-* tokens (not hardcoded literals) so this gate tracks the page —
+  // if a token's hex ever drifts, this check fails against the REAL value,
+  // not a frozen copy of it.
+  const lum = (hex) => { const c=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255)
+    .map(x=>x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4);
+    return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2]; };
+  const ratio = (f,b) => { const [hi,lo]=[Math.max(lum(f),lum(b)),Math.min(lum(f),lum(b))];
+    return (hi+0.05)/(lo+0.05); };
+  const pines = ["#0E2019","#132B21","#0A1712"];
+  const tok = (n) => (idx.match(new RegExp("--score-" + n + ":\\s*(#[0-9A-Fa-f]{6})")) || [])[1];
+  const text = ["under","even","over","bogey"].map(tok);   // text tokens: 4.5 floor
+  const rings = ["blowup"].map(tok);                       // ring-only: 3.0 floor
+  const allParsedT1c = text.every(Boolean) && rings.every(Boolean);
+  check("S25a-T1c: contrast — text tokens ≥4.5, ring tokens ≥3.0 on every pine (values parsed live from index.html's --score-* tokens)",
+    allParsedT1c
+    && text.every(f=>pines.every(b=>ratio(f,b)>=4.5))
+    && rings.every(f=>pines.every(b=>ratio(f,b)>=3.0)),
+    "text=" + JSON.stringify(text) + " rings=" + JSON.stringify(rings));
+}
+{ // T1d: eagle scores keep the ▾ glyph — fix round 1 (review finding 1)
+  // regression guard for scCellHTML's glyph derivation (index.html ~4326):
+  // strict equality (scoreCls==="under") let " under eagle" fall through to
+  // no glyph at all, making the best score on the scorer card color-only —
+  // the exact thing the comment directly above that line forbids. The fix
+  // is scoreCls.includes("under"); this check fails again if that reverts.
+  const domG = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const docG = await openScorer(domG, { noSheet: true });
+  docG.querySelector('.sc-cell[data-hole="8"]').click();   // hole 8, par 4 (course fixture)
+  await until(() => !docG.querySelector("#scSheet")?.hidden);
+  [...docG.querySelectorAll("#scSheet .sc-key[data-score]")]
+    .find(b => b.dataset.score === "2").click();            // par4-2 = eagle (X8 confirms "2" labels "Eagle" on hole 8)
+  await until(() => docG.querySelector('.sc-cell[data-hole="8"] .sc-score')?.textContent === "2");
+  const cell8 = docG.querySelector('.sc-cell[data-hole="8"]');
+  check("S25a-T1d: eagle score (2 on a par-4) still carries the ▾ glyph, same as any other under-par score — never color-only",
+    !!cell8 && cell8.classList.contains("under") && cell8.classList.contains("eagle")
+    && cell8.querySelector(".sc-glyph")?.textContent === "▾",
+    "class=" + (cell8 ? cell8.className : "no cell") +
+      " glyph=" + JSON.stringify(cell8?.querySelector(".sc-glyph")?.textContent ?? null));
+  domG.window.close();
+}
+{ // T2: color flip + rings + legend
+  const idx = readFileSync(path.join(ROOT, "index.html"), "utf8");
+
+  // Fix round 1 (§25a review) shared helper: a real (if minimal) CSS-rule
+  // parser over ONLY the <style> block, splitting each rule's selector list
+  // on commas so lookups are by EXACT selector token, not loose substring —
+  // the original draft's `.test(idx)` regexes were satisfied by finding ANY
+  // matching occurrence anywhere in the file, which is exactly the blind
+  // spot review finding FIX2/M9 exploited (a LATER duplicate rule with the
+  // wrong color still lets a `.test()` scan succeed via the earlier correct
+  // one). Every fix-round check below instead collects ALL rule bodies for
+  // an exact selector and asserts across ALL of them, so a later duplicate
+  // or a reverted single occurrence both fail closed.
+  // CSS comments MUST be stripped before rule-parsing: a comment sitting on
+  // its own line right before a selector (very common in this file, incl.
+  // pre-existing comments unrelated to this task) has no {}s of its own, so
+  // the naive [^{}]+ selector-scan swallows it INTO the next rule's
+  // "selector" text — e.g. "/* §25a B-CONV: ... */\n  .hcell.under .hs" as
+  // one combined string, which then silently fails an exact-match lookup
+  // for the clean ".hcell.under .hs" token. Caught this the hard way: T2a
+  // false-FAILed on real, correct CSS on the first run of the fix-round
+  // checks until this strip was added.
+  const styleBlock = (idx.match(/<style>([\s\S]*?)<\/style>/) || [, ""])[1].replace(/\/\*[\s\S]*?\*\//g, "");
+  const cssRules = [...styleBlock.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map(([, sel, body]) => ({ selectors: sel.split(",").map(s => s.trim()).filter(Boolean), body }));
+  const rulesFor = (selector) => cssRules.filter(r => r.selectors.includes(selector)).map(r => r.body);
+
+  // T2a (fix round 1: renamed + extended to match its own name — the
+  // original only asserted the "under" tier on three selectors, which is
+  // narrower than "under/even/over/bogey cells" claimed). Now covers every
+  // TEXT-color binding across all four selector families x all three tiers,
+  // and — the M9/M3 guard — asserts NO occurrence of that exact selector
+  // anywhere in the file (a later duplicate included) binds its color to a
+  // raw --brass/--sage/--rust literal.
+  const tierTextSelectors = {
+    ".hcell.under .hs": "--score-under", ".hcell.bogey .hs": "--score-bogey", ".hcell.blowup .hs": "--score-over",
+    ".sg-t td.under": "--score-under", ".sg-t td.bogey": "--score-bogey", ".sg-t td.blowup": "--score-over",
+    ".sc-tile-v.under": "--score-under",
+    ".sc-cell.under .sc-score": "--score-under", ".sc-cell.bogey .sc-score": "--score-bogey", ".sc-cell.blowup .sc-score": "--score-over",
+  };
+  const t2aDetail = {};
+  const t2aOK = Object.entries(tierTextSelectors).every(([sel, tok]) => {
+    const bodies = rulesFor(sel);
+    const hasToken = bodies.some(b => new RegExp("color:\\s*var\\(" + tok + "\\)").test(b));
+    const noRawLeak = bodies.every(b => !/color:\s*var\(--(brass|sage|rust)\)/.test(b));
+    t2aDetail[sel] = { count: bodies.length, hasToken, noRawLeak };
+    return hasToken && noRawLeak;
+  });
+  check("S25a-T2a: every tier TEXT-color binding (hcell .hs / sg-t td / sc-tile-v.under / sc-cell .sc-score, all applicable tiers) uses its --score-* token, and NO occurrence of that exact selector anywhere in the file — including a later duplicate rule — binds color to raw --brass/--sage/--rust",
+    t2aOK, "detail=" + JSON.stringify(t2aDetail));
+
+  // T2b (fix round 1: extended from td.blowup-only to every selector that
+  // mentions "blowup" — hcell/sg-t td/sc-cell alike, text AND ring rules —
+  // so a reverted .sc-cell.blowup .sc-score (review finding M3) dies here
+  // too, independently of T2a).
+  const blowupRules = cssRules.filter(r => r.selectors.some(s => /\bblowup\b/.test(s)));
+  const t2bNoRust = blowupRules.length > 0 && blowupRules.every(r => !/var\(--rust\)/.test(r.body));
+  check("S25a-T2b: blowup styling (text AND ring, hcell/sg-t td/sc-cell alike) never uses the raw --rust literal anywhere — the blowup tier's color must come from --score-over/--score-blowup tokens only",
+    t2bNoRust,
+    "blowupRules=" + JSON.stringify(blowupRules.map(r => r.selectors.join(",") + "{" + r.body + "}")));
+
+  // T2c (fix round 1: extended from .sg-t td-only to ALSO cover .hcell .hs
+  // / .sc-cell .sc-score — review findings M5 (eagle double-ring dropped)
+  // and M7 (entire hcell/sc-cell ring block deleted) both survived the
+  // original .sg-t td-only checks untouched. The hcell blowup ring is
+  // explicitly load-bearing: .hcell.blowup .hs's TEXT color is
+  // --score-over, which is the IDENTICAL hex to --bone (the default,
+  // untiered .hs color) — with no ring, a blowup score on the hole strip
+  // is pixel-identical to a plain par score, a real "never color-only"
+  // violation, not just a cosmetic gap.) Gets a real `detail` arg (was a
+  // static string before).
+  const ringSpecs = [
+    { sel: ".sg-t td.under::after", must: [/border-radius:\s*50%/] },
+    { sel: ".sg-t td.under.eagle::after", must: [/box-shadow/] },
+    { sel: ".sg-t td.bogey::after", must: [/border-color/], mustNotRadius: true },
+    { sel: ".sg-t td.blowup::after", must: [/box-shadow/] },
+    { sel: ".hcell.under .hs", must: [/border-radius:\s*50%/] },
+    { sel: ".sc-cell.under .sc-score", must: [/border-radius:\s*50%/] },
+    { sel: ".hcell.under.eagle .hs", must: [/box-shadow/] },
+    { sel: ".sc-cell.under.eagle .sc-score", must: [/box-shadow/] },
+    { sel: ".hcell.bogey .hs", must: [/border-color/], mustNotRadius: true },
+    { sel: ".sc-cell.bogey .sc-score", must: [/border-color/], mustNotRadius: true },
+    { sel: ".hcell.blowup .hs", must: [/box-shadow/] },
+    { sel: ".sc-cell.blowup .sc-score", must: [/box-shadow/] },
+  ];
+  const ringDetail = {};
+  const ringOK = ringSpecs.every(spec => {
+    const bodies = rulesFor(spec.sel);
+    const hasAll = spec.must.every(re => bodies.some(b => re.test(b)));
+    const noRadiusLeak = !spec.mustNotRadius || bodies.every(b => !/border-radius:\s*50%/.test(b));
+    ringDetail[spec.sel] = { count: bodies.length, hasAll, noRadiusLeak };
+    return hasAll && noRadiusLeak;
+  });
+  check("S25a-T2c: ring vocabulary present on BOTH the grid table (.sg-t td) AND the hole-strip/scorer-card (.hcell .hs / .sc-cell .sc-score) — circle under, double eagle, square bogey, double-square blowup",
+    ringOK, "detail=" + JSON.stringify(ringDetail));
+
+  // NOTE: the file-scope `dom` was already `.window.close()`d earlier in the
+  // suite (lines ~1546/5081) — jsdom nulls out `.document` on a closed
+  // window, so reusing it here would throw. Static markup like the legend
+  // needs no route/fetch state, so a fresh throwaway dom is used, guarded in
+  // try/catch (idiom per task-1-report.md) so a missing symbol/DOM shape
+  // FAILs the check instead of crashing the whole suite.
+  let legend = null, legendErr = null;
+  try {
+    const domLg = makeDom("");
+    legend = domLg.window.document.querySelector("#sgLegend");
+    domLg.window.close();
+  } catch (e) { legendErr = e.message; }
+  const t2dLabels = ["Eagle", "Birdie", "Par", "Bogey", "Double or worse"];
+  check("S25a-T2d: legend — five labels verbatim",
+    !!legend && !legendErr && t2dLabels.every(t => legend.textContent.includes(t)),
+    "legend=" + JSON.stringify(legend ? legend.textContent.replace(/\s+/g, " ").trim() : null) +
+      (legendErr ? " err=" + legendErr : ""));
+}
+{ // T2e (fix round 1, §25a FIX1): legend visibility mirrors note/scroll on
+  // BOTH of renderScoreGrid's early-return note paths. X35 (extended above)
+  // already grounds the !pars branch on a real fixture. The SECOND branch
+  // (!rounds.length, "No hole-by-hole cards yet — totals only so far.") has
+  // no existing real-fixture test to extend — building one would mean
+  // crafting a whole alternate players/rounds fixture set just for this.
+  // renderScoreGrid is reachable directly instead (confirmed top-level,
+  // non-closure via grep, same idiom as scoreClass — see task-1-report.md):
+  // it takes `players` as a plain argument and reads its DOM refs via $(),
+  // so calling it with a synthetic totals-only players array on a dom
+  // that's already completed one REAL load exercises the branch precisely,
+  // and — bonus — that same real load's own prior render proves the
+  // positive case (legend shown after a genuine successful grid render) in
+  // the same check. Guarded in try/catch per the established idiom.
+  let normalLegendHidden = null, notePath2LegendHidden = null, notePath2Text = null, t2eErr = null;
+  try {
+    const domE = makeDom("");
+    await until(() => domE.window.document.querySelectorAll("#sgTable tr.sg-teamrow").length > 0);
+    normalLegendHidden = domE.window.document.querySelector("#sgLegend")?.hidden;
+    domE.window.renderScoreGrid([{ key: "ZZ", name: "ZZ Totals-Only", rounds: { "1": { total: 70 } } }]);
+    const noteE = domE.window.document.querySelector("#sgNote");
+    notePath2Text = noteE && noteE.textContent;
+    notePath2LegendHidden = domE.window.document.querySelector("#sgLegend")?.hidden;
+    domE.window.close();
+  } catch (e) { t2eErr = e.message; }
+  check("S25a-T2e: legend shown after a real successful grid render, and hides again on renderScoreGrid's OTHER early-return note path ('No hole-by-hole cards yet') — not the same branch X35 exercises",
+    normalLegendHidden === false && notePath2LegendHidden === true
+    && !!notePath2Text && /totals only so far/i.test(notePath2Text) && !t2eErr,
+    "normalLegendHidden=" + normalLegendHidden + " notePath2LegendHidden=" + notePath2LegendHidden +
+      " notePath2Text=" + JSON.stringify(notePath2Text) + (t2eErr ? " err=" + t2eErr : ""));
+}
+
+{ // T3: ceremonial mastheads (S25a B-NAME) — fresh throwaway dom (the suite's
+  // shared `dom` is closed by this point; same hazard T2d hit, same fix).
+  const domT3 = makeDom("");
+  const d = domT3.window.document;
+  const idxT3 = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const bar = d.querySelector("#mastBar");
+  check("S25a-T3a: compact masthead bar — full ceremonial name + single-authority #mark use + hidden-on-home CSS",
+    !!bar && /THE GOOD FRIENDS YEARLY/.test(bar.textContent || "")
+    && !!bar.querySelector('svg use[href="#mark"]')
+    && /body\[data-view="home"\] #mastBar\{[^}]*display:\s*none/.test(idxT3),
+    "bar=" + !!bar + " mark=" + !!(bar && bar.querySelector('svg use[href="#mark"]')));
+  const board = d.querySelector('[data-view="board"]');
+  const boardH2T3b = board && board.querySelector("h2");
+  check("S25a-T3b: Board masthead — existing copy intact + double rule + chip slot + Leaderboard heading (fix round 1, M7)",
+    !!board && /Live from the course/.test(board.textContent || "")
+    && /Gross decides The Bird/.test(board.textContent || "")
+    && !!board.querySelector(".mast-rule") && !!board.querySelector("#mastChip")
+    && !!boardH2T3b && boardH2T3b.textContent.trim() === "Leaderboard",
+    "rule=" + !!(board && board.querySelector(".mast-rule")) + " chip=" + !!(board && board.querySelector("#mastChip"))
+      + " h2=" + JSON.stringify(boardH2T3b && boardH2T3b.textContent));
+  domT3.window.close();
+
+  // S25a-T3c (fix round 1, M1): the fixture default first_tee (2026-08-15) is
+  // a real calendar date that drifts into/out of the ±3-day event window as
+  // wall-clock time passes — anchoring the off-phase assertion to it is a
+  // time-bomb. Force off-phase explicitly via the dynInfo() idiom (X53)
+  // instead: a first_tee ~1 year out is unambiguously outside the ±3-day
+  // window regardless of when this suite runs.
+  const offPhaseInfoT3c = dynInfo(365);
+  const domT3c = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => offPhaseInfoT3c }),
+  }));
+  let chipTextC = null, t3cErr = "";
+  const t3cReady = await until(() => typeof domT3c.window.renderMastChip === "function");
+  try {
+    if (!t3cReady) throw new Error("page scripts never exposed renderMastChip");
+    domT3c.window.eval("renderMastChip()");
+    chipTextC = (domT3c.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3cErr = String((e && e.message) || e); }
+  domT3c.window.close();
+  check("S25a-T3c: chip honest off-phase — est line verbatim, never a fabricated round/day (first_tee forced ~1yr out via dynInfo(365), never the real calendar — fix round 1, M1)",
+    chipTextC === "McCall, Idaho · Est. 2019" && !/Round \d/.test(chipTextC || "") && !t3cErr,
+    "chip=" + JSON.stringify(chipTextC) + (t3cErr ? " err=" + t3cErr : ""));
+
+  // S25a-T3d/e/f (fix round 1, I1): event-phase branch coverage — zero prior
+  // coverage let two mutations survive: dropping the `rds.length` guard
+  // (event + no scores ⇒ Math.max(...[]) ⇒ "Round -Infinity") and replacing
+  // the `off!==null` guard with a device-clock fallback (event + an
+  // unparseable offset ⇒ a guessed weekday instead of refusing). Each check
+  // below isolates one guard; T3d is the baseline positive path.
+  const inWindowInfoT3 = dynInfo(1);
+
+  const domT3d = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT3 }),
+  }));
+  let chipTextD = null, t3dErr = "";
+  const t3dReady = await until(() => typeof domT3d.window.renderMastChip === "function");
+  try {
+    if (!t3dReady) throw new Error("page scripts never exposed renderMastChip");
+    domT3d.window.eval("renderMastChip()");
+    chipTextD = (domT3d.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3dErr = String((e && e.message) || e); }
+  domT3d.window.close();
+  check("S25a-T3d: chip event-phase — fixture scores derive a real Round 1|2 + weekday (fix round 1, I1); weekday not pinned since it derives from the relative dynInfo() date",
+    /^Round [12] · [A-Z][a-z]+$/.test(chipTextD || "") && !t3dErr,
+    "chip=" + JSON.stringify(chipTextD) + (t3dErr ? " err=" + t3dErr : ""));
+
+  const emptyScoresT3e = FIXTURES.scores.split(/\r\n|\n/)[0] + "\r\n";
+  const domT3e = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT3 }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => emptyScoresT3e }),
+  }));
+  let chipTextE = null, t3eErr = "";
+  const t3eReady = await until(() => typeof domT3e.window.renderMastChip === "function");
+  try {
+    if (!t3eReady) throw new Error("page scripts never exposed renderMastChip");
+    domT3e.window.eval("renderMastChip()");
+    chipTextE = (domT3e.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3eErr = String((e && e.message) || e); }
+  domT3e.window.close();
+  check("S25a-T3e: chip event-phase — EMPTY scores tab (no rounds at all) falls back to the est line, never 'Round -Infinity' (fix round 1, I1 — guards the rds.length check)",
+    chipTextE === "McCall, Idaho · Est. 2019" && !/Round/.test(chipTextE || "") && !t3eErr,
+    "chip=" + JSON.stringify(chipTextE) + (t3eErr ? " err=" + t3eErr : ""));
+
+  const noOffsetInfoT3f = FIXTURES.info.replace(
+    "2026-08-15T09:00:00-06:00", dynFirstTee(1).replace(/[+-]\d{2}:\d{2}$/, ""));
+  const domT3f = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => noOffsetInfoT3f }),
+  }));
+  let chipTextF = null, t3fErr = "";
+  const t3fReady = await until(() => typeof domT3f.window.renderMastChip === "function");
+  try {
+    if (!t3fReady) throw new Error("page scripts never exposed renderMastChip");
+    domT3f.window.eval("renderMastChip()");
+    chipTextF = (domT3f.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3fErr = String((e && e.message) || e); }
+  domT3f.window.close();
+  check("S25a-T3f: chip event-phase — first_tee with no parseable UTC offset falls back to the est line, never a device-clock-guessed weekday (fix round 1, I1 — guards the off!==null check)",
+    chipTextF === "McCall, Idaho · Est. 2019" && !/Round \d/.test(chipTextF || "") && !t3fErr,
+    "chip=" + JSON.stringify(chipTextF) + (t3fErr ? " err=" + t3fErr : ""));
+
+  // S25a-T3g (fix round 1, I2): the round domain is bounded to exactly {1,2}
+  // — the authoritative domain per tools/sheet-triggers.gs:65 and the board's
+  // own R1/R2 rendering. A hand-typed Scores round of "3" or "2026" must
+  // never headline the chip; if no round survives the filter, fall back to
+  // the est line rather than guess.
+  const bogusPlusValidT3g = FIXTURES.scores +
+    "\n2026,Duck,3,4,4,4,5,4,4,4,4,5,4,5,3,4,4,4,3,5,4,,\n";
+  const domT3g1 = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT3 }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => bogusPlusValidT3g }),
+  }));
+  let chipTextG1 = null, t3g1Err = "";
+  const t3g1Ready = await until(() => typeof domT3g1.window.renderMastChip === "function");
+  try {
+    if (!t3g1Ready) throw new Error("page scripts never exposed renderMastChip");
+    domT3g1.window.eval("renderMastChip()");
+    chipTextG1 = (domT3g1.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3g1Err = String((e && e.message) || e); }
+  domT3g1.window.close();
+
+  const allBogusT3g = FIXTURES.scores.split(/\r\n|\n/)[0] + "\r\n" +
+    "2026,Duck,3,4,4,4,5,4,4,4,4,5,4,5,3,4,4,4,3,5,4,,\n" +
+    "2026,Sully,2026,4,4,4,5,4,4,4,4,5,4,5,3,4,4,4,3,5,4,,\n";
+  const domT3g2 = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT3 }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => allBogusT3g }),
+  }));
+  let chipTextG2 = null, t3g2Err = "";
+  const t3g2Ready = await until(() => typeof domT3g2.window.renderMastChip === "function");
+  try {
+    if (!t3g2Ready) throw new Error("page scripts never exposed renderMastChip");
+    domT3g2.window.eval("renderMastChip()");
+    chipTextG2 = (domT3g2.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3g2Err = String((e && e.message) || e); }
+  domT3g2.window.close();
+
+  check("S25a-T3g: round domain bounded to {1,2} (fix round 1, I2) — a bogus round ('3') alongside a valid Round 2 row still headlines 'Round 2', never '3'; when ONLY bogus rounds exist ('3'/'2026'), falls back to the est line rather than guess",
+    /^Round 2 · [A-Z][a-z]+$/.test(chipTextG1 || "") && !t3g1Err
+    && chipTextG2 === "McCall, Idaho · Est. 2019" && !/Round/.test(chipTextG2 || "") && !t3g2Err,
+    "bogusPlusValid=" + JSON.stringify(chipTextG1) + (t3g1Err ? " err1=" + t3g1Err : "")
+      + " allBogus=" + JSON.stringify(chipTextG2) + (t3g2Err ? " err2=" + t3g2Err : ""));
+
+  // S25a-T3h (final fix wave, F3 — ratified S11 ruling): #mastCtx wrapped
+  // into 3 ragged lines at 390w in the render-close eyeball pass
+  // (progress.md 08-24) — a "finished"-test failure to a cold viewer. Ruled:
+  // hide it below 560px (the Board's own #mastChip, a DIFFERENT element,
+  // already carries the same context on phones). Same anchor-and-slice
+  // idiom T4i/T4j use for this exact media block, rather than a bare
+  // substring .test() that could match a stray duplicate anywhere else in
+  // the file.
+  const narrowMqAnchorT3h = idxT3.indexOf("@media (max-width:560px)");
+  // window sized to the WHOLE block (measured ~1640 chars incl. braces) —
+  // the rule sits at the block's tail end, after every pre-existing
+  // narrow-width override, not up front where it would shift T4j's own
+  // (independently sized) slice window over the .lb-head/.lb-row rule.
+  const narrowMqSliceT3h = narrowMqAnchorT3h >= 0 ? idxT3.slice(narrowMqAnchorT3h, narrowMqAnchorT3h + 1800) : "";
+  check("S25a-T3h: final fix wave (F3, ratified S11 ruling) — .mast-ctx{display:none} present inside the @media (max-width:560px) block, so the top bar's context line never wraps into ragged lines on a phone",
+    /\.mast-ctx\{display:\s*none\}/.test(narrowMqSliceT3h),
+    "slice=" + JSON.stringify(narrowMqSliceT3h.slice(0, 200)));
+}
+
+{ // T4: movement arrows + honest staleness basis (S25a B-MV) — fresh
+  // throwaway doms per scenario (the shared `dom` is closed by this point,
+  // same hazard T2d/T3 hit).
+  const domT4 = makeDom("");
+  await until(() => typeof domT4.window.movementFor === "function");
+  const mv = domT4.window.movementFor;
+  check("S25a-T4a: movement diff — first load, up, down, tie-shuffle, new team",
+    typeof mv === "function" && (() => {
+      const first = mv(null, ["a", "b"]);
+      const m = mv(["a", "b", "c", "d"], ["b", "a", "d", "c"]);
+      const n = mv(["a"], ["a", "z"]);
+      return first.get("a").dir === "same" && first.get("a").n === 0
+        && m.get("b").dir === "up" && m.get("b").n === 1
+        && m.get("a").dir === "down" && m.get("a").n === 1
+        && m.get("d").dir === "up" && m.get("d").n === 1
+        && n.get("z").dir === "new";
+    })(),
+    "movementFor typeof=" + typeof mv);
+  domT4.window.close();
+
+  const idxT4 = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const hasConstT4b = /STALE_BASIS_MS\s*=\s*10\*60\*1000/.test(idxT4);
+  const hasCopyT4b = idxT4.includes("Movement paused — last refresh");
+  check("S25a-T4b: staleness rule — 10-minute basis cap present with paused copy",
+    hasConstT4b && hasCopyT4b,
+    "const=" + hasConstT4b + " copy=" + hasCopyT4b);
+  const hasAriaT4c = idxT4.includes('aria-label="moved up');
+  const hasClassT4c = /lb-mv/.test(idxT4);
+  check("S25a-T4c: arrows are aria-labeled inline SVG in rows",
+    hasAriaT4c && hasClassT4c,
+    "aria=" + hasAriaT4c + " class=" + hasClassT4c);
+
+  // S25a-T4d: FIRST paint (no prior STATE.prevBoard yet) — every row's mv
+  // cell reads the dash (never a fabricated arrow before a prior paint
+  // exists to diff against) and the basis footer is honestly empty.
+  const domT4d = makeDom("");
+  await until(() => domT4d.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const mvCellsT4d = [...domT4d.window.document.querySelectorAll("#lbBody .lb-mv")];
+  const allDashT4d = mvCellsT4d.length > 0 && mvCellsT4d.every(el => el.textContent.trim() === "—");
+  const basisT4d = domT4d.window.document.querySelector("#lbMvBasis")?.textContent ?? null;
+  domT4d.window.close();
+  check("S25a-T4d: first paint — every row shows the mv dash, basis footer empty (no fabricated movement before a prior paint exists)",
+    mvCellsT4d.length > 0 && allDashT4d && basisT4d === "",
+    "cells=" + mvCellsT4d.length + " allDash=" + allDashT4d + " basis=" + JSON.stringify(basisT4d));
+
+  // S25a-T4e: a FRESH basis (STATE.prevBoard just captured, well under the
+  // 10-minute cap, SAME year) with the live order reversed forces real
+  // up/down movement — proves the mechanism, not just source-text presence
+  // (T4b/c only prove the strings exist somewhere in the file). The injected
+  // STATE.prevBoard carries `year` (fix round 1, Imp-1) matching STATE.year
+  // so this isolates the TIME-based freshness path from the year-match
+  // guard T4h covers separately.
+  const domT4e = makeDom("");
+  await until(() => domT4e.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearT4e = domT4e.window.eval("STATE.year");
+  const liveOrderT4e = [...domT4e.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
+  domT4e.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4e].reverse(), year: yearT4e, at: Date.now() }) + "; renderLeaderboard();");
+  const rowsT4e = [...domT4e.window.document.querySelectorAll("#lbBody .lb-row")];
+  const firstMvT4e = rowsT4e[0]?.querySelector(".lb-mv");
+  const lastMvT4e = rowsT4e[rowsT4e.length - 1]?.querySelector(".lb-mv");
+  const basisT4e = domT4e.window.document.querySelector("#lbMvBasis")?.textContent ?? "";
+  // fix round 1 (m4): read every element prop BEFORE closing the window, not
+  // after — consistent with T4d/f/g's idiom, and avoids relying on jsdom
+  // node state surviving window.close().
+  const firstUpT4e = !!firstMvT4e?.classList.contains("up");
+  const firstAriaT4e = firstMvT4e?.getAttribute("aria-label") || "";
+  const firstClassT4e = firstMvT4e && firstMvT4e.className;
+  const lastDownT4e = !!lastMvT4e?.classList.contains("down");
+  const lastAriaT4e = lastMvT4e?.getAttribute("aria-label") || "";
+  const lastClassT4e = lastMvT4e && lastMvT4e.className;
+  domT4e.window.close();
+  // fix round 1 (m3): the multi-row precondition is asserted, not ||-ed away
+  // — a fixture that ever collapses to one row must FAIL this check loudly
+  // (nothing to prove movement with) rather than pass vacuously.
+  const multiRowT4e = liveOrderT4e.length > 1;
+  const movementOkT4e = firstUpT4e && /^moved up \d+$/.test(firstAriaT4e) &&
+    lastDownT4e && /^moved down \d+$/.test(lastAriaT4e);
+  check("S25a-T4e: fresh basis (same year) — reversing the live order produces real aria-labeled up/down arrows + 'Movement since h:mm' footer",
+    multiRowT4e && movementOkT4e && /^Movement since \d{1,2}:\d{2}/.test(basisT4e),
+    "teams=" + liveOrderT4e.length + " multiRow=" + multiRowT4e + " firstClass=" + firstClassT4e +
+      " firstAria=" + JSON.stringify(firstAriaT4e) +
+      " lastClass=" + lastClassT4e + " basis=" + JSON.stringify(basisT4e));
+
+  // S25a-T4f: a STALE basis (captured >10 minutes ago, SAME year) suppresses
+  // every arrow back to the dash and swaps the footer to the honest paused
+  // copy — never keep showing an old diff as if it were current.
+  const domT4f = makeDom("");
+  await until(() => domT4f.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearT4f = domT4f.window.eval("STATE.year");
+  const liveOrderT4f = [...domT4f.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
+  const staleAtT4f = Date.now() - 11 * 60 * 1000;
+  domT4f.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4f].reverse(), year: yearT4f, at: staleAtT4f }) + "; renderLeaderboard();");
+  const mvCellsT4f = [...domT4f.window.document.querySelectorAll("#lbBody .lb-mv")];
+  const allDashT4f = mvCellsT4f.length > 0 && mvCellsT4f.every(el => el.textContent.trim() === "—");
+  const basisT4f = domT4f.window.document.querySelector("#lbMvBasis")?.textContent ?? "";
+  domT4f.window.close();
+  check("S25a-T4f: stale basis (>10min old, same year) suppresses every arrow to the dash and shows 'Movement paused — last refresh h:mm'",
+    mvCellsT4f.length > 0 && allDashT4f && /^Movement paused — last refresh \d{1,2}:\d{2}/.test(basisT4f),
+    "cells=" + mvCellsT4f.length + " allDash=" + allDashT4f + " basis=" + JSON.stringify(basisT4f));
+
+  // S25a-T4h (fix round 1, Imp-1): a prior basis from a DIFFERENT year is
+  // not a stale basis, it's the WRONG basis — reviewer reproduced switching
+  // the year picker fabricating "moved up 2" arrows with nothing actually
+  // moved (the old code diffed the new year's order against the old year's
+  // order under a still-fresh timestamp). A year mismatch must render
+  // exactly like a first paint: every row dashed, footer empty — never an
+  // arrow, never "since"/"paused" text.
+  const domT4h = makeDom("");
+  await until(() => domT4h.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearNowT4h = domT4h.window.eval("STATE.year");
+  const liveOrderT4h = [...domT4h.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
+  // a genuinely different (reversed) prior order under the SAME year, fresh
+  // timestamp — exactly what T4e proves DOES produce real arrows — so that
+  // switching the year with the guard removed would show the same
+  // reviewer-reported false arrows if this check regresses.
+  domT4h.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4h].reverse(), year: yearNowT4h, at: Date.now() }) + ";");
+  const yearBtnsT4h = [...domT4h.window.document.querySelectorAll("#years .year-btn")].map(b => b.dataset.year);
+  const otherYearT4h = yearBtnsT4h.find(y => y !== yearNowT4h);
+  let mvCellsT4h = [], basisT4h = "";
+  if (otherYearT4h) {
+    // the exact pre-fix code path: only STATE.year changes, STATE.prevBoard
+    // is left completely untouched (renderYears()'s own year-button handler
+    // never mentions STATE.prevBoard).
+    domT4h.window.eval("STATE.year=" + JSON.stringify(otherYearT4h) + "; STATE.open=null; renderLeaderboard();");
+    mvCellsT4h = [...domT4h.window.document.querySelectorAll("#lbBody .lb-mv")];
+    basisT4h = domT4h.window.document.querySelector("#lbMvBasis")?.textContent ?? "";
+  }
+  const allDashT4h = mvCellsT4h.length > 0 && mvCellsT4h.every(el => el.textContent.trim() === "—");
+  domT4h.window.close();
+  check("S25a-T4h: year switch never diffs against the other year's basis — dashes + empty footer, never a fabricated arrow or 'since'/'paused' text",
+    !!otherYearT4h && allDashT4h && basisT4h === "",
+    "years=" + JSON.stringify(yearBtnsT4h) + " from=" + yearNowT4h + " switchedTo=" + otherYearT4h +
+      " cells=" + mvCellsT4h.length + " allDash=" + allDashT4h + " basis=" + JSON.stringify(basisT4h));
+
+  // S25a-T4g (ruled scope addition, B-CONV, controller ruling): the Board's
+  // to-par cell (renderLeaderboard's last span) gains tier coloring — under,
+  // even, over, and the suppressed/null fallback all asserted from a
+  // rendered board (fixture teams spanning all four cases).
+  const scoresT4g = "year,team,round,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12,h13,h14,h15,h16,h17,h18,r1,r2\n"
+    + "2026,Duck,,,,,,,,,,,,,,,,,,,,,68,68\n"    // total 136, par 144 -> rel -8 (under)
+    + "2026,Sully,,,,,,,,,,,,,,,,,,,,,72,72\n"   // total 144, par 144 -> rel 0 (even)
+    + "2026,Tex,,,,,,,,,,,,,,,,,,,,,80,80\n";    // total 160, par 144 -> rel +16 (over)
+  const domT4g = makeDom("", withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresT4g }),
+  }));
+  await until(() => domT4g.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const byTeamT4g = {};
+  domT4g.window.document.querySelectorAll("#lbBody .lb-row").forEach(r => {
+    const toParSpan = r.querySelectorAll(".lb-tot")[1];
+    byTeamT4g[r.dataset.player] = toParSpan ? toParSpan.className : null;
+  });
+  domT4g.window.close();
+  const clsListT4g = (s) => (s || "").split(" ");
+  const underOkT4g = clsListT4g(byTeamT4g.duck).includes("lb-under");
+  const evenOkT4g = clsListT4g(byTeamT4g.sully).includes("lb-even");
+  const overOkT4g = clsListT4g(byTeamT4g.tex).includes("lb-over");
+
+  const courseBlank7T4g = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l).join("\n");
+  const domT4g2 = makeDom("", withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7T4g }),
+  }));
+  await until(() => domT4g2.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const rowT4g2 = domT4g2.window.document.querySelector("#lbBody .lb-row");
+  const toParSpanT4g2 = rowT4g2 && rowT4g2.querySelectorAll(".lb-tot")[1];
+  const nullClassT4g2 = toParSpanT4g2 ? toParSpanT4g2.className : null;
+  domT4g2.window.close();
+  const nullOkT4g = !!toParSpanT4g2 && !/lb-under|lb-even|lb-over/.test(nullClassT4g2 || "");
+
+  check("S25a-T4g: ruled scope addition (B-CONV) — Board to-par cell tier coloring: rel<0 -> lb-under, rel===0 -> lb-even, rel>0 -> lb-over, suppressed/null -> no tier class",
+    underOkT4g && evenOkT4g && overOkT4g && nullOkT4g,
+    "duck=" + JSON.stringify(byTeamT4g.duck) + " sully=" + JSON.stringify(byTeamT4g.sully) +
+      " tex=" + JSON.stringify(byTeamT4g.tex) + " nullCase=" + JSON.stringify(nullClassT4g2));
+
+  // S25a-T4i/T4j (fix round 1, Imp-2): the base and narrow grid templates
+  // had zero structural coverage — reverting EITHER one to its pre-mv track
+  // count (dropping the 2.2rem/2rem mv column) still passed the full suite.
+  // Same slicing idiom X37 established for its own suppressed-variant grid
+  // check: anchor on a stable marker, slice forward, regex the EXACT track
+  // list with a closing `\s*;` boundary so neither a dropped nor an extra
+  // stray track can sneak back in unnoticed.
+  const leaderboardAnchorT4 = idxT4.indexOf("/* leaderboard */");
+  const leaderboardSliceT4 = leaderboardAnchorT4 >= 0 ? idxT4.slice(leaderboardAnchorT4, leaderboardAnchorT4 + 200) : "";
+  const baseGridOkT4i = /\.lb-head,\.lb-row\{display:grid;grid-template-columns:\s*2\.4rem\s+2\.2rem\s+1fr\s+4rem\s+3\.2rem\s+3\.2rem\s+4rem\s+4rem\s*;/.test(leaderboardSliceT4);
+  check("S25a-T4i: base leaderboard grid — EXACTLY 8 tracks (pos, mv, name, thru, r1, r2, total, to-par) — the mv column can't be silently dropped or an extra track silently added",
+    baseGridOkT4i,
+    "slice=" + JSON.stringify(leaderboardSliceT4.slice(0, 160)));
+
+  const narrowMqAnchorT4 = idxT4.indexOf("@media (max-width:560px)");
+  const narrowMqSliceT4 = narrowMqAnchorT4 >= 0 ? idxT4.slice(narrowMqAnchorT4, narrowMqAnchorT4 + 600) : "";
+  const narrowGridOkT4j = /\.lb-head,\.lb-row\{grid-template-columns:\s*1\.9rem\s+2rem\s+1fr\s+3\.4rem\s+4rem\s*;/.test(narrowMqSliceT4);
+  check("S25a-T4j: narrow (≤560px) leaderboard grid — EXACTLY 5 tracks (pos, mv, name, thru, to-par-or-total) — the mv column can't be silently dropped or an extra track silently added",
+    narrowGridOkT4j,
+    "slice=" + JSON.stringify(narrowMqSliceT4.slice(0, 260)));
+
+  // S25a-T4k (fix round 1, Imp-3): head/row column PARITY unguarded —
+  // deleting the aria-hidden mv head cell from the static .lb-head markup
+  // passed the full suite untouched (the grid checks above only assert the
+  // CSS track COUNT, not that the actual rendered markup fills every
+  // track). Layout-free: element childElementCount, not layout geometry.
+  const domT4k = makeDom("");
+  await until(() => domT4k.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const headChildrenT4k = domT4k.window.document.querySelector(".lb-head")?.children.length ?? null;
+  const rowChildrenT4k = domT4k.window.document.querySelector("#lbBody .lb-row")?.children.length ?? null;
+  domT4k.window.close();
+  check("S25a-T4k: lb-head/lb-row column parity — head and a rendered row carry the SAME number of grid children (deleting the mv head cell must not pass silently)",
+    !!headChildrenT4k && headChildrenT4k === rowChildrenT4k,
+    "head=" + headChildrenT4k + " row=" + rowChildrenT4k);
+
+  // S25a-T4m (final fix wave, F1 — RULED: suppression suppresses movement):
+  // every T4 check above hand-primes STATE.prevBoard against the DEFAULT
+  // (non-suppressed) course fixture — none of them exercise parsSuppressed
+  // at all. courseMap()===null already forces Pos to the dash (X34/X37); the
+  // ▲/▼ rank-delta arrows and the "since"/"paused" footer must be suppressed
+  // right alongside it, not keep showing a diff the Pos column itself can't
+  // honestly back. Reuses T4e's exact fresh-basis precondition (hand-primed
+  // STATE.prevBoard, same year, reversed live order, well under the 10-min
+  // cap) — the ONE thing T4e proves DOES render real up/down arrows when NOT
+  // suppressed — plus X34/X37's blank-hole-7 course-fixture idiom to force
+  // parsSuppressed=true. Must FAIL if the parsSuppressed gate on mv/basis is
+  // removed from renderLeaderboard.
+  const courseBlank7T4m = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l).join("\n");
+  const domT4m = makeDom("", withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7T4m }),
+  }));
+  await until(() => domT4m.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearT4m = domT4m.window.eval("STATE.year");
+  const liveOrderT4m = [...domT4m.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
+  domT4m.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4m].reverse(), year: yearT4m, at: Date.now() }) + "; renderLeaderboard();");
+  const mvCellsT4m = [...domT4m.window.document.querySelectorAll("#lbBody .lb-mv")];
+  const allDashT4m = mvCellsT4m.length > 0 && mvCellsT4m.every(el => el.textContent.trim() === "—");
+  const noUpDownT4m = mvCellsT4m.every(el => !el.classList.contains("up") && !el.classList.contains("down"));
+  const basisT4m = domT4m.window.document.querySelector("#lbMvBasis")?.textContent ?? "";
+  domT4m.window.close();
+  check("S25a-T4m (final fix wave, F1, RULED): par-suppressed board — a fresh, same-year, hand-primed STATE.prevBoard (T4e's exact precondition, which DOES render real arrows when NOT suppressed) still renders every .lb-mv as the plain dash (no up/down class) and #lbMvBasis stays empty (neither 'since' nor 'paused') — suppression suppresses movement",
+    mvCellsT4m.length > 0 && allDashT4m && noUpDownT4m && basisT4m === "",
+    "cells=" + mvCellsT4m.length + " allDash=" + allDashT4m + " noUpDown=" + noUpDownT4m + " basis=" + JSON.stringify(basisT4m));
+
+  // S25a-T4l (final fix wave, F2b — paint()-capture seam): every T4 check
+  // above primes STATE.prevBoard BY HAND — none of them drive the REAL
+  // paint()/load() capture path, so dropping `year:` (or the whole capture
+  // line) from paint() would kill B-MV in production while this whole suite
+  // stayed green. Drives the page's actual load() entry point (the SAME
+  // top-level `function load(){}` X26 already established becomes a window
+  // property in a classic script, and is the exact path the 60s auto-refresh
+  // timer uses) TWICE: the dom's own automatic initial load() (first paint,
+  // captures STATE.prevBoard from a 3-team custom totals fixture) then a
+  // second explicit `window.load()` after flipping a mutable phase flag the
+  // fetch stub reads live (a "dyn fixture override" — same withOverride
+  // wrapper every other variant dom uses, but the returned Response's text()
+  // depends on a variable this test mutates BETWEEN the two load() calls) so
+  // Duck and Tex swap 1st/last. Asserts real up/down arrows render on the
+  // SECOND paint, and that STATE.prevBoard — inspected AFTER that same
+  // second paint — holds {order, year, at} matching what that render
+  // actually produced. Fails if paint() drops `year:` (prevBoard.year !==
+  // STATE.year) or drops the whole capture line entirely (prevBoard.order
+  // would stay stale at phase-1's order instead of matching the live DOM).
+  let phaseT4l = 1;
+  const scoresHeaderT4l = FIXTURES.scores.split(/\r\n|\n/)[0];
+  const totalsRowT4l = (team, r1, r2) => [2026, team, "", ...Array(18).fill(""), r1, r2].join(",");
+  const scoresPhase1T4l = scoresHeaderT4l + "\n"
+    + totalsRowT4l("Duck", 70, 70) + "\n"
+    + totalsRowT4l("Sully", 75, 75) + "\n"
+    + totalsRowT4l("Tex", 80, 80);
+  const scoresPhase2T4l = scoresHeaderT4l + "\n"
+    + totalsRowT4l("Duck", 80, 80) + "\n"
+    + totalsRowT4l("Sully", 75, 75) + "\n"
+    + totalsRowT4l("Tex", 70, 70);
+  const domT4l = makeDom("", withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => phaseT4l === 1 ? scoresPhase1T4l : scoresPhase2T4l }),
+  }));
+  await until(() => domT4l.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  phaseT4l = 2;
+  await domT4l.window.load(); // second REAL paint — the same load() path X26 exercises
+  const liveOrderT4l = [...domT4l.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
+  const rowForT4l = (k) => domT4l.window.document.querySelector('#lbBody .lb-row[data-player="' + k + '"]');
+  const duckMvT4l = rowForT4l("duck")?.querySelector(".lb-mv");
+  const texMvT4l = rowForT4l("tex")?.querySelector(".lb-mv");
+  const arrowsOkT4l = !!duckMvT4l && !!texMvT4l
+    && duckMvT4l.classList.contains("down") && texMvT4l.classList.contains("up");
+  const prevBoardT4l = domT4l.window.eval("STATE.prevBoard");
+  const yearNowT4l = domT4l.window.eval("STATE.year");
+  domT4l.window.close();
+  const shapeOkT4l = !!prevBoardT4l && Array.isArray(prevBoardT4l.order)
+    && JSON.stringify(prevBoardT4l.order) === JSON.stringify(liveOrderT4l)
+    && prevBoardT4l.year === yearNowT4l && typeof prevBoardT4l.at === "number";
+  check("S25a-T4l (final fix wave, F2b): end-to-end paint()-capture seam — driving the REAL load()/paint() path TWICE (X26's window.load() idiom) with team order changed between paints via a mutable fetch-stub phase flag (dyn fixture override) renders real up/down arrows on the second paint, AND leaves STATE.prevBoard — read AFTER that same second paint — holding {order,year,at} matching that paint's own rendered order/year, not stale from the first paint",
+    arrowsOkT4l && shapeOkT4l,
+    "duckClass=" + (duckMvT4l && duckMvT4l.className) + " texClass=" + (texMvT4l && texMvT4l.className) +
+      " liveOrder=" + JSON.stringify(liveOrderT4l) + " prevBoard=" + JSON.stringify(prevBoardT4l) + " year=" + yearNowT4l);
+}
+
+{ // T5: event-phase Home leaderboard top-slice (S25a B-HOME) — a literal
+  // prefix of the Board's own render. Fresh throwaway doms per scenario
+  // (same hazard T3/T4 hit — the shared `dom` is long closed by this
+  // point), phase forced via the dynInfo()/withOverride() idiom T3d..T3h
+  // established rather than raced against the real calendar.
+  const rowSig = (row) => ({
+    name: row.querySelector(".lb-name")?.textContent ?? null,
+    pos: row.querySelector(".lb-pos")?.textContent ?? null,
+    topar: row.querySelectorAll(".lb-tot")[1]?.textContent ?? null,
+  });
+  const inWindowInfoT5 = dynInfo(1);
+  const offPhaseInfoT5 = dynInfo(365);
+
+  // T5a: structural — #homeBoard sits right after #nowNext (phase-independent).
+  const domT5a = makeDom("");
+  await until(() => domT5a.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const dT5a = domT5a.window.document;
+  const nnT5a = dT5a.querySelector("#nowNext"), hbT5a = dT5a.querySelector("#homeBoard");
+  const adjacentT5a = !!nnT5a && !!hbT5a && nnT5a.nextElementSibling === hbT5a;
+  domT5a.window.close();
+  check("S25a-T5a: #homeBoard exists right after #nowNext",
+    adjacentT5a, "nn=" + !!nnT5a + " hb=" + !!hbT5a + " adjacent=" + adjacentT5a);
+
+  // T5b: event-phase parity — home slice rows equal the board's top rows,
+  // in order (name + pos text + to-par text). Fix round 1 (Imp-2): the
+  // comparison basis is explicitly the Board rendered ON the active season
+  // (STATE.year=activeSeason() forced before capturing board rows) — Home
+  // is now pinned there internally, so this is the correct apples-to-apples
+  // basis regardless of whatever year the fixture happens to default to.
+  const domT5b = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  domT5b.window.eval("STATE.year=activeSeason(); STATE.open=null; renderLeaderboard();");
+  const dT5b = domT5b.window.document;
+  const boardRowsT5b = [...dT5b.querySelectorAll("#lbBody .lb-row")].map(rowSig);
+  const homeRowsT5b = [...dT5b.querySelectorAll("#homeBoard .lb-row")].map(rowSig);
+  domT5b.window.close();
+  check("S25a-T5b: event-phase — home slice rows = board's top rows, in order (name + pos text + to-par text)",
+    homeRowsT5b.length > 0 && homeRowsT5b.length <= boardRowsT5b.length
+      && homeRowsT5b.every((r, i) => r.name === boardRowsT5b[i].name && r.pos === boardRowsT5b[i].pos && r.topar === boardRowsT5b[i].topar),
+    "home=" + JSON.stringify(homeRowsT5b) + " board=" + JSON.stringify(boardRowsT5b));
+
+  // T5c (the brief's SKELETON, completed): off-phase Home carries no board —
+  // a real phase-gating assertion, not the brief's `return true` stub.
+  const domT5c = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => offPhaseInfoT5 }),
+  }));
+  await until(() => domT5c.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  domT5c.window.eval("renderHomeBoard()");
+  const homeHtmlT5c = domT5c.window.document.querySelector("#homeBoard")?.innerHTML;
+  domT5c.window.close();
+  check("S25a-T5c: off-phase Home carries no board (real phase toggle via dynInfo(365), never the real calendar)",
+    homeHtmlT5c === "",
+    "homeBoard.innerHTML=" + JSON.stringify(homeHtmlT5c));
+
+  // T5d: non-interactive — <div> rows, no aria-expanded/aria-controls, a
+  // click never opens a card (home rows carry no click handler at all).
+  const domT5d = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5d.window.document.querySelectorAll("#homeBoard .lb-row").length > 0);
+  const homeRowElsT5d = [...domT5d.window.document.querySelectorAll("#homeBoard .lb-row")];
+  const allDivsT5d = homeRowElsT5d.length > 0 && homeRowElsT5d.every(r => r.tagName === "DIV");
+  const noAriaT5d = homeRowElsT5d.every(r => !r.hasAttribute("aria-expanded") && !r.hasAttribute("aria-controls"));
+  homeRowElsT5d[0]?.dispatchEvent(new domT5d.window.Event("click", { bubbles: true }));
+  const noCardT5d = !domT5d.window.document.querySelector("#homeBoard .card-drop");
+  domT5d.window.close();
+  check("S25a-T5d: Home rows are non-interactive — <div> not <button>, no aria-expanded/aria-controls, a click never opens a card",
+    allDivsT5d && noAriaT5d && noCardT5d,
+    "allDivs=" + allDivsT5d + " noAria=" + noAriaT5d + " noCardAfterClick=" + noCardT5d);
+
+  // T5e: suppressed-pars state (parsSuppressed) flows through ctx identically
+  // on Home — reuses X34/X37's blank-hole-7 course fixture idiom. Fix round 1
+  // (Imp-1) extends this to the mechanism half of the CSS fix: X37 already
+  // proves the Board's two .lb-tot spans hold an IDENTICAL plain-digit value
+  // when suppressed (so hiding either one loses no information); this check
+  // now proves the SAME honesty semantics on Home's rows, plus that the
+  // .home-board wrapper actually carries lb-suppressed (the class the fixed
+  // CSS selectors above key off — without it the hiding rule never engages).
+  const courseBlank7T5e = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+  const domT5e = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7T5e }),
+  }));
+  await until(() => domT5e.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  // fix round 1 (Imp-2): board rendered explicitly ON the active season —
+  // same reasoning as T5b.
+  domT5e.window.eval("STATE.year=activeSeason(); STATE.open=null; renderLeaderboard();");
+  const dT5e = domT5e.window.document;
+  const boardRowsT5e = [...dT5e.querySelectorAll("#lbBody .lb-row")].map(rowSig);
+  const homeRowsT5e = [...dT5e.querySelectorAll("#homeBoard .lb-row")].map(rowSig);
+  const homeWrapperT5e = dT5e.querySelector("#homeBoard .home-board");
+  const homeWrapperSuppressedT5e = !!homeWrapperT5e && homeWrapperT5e.classList.contains("lb-suppressed");
+  // exactly ONE total-ish semantic value per home row: the raw .lb-tot.lb-total
+  // span and the to-par-fallback .lb-tot span must hold the identical
+  // plain-digit gross total — same idiom X37 uses on the Board side.
+  const homeRowElsT5e = [...dT5e.querySelectorAll("#homeBoard .lb-row")];
+  const sameValueHomeT5e = homeRowElsT5e.length > 0 && homeRowElsT5e.every(r => {
+    const spans = r.querySelectorAll(".lb-tot");
+    const raw = spans[0]?.textContent.trim(), fallback = spans[1]?.textContent.trim();
+    return raw !== undefined && raw === fallback && /^\d+$/.test(fallback || "");
+  });
+  domT5e.window.close();
+  check("S25a-T5e: suppressed-pars state flows through ctx identically on Home — dash positions + gross-total fallback match the Board row for row; .home-board wrapper carries lb-suppressed; each home row's raw-total and to-par-fallback spans hold the IDENTICAL plain-digit value (fix round 1, Imp-1 — same honesty semantics X37 asserts on the Board)",
+    homeRowsT5e.length > 0 && homeRowsT5e.every(r => r.pos === "—")
+      && homeRowsT5e.every((r, i) => r.name === boardRowsT5e[i].name && r.pos === boardRowsT5e[i].pos && r.topar === boardRowsT5e[i].topar)
+      && homeWrapperSuppressedT5e && sameValueHomeT5e,
+    "home=" + JSON.stringify(homeRowsT5e) + " board=" + JSON.stringify(boardRowsT5e)
+      + " wrapperSuppressed=" + homeWrapperSuppressedT5e + " sameValueHome=" + sameValueHomeT5e);
+
+  // T5f: ties at the cut include every tied row (slice may exceed 5). 7
+  // custom teams, 4 clean ranks then a 3-way tie for 5th — the brief's cut
+  // algorithm must keep all three tied rows, not clip to 5.
+  const tieTeamsT5f = [["Alp", 140], ["Bly", 145], ["Cor", 150], ["Dex", 155],
+    ["Efn", 160], ["Fen", 160], ["Gan", 160]];
+  const scoresHeaderT5f = FIXTURES.scores.split(/\r\n|\n/)[0];
+  const totalsRowT5f = (team, r1, r2) => [2026, team, "", ...Array(18).fill(""), r1, r2].join(",");
+  const scoresT5f = scoresHeaderT5f + "\n"
+    + tieTeamsT5f.map(([t, tot]) => totalsRowT5f(t, Math.round(tot / 2), tot - Math.round(tot / 2))).join("\n");
+  const fieldHeaderT5f = FIXTURES.field.split(/\r\n|\n/)[0];
+  const fieldT5f = fieldHeaderT5f + "\n"
+    + tieTeamsT5f.map(([t]) => `2026,${t},${t},2019,8,In,TRUE,,`).join("\n");
+  const domT5f = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresT5f }),
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldT5f }),
+  }));
+  await until(() => domT5f.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  // fix round 1 (Imp-2): board rendered explicitly ON the active season —
+  // same reasoning as T5b.
+  domT5f.window.eval("STATE.year=activeSeason(); STATE.open=null; renderLeaderboard();");
+  const dT5f = domT5f.window.document;
+  const boardNamesT5f = [...dT5f.querySelectorAll("#lbBody .lb-row .lb-name")].map(e => e.textContent);
+  const homeNamesT5f = [...dT5f.querySelectorAll("#homeBoard .lb-row .lb-name")].map(e => e.textContent);
+  domT5f.window.close();
+  check("S25a-T5f: ties at the cut include every tied row — a 3-way tie for 5th keeps the slice at 7, not clipped to 5",
+    boardNamesT5f.length === 7 && homeNamesT5f.length === 7
+      && homeNamesT5f.every((n, i) => n === boardNamesT5f[i]),
+    "boardCount=" + boardNamesT5f.length + " homeCount=" + homeNamesT5f.length
+      + " board=" + JSON.stringify(boardNamesT5f) + " home=" + JSON.stringify(homeNamesT5f));
+
+  // T5g: the "Full leaderboard" link — exact copy + #board href.
+  const domT5g = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5g.window.document.querySelectorAll("#homeBoard .lb-row").length > 0);
+  const linkT5g = domT5g.window.document.querySelector("#homeBoard .home-board-link");
+  const linkOkT5g = !!linkT5g && linkT5g.getAttribute("href") === "#board"
+    && linkT5g.textContent.trim() === "Full leaderboard →";
+  domT5g.window.close();
+  check("S25a-T5g: 'Full leaderboard →' link present with href=#board, exact copy",
+    linkOkT5g,
+    "href=" + (linkT5g && linkT5g.getAttribute("href")) + " text=" + JSON.stringify(linkT5g && linkT5g.textContent));
+
+  // T5h: empty players (zero score rows) → Home carries no board either,
+  // same honest-empty rule as the Board's own #lbBody. No positive DOM
+  // marker to poll for (zero rows is the expected steady state), so settle
+  // instead of until — same idiom as the pre-existing B2 empty-scores check.
+  const emptyScoresT5h = FIXTURES.scores.split(/\r\n|\n/)[0] + "\r\n";
+  const domT5h = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => emptyScoresT5h }),
+  }));
+  await settle();
+  const homeHtmlT5h = domT5h.window.document.querySelector("#homeBoard")?.innerHTML;
+  domT5h.window.close();
+  check("S25a-T5h: empty players (no cards posted) → #homeBoard empty even in event phase",
+    homeHtmlT5h === "",
+    "homeBoard.innerHTML=" + JSON.stringify(homeHtmlT5h));
+
+  // T5i: no second timestamp — the slice inherits the §24 strip's stamp
+  // above it; #homeBoard itself must never render its own sync/stamp text.
+  const domT5i = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5i.window.document.querySelectorAll("#homeBoard .lb-row").length > 0);
+  const homeHtmlT5i = domT5i.window.document.querySelector("#homeBoard").innerHTML;
+  domT5i.window.close();
+  check("S25a-T5i: no second timestamp inside #homeBoard (the §24 strip's stamp above it is the only one)",
+    !/class="sync"/i.test(homeHtmlT5i) && !/Checked |Updated |Couldn't refresh|Saved copy/.test(homeHtmlT5i),
+    "homeBoard.innerHTML=" + JSON.stringify(homeHtmlT5i.slice(0, 200)));
+
+  // T5j (fix round 1, Imp-3): T5b/T5e only compare three TEXT fields (name,
+  // pos, to-par) — a Home-only divergence in the to-par TIER CLASS, the
+  // `lead` class, or the " WD" marker would change none of those three
+  // strings and pass both checks silently. Per-index STRUCTURAL comparison
+  // instead: home row innerHTML with the .lb-mv span stripped (Home always
+  // passes mv:null while the Board may show a real arrow — that's an
+  // intentional, already-asserted difference, not a defect) must equal the
+  // board row's identically-stripped innerHTML, AND the row wrapper's own
+  // className must match (the interactive button-vs-div TAG itself is the
+  // only allowed difference — asserted separately by T5d). Reuses V6's
+  // exact WD-fixture idiom so the WD-marker path is actually exercised
+  // (default fixture never has a wd team); the default fixture's own
+  // tied-for-1st rows already exercise `lead`, and its spread of rel
+  // values already exercises all three to-par tier classes.
+  const fieldTexWdT5j = FIXTURES.field.replace("2026,Tex,Tex,2019,18,In,TRUE,", "2026,Tex,Tex,2019,18,wd,TRUE,");
+  const domT5j = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldTexWdT5j }),
+  }));
+  await until(() => domT5j.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  domT5j.window.eval("STATE.year=activeSeason(); STATE.open=null; renderLeaderboard();");
+  const dT5j = domT5j.window.document;
+  const stripMvT5j = (el) => {
+    const clone = el.cloneNode(true);
+    const mv = clone.querySelector(".lb-mv");
+    if (mv) mv.remove();
+    return clone.innerHTML;
+  };
+  const boardRowElsT5j = [...dT5j.querySelectorAll("#lbBody .lb-row")];
+  const homeRowElsT5j = [...dT5j.querySelectorAll("#homeBoard .lb-row")];
+  const innerMatchT5j = homeRowElsT5j.length > 0
+    && homeRowElsT5j.every((r, i) => stripMvT5j(r) === stripMvT5j(boardRowElsT5j[i]));
+  const classMatchT5j = homeRowElsT5j.every((r, i) => r.className === boardRowElsT5j[i].className);
+  const wdExercisedT5j = homeRowElsT5j.some(r => /\bWD\b/.test(r.textContent));
+  const tierExercisedT5j = boardRowElsT5j.some(r => /lb-under|lb-even|lb-over/.test(r.innerHTML));
+  const leadExercisedT5j = boardRowElsT5j.some(r => r.className.includes("lead"));
+  domT5j.window.close();
+  check("S25a-T5j: per-index STRUCTURAL parity (fix round 1, Imp-3) — home row innerHTML with .lb-mv stripped equals the board row's (WD marker + to-par tier class both included, not just name/pos/to-par text), and the row wrapper's own className matches (lead class included)",
+    innerMatchT5j && classMatchT5j && wdExercisedT5j && tierExercisedT5j && leadExercisedT5j,
+    "innerMatch=" + innerMatchT5j + " classMatch=" + classMatchT5j + " wdExercised=" + wdExercisedT5j
+      + " tierExercised=" + tierExercisedT5j + " leadExercised=" + leadExercisedT5j
+      + " homeClasses=" + JSON.stringify(homeRowElsT5j.map(r => r.className))
+      + " boardClasses=" + JSON.stringify(boardRowElsT5j.map(r => r.className)));
+
+  // T5k (fix round 1, Imp-2, RULED): the year picker flipped to an archive
+  // year must NOT rewrite Home's hero out from under a live countdown —
+  // Home stays pinned to activeSeason() even while the Board itself now
+  // shows a different year's (different) roster. Reuses T4h's own
+  // otherYear/.year-btn idiom (the default fixture reliably carries a 2025
+  // archive row alongside 2026, same precondition T4h already depends on).
+  // Must FAIL if the activeSeason() pin in renderHomeBoard/wdKeySet is
+  // removed (Home would then follow STATE.year like the Board does).
+  const domT5k = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5k.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const dT5k = domT5k.window.document;
+  const activeSeasonT5k = domT5k.window.eval("activeSeason()");
+  const homeNamesBeforeT5k = [...dT5k.querySelectorAll("#homeBoard .lb-row .lb-name")].map(e => e.textContent);
+  const yearBtnsT5k = [...dT5k.querySelectorAll("#years .year-btn")];
+  const otherBtnT5k = yearBtnsT5k.find(b => b.dataset.year !== activeSeasonT5k);
+  let switchedToT5k = null, boardNamesAfterT5k = null, homeNamesAfterT5k = null;
+  if (otherBtnT5k) {
+    otherBtnT5k.click();
+    switchedToT5k = domT5k.window.eval("STATE.year");
+    boardNamesAfterT5k = [...dT5k.querySelectorAll("#lbBody .lb-row .lb-name")].map(e => e.textContent);
+    homeNamesAfterT5k = [...dT5k.querySelectorAll("#homeBoard .lb-row .lb-name")].map(e => e.textContent);
+  }
+  domT5k.window.close();
+  check("S25a-T5k: fix round 1 (Imp-2, RULED) — year picker flipped to an archive year: Home's slice stays pinned to the active season (unchanged names before/after), even though the Board itself now shows the archive year's different roster",
+    !!otherBtnT5k && switchedToT5k !== activeSeasonT5k
+      && homeNamesBeforeT5k.length > 0 && homeNamesAfterT5k !== null
+      && JSON.stringify(homeNamesAfterT5k) === JSON.stringify(homeNamesBeforeT5k)
+      && JSON.stringify(boardNamesAfterT5k) !== JSON.stringify(homeNamesBeforeT5k),
+    "activeSeason=" + activeSeasonT5k + " years=" + JSON.stringify(yearBtnsT5k.map(b => b.dataset.year))
+      + " switchedTo=" + switchedToT5k
+      + " homeBefore=" + JSON.stringify(homeNamesBeforeT5k)
+      + " homeAfter=" + JSON.stringify(homeNamesAfterT5k)
+      + " boardAfter=" + JSON.stringify(boardNamesAfterT5k));
+
+  // S25a-T5l (final fix wave, F2a — Home mv-cell alignment): T5j strips
+  // .lb-mv before comparing home/board innerHTML (by design — Home always
+  // passes ctx.mv=null while the Board may show a real arrow), which means
+  // a regression where lbRowHTML only builds the mv cell for the
+  // interactive path (e.g. `${interactive?mvHtml:""}`) would pass T5j/T5b/
+  // T5e untouched while silently misaligning Home's grid columns against
+  // the Board's own 8-track template (T4i/T4k's column-count contract).
+  // Asserted directly instead: a rendered Home row must CONTAIN a .lb-mv
+  // span, in its dash form (ctx.mv is always null on Home).
+  const domT5l = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5l.window.document.querySelectorAll("#homeBoard .lb-row").length > 0);
+  const homeRowT5l = domT5l.window.document.querySelector("#homeBoard .lb-row");
+  const mvSpanT5l = homeRowT5l?.querySelector(".lb-mv");
+  const dashOkT5l = !!mvSpanT5l && mvSpanT5l.textContent.trim() === "—";
+  domT5l.window.close();
+  check("S25a-T5l (final fix wave, F2a): Home row renders a .lb-mv span (dash form) — lbRowHTML must fill the mv cell on BOTH render paths so Home's grid stays column-aligned with the Board's (T4i/T4k contract), even though Home always passes ctx.mv=null",
+    dashOkT5l,
+    "hasSpan=" + !!mvSpanT5l + " text=" + JSON.stringify(mvSpanT5l && mvSpanT5l.textContent));
+}
+
+{ // T6: broadcast lower-third restyle of the §24 strip + announce banner
+  // (S25a B-LT). CSS-ONLY task — zero JS edits. Reuses T2's exact
+  // rule-parser idiom (strip comments, split each rule's selector list on
+  // commas, look up bodies by EXACT selector token) so a later duplicate
+  // or reverted rule fails closed instead of passing on an earlier stale
+  // match elsewhere in the file.
+  const idx = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const styleBlock = (idx.match(/<style>([\s\S]*?)<\/style>/) || [, ""])[1].replace(/\/\*[\s\S]*?\*\//g, "");
+  const cssRules = [...styleBlock.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map(([, sel, body]) => ({ selectors: sel.split(",").map(s => s.trim()).filter(Boolean), body }));
+  const rulesFor = (selector) => cssRules.filter(r => r.selectors.includes(selector)).map(r => r.body);
+  const letterSpacingEm = (body) => { const m = body.match(/letter-spacing:\s*([\d.]+)em/); return m ? parseFloat(m[1]) : null; };
+
+  // T6a: the strip container carries the 2px brass left rule, keyed to
+  // #nowNext:not(:empty) rather than bare #nowNext — paintHome's own
+  // nn.innerHTML="" off-event branch (untouched — no JS edited by this
+  // task) already leaves the container CSS-:empty, so the rule only paints
+  // while there's real content, with no JS class-toggle needed.
+  const nnBodies = rulesFor("#nowNext:not(:empty)");
+  const nnRuleOK = nnBodies.some(b => /border-left:\s*2px\s+solid\s+var\(--brass\)/.test(b));
+  check("S25a-T6a: strip container (#nowNext:not(:empty)) carries a 2px solid var(--brass) left rule",
+    nnRuleOK, "bodies=" + JSON.stringify(nnBodies));
+
+  // T6b: the strip's kicker (the Now:/Next: label, `.nn-row strong` in
+  // paintHome's existing template — untouched) is letterspaced (>=.2em)
+  // sage caps, the .eyebrow idiom; the row's own content stays bone
+  // (unchanged from §24 — this restyle must not regress that color).
+  const kickerBodies = rulesFor(".nn-row strong");
+  const kickerOK = kickerBodies.some(b => /color:\s*var\(--sage\)/.test(b)
+    && /text-transform:\s*uppercase/.test(b) && (letterSpacingEm(b) ?? 0) >= 0.2);
+  const rowBodies = rulesFor(".nn-row");
+  const rowBoneOK = rowBodies.some(b => /color:\s*var\(--bone\)/.test(b));
+  check("S25a-T6b: strip kicker (.nn-row strong) is letterspaced (>=.2em) sage caps, following the .eyebrow idiom; row content (.nn-row) stays bone, unregressed",
+    kickerOK && rowBoneOK, "kickerBodies=" + JSON.stringify(kickerBodies) + " rowBodies=" + JSON.stringify(rowBodies));
+
+  // T6c: the announce banner gets the same rule-family treatment — a 2px
+  // left rule — AND its §24 fix-round-1 contrast floor (comment on
+  // #announceBar: "#fff on brass was ~2.2:1; pine on brass is ~7.5:1") must
+  // not regress. The banner's OWN background is brass, so a brass rule
+  // would be invisible; var(--pine) is its already-established
+  // high-contrast partner (the same color #annDismiss already borders
+  // itself in), so the rule color differs from the strip's on purpose.
+  // Contrast is parsed LIVE from index.html's own --pine/--brass tokens
+  // (T1c's idiom), not a frozen literal, so a future token edit is caught
+  // here too.
+  const bannerBodies = rulesFor("#announceBar");
+  const bannerRuleOK = bannerBodies.some(b => /border-left:\s*2px\s+solid\s+var\(--pine\)/.test(b));
+  const lum = (hex) => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map(x => x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const ratio = (f, b) => { const [hi, lo] = [Math.max(lum(f), lum(b)), Math.min(lum(f), lum(b))];
+    return (hi + 0.05) / (lo + 0.05); };
+  const pineHexT6 = (idx.match(/--pine:\s*(#[0-9A-Fa-f]{6})/) || [])[1];
+  const brassHexT6 = (idx.match(/--brass:\s*(#[0-9A-Fa-f]{6})/) || [])[1];
+  const bannerRatio = pineHexT6 && brassHexT6 ? ratio(pineHexT6, brassHexT6) : 0;
+  check("S25a-T6c: announce banner (#announceBar) carries the same 2px solid left-rule family (in var(--pine), its own high-contrast partner) AND its pine-on-brass text contrast still holds the 4.5:1 floor, never regressed by this restyle",
+    bannerRuleOK && bannerRatio >= 4.5,
+    "ruleBodies=" + JSON.stringify(bannerBodies) + " pine=" + pineHexT6 + " brass=" + brassHexT6 + " ratio=" + bannerRatio.toFixed(3));
 }
 
 /* ---------------------------------------------------------------------

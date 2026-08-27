@@ -15,6 +15,9 @@
   :root{
     --pine:#0E2019; --pine-2:#132B21; --pine-3:#0A1712;
     --bone:#E9E3D3; --sage:#8A9B8C; --brass:#C8A24A; --brass-dim:#6F5A26; --rust:#B0705E;
+    /* §25a B-CONV — semantic score tokens (spec rev 2 table; contrast measured in suite) */
+    --score-under:#D08A76; --score-even:#C8A24A; --score-over:#E9E3D3;
+    --score-bogey:#8A9B8C; --score-blowup:#B0705E;
     --display:"Bodoni Moda", Didot, Georgia, serif;
     --ui:"Jost", Futura, "Helvetica Neue", Arial, sans-serif;
   }
@@ -31,6 +34,19 @@
        backdrop-filter:blur(8px);border-bottom:1px solid rgba(200,162,74,.25)}
   .nav-inner{max-width:1100px;margin:0 auto;padding:11px 24px;display:flex;align-items:center;gap:14px;position:relative}
   .nav-mark{width:19px;height:25px;color:var(--brass);flex:none}
+  /* S25a B-NAME: ceremonial masthead bar + Board masthead (canvas-normative) */
+  #mastBar{display:flex;align-items:center;gap:12px;justify-content:center;
+    padding:8px 24px;background:rgba(10,23,18,.6);border-bottom:1px solid rgba(200,162,74,.2)}
+  body[data-view="home"] #mastBar{display:none}
+  .mast-mark{width:15px;height:20px;color:var(--brass);flex:none}
+  .mast-name{font-family:var(--display);font-weight:700;font-size:.72rem;
+    letter-spacing:.3em;text-indent:.3em;color:var(--bone);white-space:nowrap}
+  .mast-ctx,.mast-chip{font-size:.6rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage)}
+  .mast-chip{margin-left:auto;color:var(--brass);border:1px solid rgba(200,162,74,.45);
+    padding:5px 12px;white-space:nowrap;align-self:center}
+  .mast-head{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+  .mast-rule{border-top:1px solid rgba(200,162,74,.45);padding-top:3px;margin:10px 0 6px}
+  .mast-rule::after{content:"";display:block;border-top:1px solid rgba(200,162,74,.2)}
   .nav-name{font-family:var(--display);font-weight:700;font-size:1.05rem;
             letter-spacing:.34em;margin-right:auto;padding-left:2px}
   .nav-links{display:flex;gap:19px;align-items:center;overflow-x:auto;scrollbar-width:none}
@@ -59,9 +75,16 @@
           font-variant-numeric:tabular-nums}
   .cd-lab{font-size:.56rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage);margin-top:7px}
   .cd-msg{font-family:var(--display);font-size:1.5rem;color:var(--brass);margin:30px 0 0}
-  /* §24 H-NOWNEXT strip — site tokens only, no new palette. */
+  /* §24 H-NOWNEXT strip — site tokens only, no new palette.
+     §25a B-LT: broadcast lower-third treatment. Keyed to :not(:empty) so
+     the rule only paints while paintHome (untouched JS) has actually set
+     content — off-event it still sets nn.innerHTML="", which already
+     satisfies CSS :empty on its own, no JS change needed to gate this. */
+  #nowNext:not(:empty){border-left:2px solid var(--brass);padding:2px 0 2px 16px;
+    margin:18px auto 0;max-width:36ch;text-align:left}
   .nn-row{font-size:.92rem;color:var(--bone);margin:8px 0 0}
-  .nn-row strong{color:var(--brass);font-weight:600}
+  .nn-row strong{display:block;color:var(--sage);font-weight:400;font-size:.63rem;
+    letter-spacing:.22em;text-transform:uppercase;margin:0 0 4px}
   .nn-chips{margin:14px 0 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
   .nn-chips a{color:var(--brass);text-decoration:none;font-size:.62rem;letter-spacing:.2em;
     text-transform:uppercase;border:1px solid rgba(200,162,74,.45);padding:6px 14px}
@@ -89,7 +112,7 @@
   .band .lede{color:var(--sage);max-width:52ch;margin:0 0 30px}
   .sync{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--brass-dim);
         margin:14px 0 0;min-height:1em}
-  #homeStatus a,#nyBody a{color:var(--brass);text-decoration:none;border-bottom:1px solid var(--brass-dim)}
+  #homeStatus a,#nyBody a,.home-board-link{color:var(--brass);text-decoration:none;border-bottom:1px solid var(--brass-dim)}
 
   .health-strip{position:fixed;right:10px;bottom:10px;z-index:999;
     max-width:min(92vw,420px);max-height:40vh;overflow:auto;
@@ -99,7 +122,14 @@
   .health-strip summary{cursor:pointer;color:var(--rust)}
   .health-strip div{padding:4px 0 0}
 
+  /* §25a B-LT: same lower-third rule family as #nowNext, but in var(--pine) —
+     the banner's OWN background is brass, so a brass rule would be
+     invisible; pine is the banner's already-established high-contrast
+     partner (the same color #annDismiss already borders itself in below),
+     so this echoes the family language without touching the pine-on-brass
+     text pairing (§24's measured ~7:1 contrast fix, preserved verbatim). */
   #announceBar{position:relative;background:var(--brass,#8a6d3b);color:var(--pine);
+    border-left:2px solid var(--pine);
     padding:10px 14px;font-size:.95rem;display:flex;gap:12px;align-items:baseline}
   /* review round 1: was position:sticky;top:0;z-index:60 — that painted over
      .nav (also sticky top:0) once the page scrolled, hiding the nav whenever
@@ -118,7 +148,10 @@
   #announceBar #annDismiss:hover,#announceBar #annDismiss:focus-visible{background:rgba(14,32,25,.12)}
   #annUpdates{margin:26px 0 0}
   #annUpdates .ann-row{display:flex;gap:10px;padding:4px 0;font-size:.9rem}
-  #annUpdates .ann-when{opacity:.6;white-space:nowrap}
+  /* §25a B-LT: kicker treatment (letterspaced sage caps) — the same
+     label-then-content reading order as the strip's .nn-row strong. */
+  #annUpdates .ann-when{color:var(--sage);font-size:.63rem;letter-spacing:.2em;
+    text-transform:uppercase;white-space:nowrap}
   .subhead{font-family:var(--display);font-size:1.4rem;margin:44px 0 16px;font-weight:400}
 
   .years{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 26px}
@@ -129,7 +162,7 @@
   .year-btn[aria-pressed="true"]{color:var(--pine);background:var(--brass);border-color:var(--brass)}
 
   /* leaderboard */
-  .lb-head,.lb-row{display:grid;grid-template-columns:2.4rem 1fr 4rem 3.2rem 3.2rem 4rem 4rem;
+  .lb-head,.lb-row{display:grid;grid-template-columns:2.4rem 2.2rem 1fr 4rem 3.2rem 3.2rem 4rem 4rem;
                    gap:10px;align-items:baseline;padding:13px 6px;text-align:left}
   .lb-head{font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);
            border-bottom:1px solid var(--brass-dim);padding-bottom:9px}
@@ -145,7 +178,24 @@
   .lb-thru{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
   .lb-num{text-align:right;font-variant-numeric:tabular-nums;font-size:.95rem;color:var(--sage)}
   .lb-tot{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
+  /* §25a B-MV: movement arrows column. Same-width dash renders in every row
+     so the grid stays aligned whether or not there's real movement to show. */
+  .lb-mv{font-size:.7rem;color:var(--sage);display:flex;align-items:center;gap:3px}
+  .lb-mv.up{color:var(--brass)}
+  .lb-mv.down{color:var(--sage)}
+  /* §25a B-CONV (ruled scope addition): Board to-par cell tier coloring —
+     reuses the same semantic tokens the scorecard glyphs already use. */
+  .lb-under{color:var(--score-under)}
+  .lb-even{color:var(--score-even)}
+  .lb-over{color:var(--score-over)}
   .lb-empty,.sched-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
+  /* §25a B-HOME: event-phase top slice on Home — a literal prefix of the
+     Board's own render, sized down. .home-board .lb-row inherits every
+     .lb-row rule above (same grid, same classes) via the shared class. */
+  .home-board{margin-top:18px}
+  .home-board .lb-row{padding:9px 0;font-size:.9em;cursor:default}
+  .home-board-link{display:inline-block;margin-top:12px;font-size:.68rem;
+    letter-spacing:.14em;text-transform:uppercase}
   /* SC-PAR-LABEL (§20 amendment 2): courseMap() null means the second
      .lb-tot column is honestly relabeled "Total" (renderLeaderboard) — at
      widths where the SEPARATE .lb-total column also shows, that would put
@@ -153,8 +203,14 @@
      redundant, not dishonest, but noisy); hide the separate one so exactly
      ONE correctly-labeled Total column shows, at every width. The pre-existing
      ≤560px rule already hides .lb-total unconditionally — this rule covers
-     the WIDE-width case that one doesn't reach. */
-  #leaderboard.lb-suppressed .lb-total{display:none}
+     the WIDE-width case that one doesn't reach.
+     Fix round 1 (Imp-1): this rule was scoped to the #leaderboard id only,
+     so Home's suppressed slice (.home-board.lb-suppressed, same honest-
+     fallback semantics via the shared lbRowHTML) showed the gross total
+     TWICE — the raw .lb-total span never hid on Home. Added as a second
+     selector on the SAME rule (never a separate .home-board-only rule) so
+     the two surfaces can't drift apart again. */
+  #leaderboard.lb-suppressed .lb-total,.home-board.lb-suppressed .lb-total{display:none}
   /* Whole-branch review Imp-1: hiding one item out of the explicit 7-track
      grid (line ~104) does NOT redefine the template — the remaining To-par
      column auto-flows into track 6 and the 7th track (4rem + a 10px gutter)
@@ -166,10 +222,16 @@
      ≤560px breakpoint: an unscoped id-selector rule would out-specify (id
      beats class) the ≤560px 4-track rule and regress phones, since
      .lb-suppressed is a data-state class independent of viewport width — a
-     narrow suppressed board must keep using the narrow 4-track template. */
+     narrow suppressed board must keep using the narrow 4-track template.
+     Fix round 1 (Imp-1): same dangling-track bug applied to Home's slice
+     (.home-board carries the identical .lb-row grid via the shared class,
+     and its own 3-class .home-board.lb-suppressed .lb-row selector would
+     out-specify the ≤560px narrow rule exactly like the id-selector case
+     above if left unscoped) — .home-board.lb-suppressed .lb-row joins the
+     SAME min-width:561px-scoped rule rather than a duplicate one. */
   @media (min-width:561px){
-    #leaderboard.lb-suppressed .lb-head,#leaderboard.lb-suppressed .lb-row{
-      grid-template-columns:2.4rem 1fr 4rem 3.2rem 3.2rem 4rem}
+    #leaderboard.lb-suppressed .lb-head,#leaderboard.lb-suppressed .lb-row,.home-board.lb-suppressed .lb-row{
+      grid-template-columns:2.4rem 2.2rem 1fr 4rem 3.2rem 3.2rem 4rem}
   }
 
   /* per-player card */
@@ -184,11 +246,73 @@
   .hcell .hn{font-size:.5rem;letter-spacing:.08em;color:var(--sage);display:block}
   .hcell .hp{font-size:.5rem;color:var(--brass-dim);display:block}
   .hcell .hs{font-family:var(--display);font-size:1rem;color:var(--bone);
-             font-variant-numeric:tabular-nums;display:block;margin-top:2px}
+             font-variant-numeric:tabular-nums;margin-top:2px;
+             display:inline-flex;align-items:center;justify-content:center;
+             min-width:1.6em;min-height:1.6em}   /* box shape UNCONDITIONAL — fix round 1, FIX4:
+             every hole cell (tiered or not) gets the same box, so the ring border below
+             (tier-conditional only) never shifts the column's alignment */
   .hcell.sum{border-color:var(--brass-dim);background:rgba(200,162,74,.07)}
-  .hcell.under .hs{color:var(--brass);font-weight:700}
-  .hcell.bogey .hs{color:var(--sage)}
-  .hcell.blowup .hs{color:var(--rust)}
+  /* §25a B-CONV: five-token golf convention (K3/L2 class vocab unchanged — colors only) */
+  .hcell.under .hs{color:var(--score-under);font-weight:700}
+  .hcell.bogey .hs{color:var(--score-bogey)}
+  .hcell.blowup .hs{color:var(--score-over)}   /* rust TEXT fails 4.5 floor — ring carries the tier */
+  .sg-t td.under{color:var(--score-under);font-weight:700}
+  .sg-t td.bogey{color:var(--score-bogey)}
+  .sg-t td.blowup{color:var(--score-over)}
+  .sc-tile-v.under{color:var(--score-under)}
+  .sc-cell.under .sc-score{color:var(--score-under)}
+  .sc-cell.bogey .sc-score{color:var(--score-bogey)}
+  .sc-cell.blowup .sc-score{color:var(--score-over)}
+  /* §25a B-GLYPH: broadcast scorecard rings — pure CSS on existing tier classes */
+  .sg-t td.under,.sg-t td.bogey,.sg-t td.blowup{position:relative}
+  .sg-t td.under::after,.sg-t td.bogey::after,.sg-t td.blowup::after{
+    content:"";position:absolute;inset:15%;pointer-events:none;border:1px solid var(--score-under)}
+  /* render-close finding (S11, watch-list): a percentage inset on a
+     non-square <td> (measured ~35.2x31.4 border-box) renders an ELLIPSE
+     (~21.9x19.3, aspect ~1.14), not a circle — border-radius:50% only
+     rounds an ellipse's corners, it can't correct the aspect ratio. A
+     fixed-size box in em units (relative to the cell's own .85rem
+     font-size), centered independent of the td's own W/H, gives a true
+     circle regardless of viewport/table-layout width. bogey/blowup stay on
+     the shared inset:15% rectangle above — only the ring (under/eagle)
+     needs to be circular. */
+  .sg-t td.under::after{border-radius:50%;
+    inset:auto;top:50%;left:50%;width:1.6em;height:1.6em;margin:0;
+    transform:translate(-50%,-50%)}
+  .sg-t td.under.eagle::after{box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-under)}
+  .sg-t td.bogey::after{border-color:var(--score-bogey)}
+  .sg-t td.blowup::after{border-color:var(--score-blowup);
+    box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-blowup)}
+  /* fix round 1, FIX4: this block is now border/border-radius/box-shadow
+     ONLY — box shape (display/min-width/min-height/align/justify) moved to
+     the UNCONDITIONAL .hcell .hs / .sc-cell .sc-score rules above, so a
+     par/blank cell's box never differs in shape from a tiered one, only in
+     whether it grows a ring border. */
+  .hcell.under .hs,.hcell.bogey .hs,.hcell.blowup .hs,
+  .sc-cell.under .sc-score,.sc-cell.bogey .sc-score,.sc-cell.blowup .sc-score{
+    border:1px solid var(--score-under)}
+  .hcell.under .hs,.sc-cell.under .sc-score{border-radius:50%}
+  .hcell.under.eagle .hs,.sc-cell.under.eagle .sc-score{
+    box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-under)}
+  .hcell.bogey .hs,.sc-cell.bogey .sc-score{border-color:var(--score-bogey)}
+  .hcell.blowup .hs,.sc-cell.blowup .sc-score{border-color:var(--score-blowup);
+    box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-blowup)}
+  .sg-legend{display:flex;flex-wrap:wrap;gap:22px;align-items:center;margin-top:14px;
+    padding-top:12px;border-top:1px solid rgba(200,162,74,.2)}
+  /* render-close finding (S11): .sg-legend's own display:flex is the SAME
+     specificity as the UA [hidden]{display:none} default, and — being an
+     author rule declared after it in the cascade — silently wins. Every
+     sibling toggle in this exact feature (.sg-controls[hidden] below,
+     .card-drop[hidden] above) already carries this companion override; this
+     one was missed, so renderScoreGrid()'s legend.hidden=true (the
+     par-suppressed and no-rounds-yet branches) had zero visual effect in a
+     real browser even though it read correctly true in the DOM (jsdom-based
+     smoke suite has no cascade to catch this — real-browser-only defect). */
+  .sg-legend[hidden]{display:none}
+  .sg-legend .lg{display:flex;align-items:center;gap:9px;font-size:.62rem;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--sage)}
+  .sg-legend .gl{display:inline-flex;width:26px;height:26px;align-items:center;
+    justify-content:center;font-family:var(--display)}
 
   /* v2.3 scorecard grid (G-GRID/G-SCROLL): page never scrolls sideways —
      .sg-scroll owns the overflow. Headers are the tap targets (≥44px). */
@@ -204,9 +328,6 @@
   .sg-t tbody th.sg-team{font-weight:300}
   .sg-t tr.sg-par td,.sg-t tr.sg-par th{font-size:.8rem;color:var(--bone);font-weight:400;border-color:transparent;padding:6px 3px}
   .sg-t tr.sg-yds td,.sg-t tr.sg-yds th{font-size:.7rem;color:var(--sage);border-color:transparent;padding:2px 3px 8px}
-  .sg-t td.under{color:var(--brass);font-weight:700}
-  .sg-t td.bogey{color:var(--sage)}
-  .sg-t td.blowup{color:var(--rust)}
   .sg-t th[data-hole="10"],.sg-t td[data-hole="10"]{border-left:2px solid var(--brass-dim)}
   .sg-t tr.sg-par td[data-hole="10"],.sg-t tr.sg-yds td[data-hole="10"]{border-left:2px solid var(--brass-dim)}
   .sg-controls{display:flex;gap:8px;margin-bottom:10px}
@@ -423,7 +544,11 @@
     .band{padding:54px 0}
     .slot{grid-template-columns:1fr;gap:2px;padding:16px 0}
     .slot-where{text-align:left}
-    .lb-head,.lb-row{grid-template-columns:1.9rem 1fr 3.4rem 4rem;gap:8px}
+    /* §25a B-MV: mv column added narrow too (2rem, second track) — if this
+       overflows at the narrowest widths, Task 7's 390w measurement is the
+       place to drop it back out (e.g. a ≤390px override hiding .lb-mv and
+       re-collapsing this template to the 4 surviving tracks). */
+    .lb-head,.lb-row{grid-template-columns:1.9rem 2rem 1fr 3.4rem 4rem;gap:8px}
     .lb-r1,.lb-r2,.lb-total{display:none}
     .mn-head,.mn-row{grid-template-columns:1fr 4rem 5rem}
     .mn-won{display:none}
@@ -441,6 +566,12 @@
     .countdown{gap:16px}
     .cd-unit{min-width:52px}
     .photo-frame{height:420px}
+    /* Final fix wave (F3, ratified S11 ruling): #mastCtx wraps into 3 ragged
+       lines at 390w — a "finished" failure to a cold viewer. The bar keeps
+       crest + name only below this width; the Board's own #mastChip (a
+       DIFFERENT element, .mast-chip — untouched here) already carries the
+       same context on the Board's own h2, so nothing is lost. */
+    .mast-ctx{display:none}
   }
 
   /* §18 scorer shell — Task 1 (picker/confirm) + Task 3 (card/pad/round chip). */
@@ -521,7 +652,6 @@
   .sc-tile-k{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--sage)}
   .sc-tile-v{font-family:var(--display);font-size:21px;line-height:1.1;margin-top:2px;
     font-variant-numeric:tabular-nums;color:var(--bone)}
-  .sc-tile-v.under{color:var(--brass)}
   .sc-tile-par{border-color:var(--brass-dim)}
   .sc-tally-lab{font-size:13px;letter-spacing:.02em;text-transform:none;margin-left:4px;color:var(--sage)}
   /* Rev-3 UI wave, task 1 (SC-UI-V/SC-SKIN) — vertical Out|In card,
@@ -562,14 +692,19 @@
   @media (max-width:400px){
     .sc-hole-yds{display:none}
   }
-  .sc-score{font-family:var(--display);font-size:22px;font-variant-numeric:tabular-nums;min-width:36px;
+  .sc-score{font-family:var(--display);font-size:22px;font-variant-numeric:tabular-nums;
     text-align:right;color:var(--bone)}
+  /* fix round 1, FIX4: box shape UNCONDITIONAL on .sc-cell .sc-score (every
+     score — tiered, par, or blank "–" — gets the identical box; only the
+     ring border below stays tier-conditional). min-width:1.6em at 22px is
+     within 1px of the old flat 36px min-width it replaces, so untiered
+     cells keep the same footprint in the Out|In row (D1-hardened flex:1 on
+     .sc-hole-par already absorbs any residual slack either way). */
+  .sc-cell .sc-score{display:inline-flex;align-items:center;justify-content:center;
+    min-width:1.6em;min-height:1.6em}
   .sc-score .sc-dash{color:var(--sage);font-size:18px}
   .sc-glyph{font-size:13px;line-height:1;font-style:normal;color:var(--sage)}
   .sc-mark{flex:none;width:16px;font-size:13px;line-height:1;font-style:normal;text-align:center;color:var(--sage)}
-  .sc-cell.under .sc-score{color:var(--brass)}
-  .sc-cell.bogey .sc-score{color:var(--sage)}
-  .sc-cell.blowup .sc-score{color:var(--rust)}
   /* SC-HONEST/SC-NOCLOBBER truth-state marks (rev 2's four states + conflict
      + rejected, rev 3's dress only): ▮ on-sheet · ⇡ queued/sending ·
      ▲ conflict · ! rejected — the class combines with the scoreClass ones
@@ -627,9 +762,14 @@
      transcribed from tools/scorer-rev3-prototype.html's .veil/.sheet/
      .sheet-head/.replace-line/.pad/.key/.numrow rules into .sc-`-prefixed
      site equivalents (same token-reuse discipline as task 1: no --under/
-     --line/second :root — eagle/birdie/parkey reuse the site's existing
-     --brass "under-par" signal; bogey reuses --sage, matching the score-
-     cell convention task 1 already established, NOT the prototype's own
+     --line/second :root — eagle/birdie tint their label with --score-under,
+     the site's live under-par signal (fix round 1, §25a FIX3: was raw
+     --brass, now the token so this pad never drifts from the scorecard's
+     own convention again); parkey stays --brass, which is ceremony here
+     (the ONE primary key's emphasis tint), not a score-tier signal, so it
+     is deliberately untouched; bogey reuses --sage, matching the score-
+     cell convention task 1 already established (--score-bogey is the same
+     hex as --sage — still true post-token-swap), NOT the prototype's own
      --rust bogey-key tint). #scSheet/#scVeil keep the native `hidden`
      attribute when closed (STATE.scPadHole==null) IN ADDITION to the `.on`
      class used when open: every state change here does a full innerHTML
@@ -698,7 +838,7 @@
      climbs further, to the biggest text on the pad. */
   .sc-key b{font-family:var(--display);font-size:23px;font-weight:400}
   .sc-key-lab{font-size:13px;color:var(--sage);text-transform:uppercase;letter-spacing:.04em}
-  .sc-key.sc-eagle .sc-key-lab,.sc-key.sc-birdie .sc-key-lab{color:var(--brass)}
+  .sc-key.sc-eagle .sc-key-lab,.sc-key.sc-birdie .sc-key-lab{color:var(--score-under)}
   .sc-key.sc-parkey{border-color:var(--brass);background:var(--pine-3)}
   .sc-key.sc-parkey b{color:var(--brass);font-size:29px}
   .sc-key.sc-parkey .sc-key-lab{color:var(--brass);font-size:13px}
@@ -750,10 +890,16 @@
     background:var(--pine-2);color:var(--bone);font-family:var(--ui);cursor:pointer;padding:10px}
   .sc-con-btn b{font-family:var(--display);font-size:22px;display:block}
   .sc-con-btn small{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--sage)}
-  /* Keep = the safe default — reuses Task 1/2's --brass "under-par"
-     convention (this site has no --under, the prototype's own token for
-     this button). Replace-with-mine = the more assertive override, --rust,
-     matching the conflict cell's own rust tint. */
+  /* Keep = the safe default — reuses the site's --brass identity color
+     (this site has no --under, the prototype's own token for this button).
+     Fix round 1, §25a FIX3 audit: this brass use is ceremony (the site's
+     general "safe default" tint), NOT the score-tier under-par signal —
+     "Keep"/"Replace" describe which VALUE to trust in a conflict, they
+     carry no over/under-par meaning, so this stays brass unchanged; only
+     the COMMENT'S framing is corrected here (it used to imply a live link
+     to the under-par convention, which now lives at --score-under instead).
+     Replace-with-mine = the more assertive override, --rust, matching the
+     conflict cell's own rust tint (also ceremony, not a score-tier color). */
   .sc-con-btn.sc-con-keep{border-color:var(--brass)} .sc-con-btn.sc-con-keep b{color:var(--brass)}
   .sc-con-btn.sc-con-mine{border-color:var(--rust)} .sc-con-btn.sc-con-mine b{color:var(--rust)}
   .sc-con-btn:focus-visible{outline:2px solid var(--brass)}
@@ -833,6 +979,13 @@
     </div>
   </div>
 </nav>
+<!-- S25a B-NAME: compact ceremonial masthead bar — every view except Home
+     (CSS below); the mark reuses the #mark symbol (single authority, Y4). -->
+<div id="mastBar">
+  <svg class="mast-mark" aria-hidden="true"><use href="#mark"/></svg>
+  <span class="mast-name">THE GOOD FRIENDS YEARLY</span>
+  <span class="mast-ctx" id="mastCtx"></span>
+</div>
 
 <section class="hero view" data-view="home" id="home">
   <div class="wrap">
@@ -915,6 +1068,7 @@
     </div>
 
     <div id="nowNext"></div>
+    <div id="homeBoard"></div>
     <div id="homeStatus"></div>
     <div id="homeSync" class="sync"></div>
 
@@ -936,27 +1090,39 @@
 
 <section class="band band-alt view" data-view="board" id="leaderboard">
   <div class="wrap">
-    <p class="eyebrow">Live from the course</p>
-    <h2>Leaderboard</h2>
+    <div class="mast-head">
+      <p class="eyebrow">Live from the course</p>
+      <h2>Leaderboard</h2>
+      <span class="mast-chip" id="mastChip"></span>
+    </div>
+    <div class="mast-rule" aria-hidden="true"></div>
     <p class="lede">Gross decides The Bird. Tap a team for the full card.</p>
     <div class="sc-board-row">
       <div class="years" id="years" role="group" aria-label="Tournament year"></div>
       <div id="scBoardBtnWrap"></div>
     </div>
     <div class="lb-head">
-      <div>Pos</div><div>Team</div><div>Thru</div>
+      <div>Pos</div><div class="lb-mv" aria-hidden="true"></div><div>Team</div><div>Thru</div>
       <div class="lb-num lb-r1">R1</div><div class="lb-num lb-r2">R2</div>
       <div class="lb-tot lb-total">Total</div><div class="lb-tot" id="lbToParHead">To par</div>
     </div>
     <div id="lbBody">
       <div class="lb-empty">No cards posted yet. Scores appear here as the sheet fills in.</div>
     </div>
+    <p class="sync" id="lbMvBasis"></p>
     <div class="sg" id="sgWrap" hidden>
       <p class="nine-lab">Hole by hole</p>
       <div class="lb-empty" id="sgNote" hidden>Hole-by-hole view needs all 18 holes on the Course tab.</div>
       <div class="sg-controls" id="sgRounds" hidden></div>
       <div class="sg-scroll" id="sgScroll"><table class="sg-t" id="sgTable"></table></div>
       <div class="sg-panel card-drop" id="sgPanel" hidden></div>
+      <div class="sg-legend" id="sgLegend" aria-label="Scorecard legend">
+        <span class="lg"><span class="gl" style="color:var(--score-under);border:1px solid var(--score-under);border-radius:50%;box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-under)">3</span>Eagle</span>
+        <span class="lg"><span class="gl" style="color:var(--score-under);border:1px solid var(--score-under);border-radius:50%">3</span>Birdie</span>
+        <span class="lg"><span class="gl" style="color:var(--bone)">4</span>Par</span>
+        <span class="lg"><span class="gl" style="color:var(--score-bogey);border:1px solid var(--score-bogey)">5</span>Bogey</span>
+        <span class="lg"><span class="gl" style="color:var(--score-over);border:1px solid var(--score-blowup);box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-blowup)">7</span>Double or worse</span>
+      </div>
     </div>
     <p class="sync" id="lbSync"></p>
   </div>
@@ -1297,7 +1463,7 @@ const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,
   17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
 let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null,
   scTeam:null, scSeason:null, scPadHole:null, scRoundOverride:null,
-  scPadOtherOpen:false, scConfirmPending:null, scPickerOpen:null };
+  scPadOtherOpen:false, scConfirmPending:null, scPickerOpen:null, prevBoard:null, lastBoardOrder:null };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -1695,9 +1861,25 @@ function renderBoardScoreBtn(){
     : "";
 }
 
+/* §25a B-MV: standings movement vs the previous successful paint — in-page only,
+   never persisted (no fabricated overnight movement). */
+const STALE_BASIS_MS = 10*60*1000;
+function movementFor(prevOrder, keys){
+  const out = new Map();
+  if(!prevOrder){ keys.forEach(k=>out.set(k,{dir:"same",n:0})); return out; }
+  const prev = new Map(prevOrder.map((k,i)=>[k,i]));
+  keys.forEach((k,i)=>{
+    if(!prev.has(k)){ out.set(k,{dir:"new",n:0}); return; }
+    const d = prev.get(k)-i;
+    out.set(k, d>0?{dir:"up",n:d}:d<0?{dir:"down",n:-d}:{dir:"same",n:0});
+  });
+  return out;
+}
+
 function scoreClass(score,par){
   if(!par) return "";
   const d=score-par;
+  if(d<=-2) return " under eagle";   // §25a B-GLYPH: additive tier — every .includes("under") consumer unaffected
   if(d<0) return " under";
   if(d===1) return " bogey";
   if(d>=2) return " blowup";
@@ -1758,8 +1940,54 @@ function rankedPlayers(basis,seasonY=STATE.year){
   return players;
 }
 
+/* §25a B-HOME: the single row template shared by the Board (#lbBody,
+   interactive — a <button> that toggles the score card) and Home's
+   top-slice (#homeBoard, non-interactive — a plain <div>, no
+   aria-expanded/aria-controls, no click handler, never a card). One
+   implementation only — a semantic diff between the two render paths is a
+   spec defect (parity is the point of B-HOME). ctx.mv is the movement Map
+   (or null) exactly as renderLeaderboard computes it; Home always passes
+   null (no per-row movement diff on the slice). ctx.open only matters for
+   interactive rows. */
+function lbRowHTML(p, ctx){
+  const {parsSuppressed, wdKeys, mv, open, interactive} = ctx;
+  const pos=p.pos;
+  const lead=(!parsSuppressed && pos===1)?" lead":"";
+  const id=esc(p.key).replace(/ /g,"-");
+  const thru=thruLabel(p);
+  const wdMarker=wdKeys.has(p.key)?" WD":"";
+  const m=mv?mv.get(p.key):null;
+  const mvHtml=!m||m.dir==="same"||m.dir==="new"
+    ? '<span class="lb-mv">—</span>'
+    : m.dir==="up"
+      ? `<span class="lb-mv up" aria-label="moved up ${m.n}"><svg width="8" height="7" viewBox="0 0 9 8"><path d="M4.5 0 L9 8 L0 8 Z" fill="currentColor"></path></svg>${m.n}</span>`
+      : `<span class="lb-mv down" aria-label="moved down ${m.n}"><svg width="8" height="7" viewBox="0 0 9 8"><path d="M4.5 8 L0 0 L9 0 Z" fill="currentColor"></path></svg>${m.n}</span>`;
+  const relCls=p.rel===null?"":(p.rel<0?" lb-under":(p.rel===0?" lb-even":" lb-over"));
+  const cells=`
+        <span class="lb-pos">${parsSuppressed ? "—" : (pos??"—")}</span>
+        ${mvHtml}
+        <span class="lb-name">${captainLabel(p.key, p.name).html}</span>
+        <span class="lb-thru">${thru}${wdMarker}</span>
+        <span class="lb-num lb-r1">${p.roundTotals["1"]??"—"}</span>
+        <span class="lb-num lb-r2">${p.roundTotals["2"]??"—"}</span>
+        <span class="lb-tot lb-total">${p.total??"—"}</span>
+        <span class="lb-tot${relCls}">${p.rel!==null?toPar(p.rel):(p.total??"—")}</span>`;
+  // fix round 1 (fold-in): non-interactive rows carry no data-player —
+  // nothing reads it here, and a stray delegated click handler added later
+  // (elsewhere in the file) matching ".lb-row[data-player]" would silently
+  // start treating Home rows as clickable board rows.
+  if(!interactive) return `<div class="lb-row${lead}">${cells}</div>`;
+  return `<button class="lb-row${lead}" type="button" data-player="${esc(p.key)}"
+              aria-expanded="${open}" aria-controls="card-${id}">${cells}</button>` + (open?cardHTML(p):"");
+}
+
 function renderLeaderboard(){
   const players=rankedPlayers("gross");
+  // §25a B-MV (fix round 1, m2): stash the order this render ACTUALLY
+  // produced, once, here — paint() captures STATE.prevBoard from this same
+  // stashed array afterward instead of running a second rankedPlayers("gross")
+  // pass, so the captured basis is byte-identical to what was rendered.
+  STATE.lastBoardOrder = players.map(p=>p.key);
   // SC-PAR-LABEL (§20 amendment 2): courseMap()===null is the SAME
   // suppression signal SC-PAR-VALID's consumers already key off (X33-X36) —
   // reused directly, courseMap() itself untouched. When suppressed, the
@@ -1781,28 +2009,35 @@ function renderLeaderboard(){
     // quiet and let stale cards keep looking current.
     $("#lbBody").innerHTML='<div class="lb-empty">No cards posted yet. Scores appear here as the sheet fills in.</div>';
     STATE.open=null;
+    const mvBasisEmpty=$("#lbMvBasis"); if(mvBasisEmpty) mvBasisEmpty.textContent="";
     renderScoreGrid([]);
     return;
   }
   const wdKeys=wdKeySet();
-  $("#lbBody").innerHTML=players.map(p=>{
-    const pos=p.pos;
-    const lead=(!parsSuppressed && pos===1)?" lead":"";
-    const id=esc(p.key).replace(/ /g,"-");
-    const open=STATE.open===p.key;
-    const thru=thruLabel(p);
-    const wdMarker=wdKeys.has(p.key)?" WD":"";
-    return `<button class="lb-row${lead}" type="button" data-player="${esc(p.key)}"
-              aria-expanded="${open}" aria-controls="card-${id}">
-        <span class="lb-pos">${parsSuppressed ? "—" : (pos??"—")}</span>
-        <span class="lb-name">${captainLabel(p.key, p.name).html}</span>
-        <span class="lb-thru">${thru}${wdMarker}</span>
-        <span class="lb-num lb-r1">${p.roundTotals["1"]??"—"}</span>
-        <span class="lb-num lb-r2">${p.roundTotals["2"]??"—"}</span>
-        <span class="lb-tot lb-total">${p.total??"—"}</span>
-        <span class="lb-tot">${p.rel!==null?toPar(p.rel):(p.total??"—")}</span>
-      </button>` + (open?cardHTML(p):"");
-  }).join("");
+  // §25a B-MV: movement diffs against the PREVIOUS successful paint only,
+  // and only within the honest staleness window — an older basis suppresses
+  // to the dash + a "paused" footer rather than silently keep showing a
+  // stale diff as current (STATE.prevBoard is captured in paint(), AFTER
+  // this render fan-out, so it always lags one paint behind on purpose).
+  // Fix round 1 (Imp-1): a prior basis from a DIFFERENT year is not a stale
+  // basis, it's the WRONG basis — diffing this year's order against last
+  // year's fabricates movement (an archive-year switch showed "moved up 2"
+  // with nothing actually moved). A year mismatch renders exactly like a
+  // first paint (dashes, empty footer), never "paused".
+  // Final fix wave (F1, RULED): suppression suppresses movement — a
+  // par-suppressed board (courseMap()===null, Pos already showing "—")
+  // must not still show rank-delta arrows or a "since"/"paused" footer.
+  // Gated at the SAME parsSuppressed derived above, right alongside the
+  // basisFresh/mv computation it protects.
+  const yearMatch = !parsSuppressed && STATE.prevBoard && STATE.prevBoard.year===STATE.year;
+  const basisFresh = yearMatch && (Date.now()-STATE.prevBoard.at) <= STALE_BASIS_MS;
+  const mv = basisFresh ? movementFor(STATE.prevBoard.order, players.map(p=>p.key)) : null;
+  const mvBasis=$("#lbMvBasis");
+  if(mvBasis) mvBasis.textContent = parsSuppressed ? "" : (basisFresh ? "Movement since "+fmtClock(STATE.prevBoard.at)
+    : (yearMatch ? "Movement paused — last refresh "+fmtClock(STATE.prevBoard.at) : ""));
+  $("#lbBody").innerHTML=players.map(p=>
+    lbRowHTML(p,{parsSuppressed,wdKeys,mv,open:STATE.open===p.key,interactive:true})
+  ).join("");
 
   $("#lbBody").querySelectorAll(".lb-row").forEach(b=>b.addEventListener("click",()=>{
     STATE.open = STATE.open===b.dataset.player ? null : b.dataset.player;
@@ -1811,9 +2046,38 @@ function renderLeaderboard(){
   renderScoreGrid(players);
 }
 
+/* §25a B-HOME: event-phase top slice — a literal prefix of the Board's
+   render. Phase authority is seasonPhase() (the SAME call the mast chip
+   and the Now/Next strip already gate on — never a second clock
+   computation). Ties at the cut INCLUDE every tied row (slice may exceed
+   5): players.length<=5 keeps everyone; otherwise the first 5 plus any
+   player sharing the 5th-place player's pos.
+   Fix round 1 (Imp-2, RULED): the hero sits under a live countdown, so it
+   is pinned to the ACTIVE season regardless of what year the Board's own
+   year picker happens to be showing — flipping that picker must never
+   rewrite the Home slice out from under a running clock. rankedPlayers and
+   wdKeySet both take the explicit activeSeason() rather than defaulting to
+   STATE.year. courseMap() (parsSuppressed's source) is season-independent
+   (reads STATE.data.course directly, no year param at all — one Course
+   tab covers every year) so no pinning is needed there. */
+function renderHomeBoard(){
+  const el=$("#homeBoard"); if(!el) return;
+  if(seasonPhase()!=="event"){ el.innerHTML=""; return; }
+  const season=activeSeason();
+  const players=rankedPlayers("gross",season);
+  if(!players.length){ el.innerHTML=""; return; }
+  const parsSuppressed=!courseMap();
+  const cut=players.length<=5?players.length
+    :players.filter((p,i)=>i<5||(p.pos!==null&&p.pos===players[4].pos)).length;
+  const wdKeys=wdKeySet(season);
+  el.innerHTML=`<div class="home-board${parsSuppressed?" lb-suppressed":""}"><p class="eyebrow">Leaderboard</p>`
+    + players.slice(0,cut).map(p=>lbRowHTML(p,{parsSuppressed,wdKeys,mv:null,interactive:false})).join("")
+    + `<a class="home-board-link" href="#board">Full leaderboard &rarr;</a></div>`;
+}
+
 /* ---------- v2.3 hole-by-hole grid (G-GRID) ---------- */
 function renderScoreGrid(players){
-  const wrap=$("#sgWrap"), note=$("#sgNote"), scroll=$("#sgScroll"), table=$("#sgTable");
+  const wrap=$("#sgWrap"), note=$("#sgNote"), scroll=$("#sgScroll"), table=$("#sgTable"), legend=$("#sgLegend");
   if(!wrap) return;
   // G-PANEL: any re-render (refresh, round toggle, or a fresh fetch that
   // no longer matches) closes a stale open hole panel — it must not survive
@@ -1828,9 +2092,9 @@ function renderScoreGrid(players){
   const pars=courseMap();
   if(!pars){
     note.textContent="Hole-by-hole view needs all 18 holes on the Course tab.";
-    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return;
+    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; legend.hidden=true; return;
   }
-  note.hidden=true; scroll.hidden=false;
+  note.hidden=true; scroll.hidden=false; legend.hidden=false;
   // G-ROUND: only rounds with an actual hole-by-hole card count toward the
   // grid/toggle. A round that exists solely as a {total} entry (no .holes)
   // must not be selectable — there's no hole-by-hole card to show for it —
@@ -1838,7 +2102,7 @@ function renderScoreGrid(players){
   const rounds=[...new Set(players.flatMap(p=>Object.keys(p.rounds).filter(r=>p.rounds[r].holes)))].sort();
   if(!rounds.length){
     note.textContent="No hole-by-hole cards yet — totals only so far.";
-    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; return;
+    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; legend.hidden=true; return;
   }
   const rd=(STATE.gridRound&&rounds.includes(STATE.gridRound))?STATE.gridRound:rounds[0];
   const prevRd=table.dataset.round;   // captured before this render's mutations, for G-FOCUS's same-round guard
@@ -2452,13 +2716,18 @@ function roomsModel(){
   return {open:true,anchor,priorYear,props,queue};
 }
 
-/* W-WD helper: compute the set of withdrawn team keys for the current year.
-   Shared by renderCalcutta (payout logic) and renderLeaderboard (row annotation).
-   Flags each withdrawn team once. */
-function wdKeySet(){
-  const roster=rosterMap();
+/* W-WD helper: compute the set of withdrawn team keys for `seasonY`.
+   Shared by renderCalcutta (payout logic) and renderLeaderboard (row
+   annotation) — both existing callers keep passing nothing, so the
+   STATE.year default preserves their behavior byte-for-byte. §25a B-HOME
+   fix round 1 (Imp-2, RULED): renderHomeBoard passes activeSeason()
+   explicitly so a WD marker can never leak across a year boundary while
+   the Home hero is pinned off the Board's own year picker. Flags each
+   withdrawn team once. */
+function wdKeySet(seasonY=STATE.year){
+  const roster=rosterMap(seasonY);
   const fieldStatusByKey={};
-  (STATE.data.field||[]).filter(r=>r.player&&r.year===STATE.year).forEach(r=>{
+  (STATE.data.field||[]).filter(r=>r.player&&r.year===seasonY).forEach(r=>{
     fieldStatusByKey[nkey(r.player)]=String(r.status||"").trim().toLowerCase();
   });
   const wdKeys=new Set();
@@ -2467,14 +2736,14 @@ function wdKeySet(){
       const names=[t.captain,...t.members].filter(Boolean);
       if(names.some(n=>fieldStatusByKey[nkey(n)]==="wd")){
         wdKeys.add(k);
-        flag('Team "'+(t.captain||k)+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
+        flag('Team "'+(t.captain||k)+'" is marked wd (withdrawn) for '+seasonY+' — excluded from the Final/Projected completeness check');
       }
     });
   } else {
     Object.keys(fieldStatusByKey).forEach(k=>{
       if(fieldStatusByKey[k]==="wd"){
         wdKeys.add(k);
-        flag('"'+k+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
+        flag('"'+k+'" is marked wd (withdrawn) for '+seasonY+' — excluded from the Final/Projected completeness check');
       }
     });
   }
@@ -2998,7 +3267,7 @@ function renderChampions(){
 }
 
 function renderAll(){
-  renderYears(); renderLeaderboard(); renderBoardScoreBtn(); renderField(); renderDraft(); renderPairings();
+  renderYears(); renderLeaderboard(); renderBoardScoreBtn(); renderField(); renderDraft(); renderPairings(); renderMastChip(); renderHomeBoard();
   renderCalcutta(); renderNextYear(); renderRooms(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
 }
 
@@ -3081,6 +3350,28 @@ function teeOffsetMs(){
   const m=String(INFO.first_tee||CONFIG.FIRST_TEE||"").match(/([+-])(\d{2}):(\d{2})\s*$/);
   return m ? (m[1]==="-"?-1:1)*((+m[2])*60+(+m[3]))*60000 : null;
 }
+
+/* S25a B-NAME: honest round-context chip. Event phase only; Round = highest
+   round with any posted score this season (data, never the clock); weekday
+   from the tee offset (ONE owner, S24). Anything underivable falls back to
+   the est line — never a guessed round or day. Board chip + bar share it. */
+function renderMastChip(){
+  const chip=document.querySelector("#mastChip"), ctx=document.querySelector("#mastCtx");
+  if(!chip&&!ctx) return;
+  let label="McCall, Idaho \u00b7 Est. 2019";
+  if(seasonPhase()==="event"){
+    const off=teeOffsetMs();
+    const rds=[...new Set(buildPlayers(activeSeason()).flatMap(p=>Object.keys(p.rounds)))]
+      .map(Number).filter(n=>n===1||n===2);
+    if(off!==null&&rds.length){
+      const wd=WEEKDAYS[new Date(Date.now()+off).getUTCDay()];
+      label="Round "+Math.max(...rds)+" \u00b7 "+wd[0].toUpperCase()+wd.slice(1);
+    }
+  }
+  if(chip) chip.textContent=label;
+  if(ctx) ctx.textContent=label;
+}
+
 function parseClock(t){
   const m=String(t||"").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
   if(!m) return null;
@@ -3608,11 +3899,16 @@ function scPadNumbers(hole){
 // Task 2 (rev 3, SC-PAD-SHEET) — maps a preset key's scParLabel() text back
 // to its visual-emphasis class, purely a render concern (scParLabel/
 // scPadNumbers themselves are untouched). Par is the ONE primary key
-// (.sc-parkey); eagle/birdie tint their label brass (this site's existing
-// "under-par" signal — task 1 established there's no separate --under
-// token); bogey is left at .sc-key-lab's own default --sage, matching task
-// 1's bogey-score-cell color exactly (a deliberate departure from the
-// prototype's own rust-tinted bogey key, for site-wide consistency).
+// (.sc-parkey, stays brass — ceremony/emphasis, not a score-tier signal);
+// eagle/birdie tint their label --score-under (fix round 1, §25a FIX3: was
+// raw --brass — this site has no separate --under token, so the pad used
+// to just borrow --brass directly; now it borrows the real under-par
+// TOKEN instead, so it can never silently drift from the scorecard's own
+// convention again); bogey is left at .sc-key-lab's own default --sage,
+// matching task 1's bogey-score-cell color exactly (--score-bogey is the
+// same hex as --sage, so this still holds post-token-swap — a deliberate
+// departure from the prototype's own rust-tinted bogey key, for site-wide
+// consistency).
 function scKeyExtraClass(label){
   if(label==="Eagle") return " sc-eagle";
   if(label==="Birdie") return " sc-birdie";
@@ -4354,7 +4650,7 @@ function scCellHTML(h,nextHole){
   // Over/under is never color-only: a ▾/▴ glyph rides alongside the color
   // class, as a SIBLING of .sc-score (never nested inside it) so anything
   // reading .sc-score's textContent keeps seeing the bare score digits.
-  const glyph=scoreCls==="under"?"▾":(scoreCls==="bogey"||scoreCls==="blowup")?"▴":"";
+  const glyph=scoreCls.includes("under")?"▾":(scoreCls==="bogey"||scoreCls==="blowup")?"▴":"";
   const cls=[scoreCls,extraCls].filter(Boolean).join(" ");
   const scoreHTML=label!=null
     ? `<span class="sc-score${scoreCls?" "+scoreCls:""}">${label}</span>${glyph?`<i class="sc-glyph" aria-hidden="true">${glyph}</i>`:""}`
@@ -4837,6 +5133,15 @@ function paint(data,results){
   renderInfo(data.info);
   normalizeYears(data);
   renderAll();
+  // §25a B-MV: captured AFTER the render fan-out above, so this paint's own
+  // renderLeaderboard() diffed against the PREVIOUS paint's order — never
+  // its own just-rendered board (which would always show zero movement).
+  // order comes from STATE.lastBoardOrder (fix round 1, m2) — the exact
+  // array renderLeaderboard() just rendered from, above, rather than a
+  // second rankedPlayers("gross") pass; year is pinned alongside it (fix
+  // round 1, Imp-1) so a later year switch can tell "stale" apart from
+  // "wrong season entirely".
+  STATE.prevBoard = { order: STATE.lastBoardOrder, year: STATE.year, at: Date.now() };
   $("#lbSync").textContent=stampFor("scores",results);
   $("#schedSync").textContent=stampFor("schedule",results);
   $("#calSync").textContent=stampFor("calcutta",results);

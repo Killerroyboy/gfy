@@ -1,0 +1,534 @@
+[
+  {
+    "id": "01-board-fresh-arrows",
+    "vp": "mobile",
+    "facts": {
+      "dataView": "board",
+      "mvCells": [
+        "lb-mv up:4",
+        "lb-mv up:2",
+        "lb-mv:—",
+        "lb-mv down:2",
+        "lb-mv down:4"
+      ],
+      "mvBasis": "Movement since 2:00pm",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "01-board-fresh-arrows",
+    "vp": "desktop",
+    "facts": {
+      "dataView": "board",
+      "mvCells": [
+        "lb-mv up:4",
+        "lb-mv up:2",
+        "lb-mv:—",
+        "lb-mv down:2",
+        "lb-mv down:4"
+      ],
+      "mvBasis": "Movement since 2:00pm",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "02-board-suppressed",
+    "vp": "mobile",
+    "facts": {
+      "dataView": "board",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": true,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board lb-suppressed\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row\">\n        <span class=\"lb-pos\">—</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Tex</span></span>\n        <span class=\"lb-thru\">R2 · 7</span>\n        <span class=\"l",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "02-board-suppressed",
+    "vp": "desktop",
+    "facts": {
+      "dataView": "board",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": true,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board lb-suppressed\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row\">\n        <span class=\"lb-pos\">—</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Tex</span></span>\n        <span class=\"lb-thru\">R2 · 7</span>\n        <span class=\"l",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "03-board-stale-movement",
+    "vp": "mobile",
+    "facts": {
+      "dataView": "board",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "Movement paused — last refresh 1:49pm",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "03-board-stale-movement",
+    "vp": "desktop",
+    "facts": {
+      "dataView": "board",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "Movement paused — last refresh 1:49pm",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "04-grid-glyphs-legend",
+    "vp": "mobile",
+    "facts": {
+      "dataView": "board",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "04-grid-glyphs-legend",
+    "vp": "desktop",
+    "facts": {
+      "dataView": "board",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "05a-home-slice",
+    "vp": "mobile",
+    "facts": {
+      "dataView": "home",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "05a-home-slice",
+    "vp": "desktop",
+    "facts": {
+      "dataView": "home",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "05b-home-slice-tie",
+    "vp": "mobile",
+    "facts": {
+      "dataView": "home",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Alp</span></span>\n        <span class=\"lb-thru\">totals</span>\n        <span class=\"lb-num lb-",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "05b-home-slice-tie",
+    "vp": "desktop",
+    "facts": {
+      "dataView": "home",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Alp</span></span>\n        <span class=\"lb-thru\">totals</span>\n        <span class=\"lb-num lb-",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "06-home-suppressed",
+    "vp": "mobile",
+    "facts": {
+      "dataView": "home",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": true,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board lb-suppressed\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row\">\n        <span class=\"lb-pos\">—</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Tex</span></span>\n        <span class=\"lb-thru\">R2 · 7</span>\n        <span class=\"l",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "06-home-suppressed",
+    "vp": "desktop",
+    "facts": {
+      "dataView": "home",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": true,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board lb-suppressed\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row\">\n        <span class=\"lb-pos\">—</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Tex</span></span>\n        <span class=\"lb-thru\">R2 · 7</span>\n        <span class=\"l",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "07-home-off-phase",
+    "vp": "mobile",
+    "facts": {
+      "dataView": "home",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "McCall, Idaho · Est. 2019",
+      "mastCtx": "McCall, Idaho · Est. 2019",
+      "homeBoardHTML": "",
+      "nowNext": "",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "07-home-off-phase",
+    "vp": "desktop",
+    "facts": {
+      "dataView": "home",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "McCall, Idaho · Est. 2019",
+      "mastCtx": "McCall, Idaho · Est. 2019",
+      "homeBoardHTML": "",
+      "nowNext": "",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "08a-masthead-data-view",
+    "vp": "mobile",
+    "facts": {
+      "dataView": "schedule",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "08a-masthead-data-view",
+    "vp": "desktop",
+    "facts": {
+      "dataView": "schedule",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "08b-board-masthead-offphase",
+    "vp": "mobile",
+    "facts": {
+      "dataView": "board",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "McCall, Idaho · Est. 2019",
+      "mastCtx": "McCall, Idaho · Est. 2019",
+      "homeBoardHTML": "",
+      "nowNext": "",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "08b-board-masthead-offphase",
+    "vp": "desktop",
+    "facts": {
+      "dataView": "board",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "McCall, Idaho · Est. 2019",
+      "mastCtx": "McCall, Idaho · Est. 2019",
+      "homeBoardHTML": "",
+      "nowNext": "",
+      "announceHidden": null
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "09-nownext-announce",
+    "vp": "mobile",
+    "facts": {
+      "dataView": "home",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": false
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "09-nownext-announce",
+    "vp": "desktop",
+    "facts": {
+      "dataView": "home",
+      "mvCells": [
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—",
+        "lb-mv:—"
+      ],
+      "mvBasis": "",
+      "suppressed": false,
+      "mastChip": "Round 2 · Saturday",
+      "mastCtx": "Round 2 · Saturday",
+      "homeBoardHTML": "<div class=\"home-board\"><p class=\"eyebrow\">Leaderboard</p><div class=\"lb-row lead\">\n        <span class=\"lb-pos\">1</span>\n        <span class=\"lb-mv\">—</span>\n        <span class=\"lb-name\"><span class=\"cap\">Duck</span></span>\n        <span class=\"lb-thru\">F</span>\n        <span class=\"lb-num lb-r1\">",
+      "nowNext": "Now: Round One — shotgun start · 9:00 am · Meadow CreekNext: Presentation of The Bird · 2:00 pm · 18th greenPairingsBoardRooms",
+      "announceHidden": false
+    },
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  }
+]
