@@ -5177,22 +5177,51 @@ function paint(data,results){
   renderAnnouncements();
   renderScorer();
 }
+/* FT (2026-08-28): fetch tiers. The published CSV lags the sheet ~1-5min and
+   rate-limits bursts (measured), and a lodge-wifi NAT multiplies clients —
+   so only the tabs the EVENT WINDOW needs stay on the 60s cadence, and only
+   during it; everything else (and everything off-season) refreshes at 5min.
+   Skipped tabs repaint their last result — the `at` stamp stays the true
+   fetch time, so freshness stamps remain honest by construction. Cadence is
+   anchored on ATTEMPT time (reqAt): failures retry on the same tier while
+   the per-tab BACKOFF curve keeps its own inner pacing. */
+const HOT_TABS=["scores","info","field","pairings","announce","schedule","calcutta"];
+const COLD_MS=Math.max(300000,CONFIG.REFRESH_MS*5);   // cold = 5× the hot cadence, floor 5min
+let LAST_GOT={};
+function dueTabs(now,lastAt,phase){
+  return TABS.filter(t=>{
+    const cad=(phase==="event"&&HOT_TABS.includes(t))?CONFIG.REFRESH_MS:COLD_MS;
+    return now-(lastAt[t]||0)>=cad;
+  });
+}
 async function load(){
   if(DEBUG) return loadDebug();
-  const got=await Promise.all(TABS.map(pull));
+  const now=Date.now();
+  const lastAt={}; TABS.forEach(t=>{ if(LAST_GOT[t]) lastAt[t]=LAST_GOT[t].reqAt||0; });
+  const due=new Set(dueTabs(now,lastAt,seasonPhase()));
+  const got=await Promise.all(TABS.map(t=>due.has(t)
+    ? pull(t).then(g=>({...g,reqAt:now}))
+    : Promise.resolve(LAST_GOT[t]||{rows:null,at:0,live:false,err:null,reqAt:0})));
+  TABS.forEach((t,i)=>{ LAST_GOT[t]=got[i]; });
   const data={}; TABS.forEach((t,i)=>data[t]=got[i].rows);
   writeCache(got);
   paint(data,got);
 }
 
 tick(); setInterval(tick,30000);
-/* §24 H-REFRESH: the existing unconditional 60s load() loop is RETAINED at its
-   cadence (rev 2 — reuse, don't duplicate). Two additions only: skip fetches
-   while hidden (through this named seam so tests can drive it), and load()
-   immediately on wake — phone unlocked at the tee sees fresh data instantly. */
+/* §24 H-REFRESH: the load() loop keeps its REFRESH_MS cadence but each firing
+   fetches only the DUE tabs (FT tiers above). Two behaviors preserved intact:
+   skip fetches while hidden (through this named seam so tests can drive it),
+   and load() immediately on wake — a phone unlocked at the tee refreshes
+   everything stale instantly, since lock time ages every tier. The timer
+   self-reschedules with ±10s jitter so clients behind one NAT desynchronize. */
 function pageVisible(){ return typeof document.hidden==="undefined"||!document.hidden; }
 function refreshTick(){ if(pageVisible()) load(); }
-load(); setInterval(refreshTick,CONFIG.REFRESH_MS);
+function scheduleRefresh(){
+  const jitter=Math.floor(Math.random()*20000)-10000;
+  setTimeout(()=>{ refreshTick(); scheduleRefresh(); },Math.max(15000,CONFIG.REFRESH_MS+jitter));
+}
+load(); scheduleRefresh();
 document.addEventListener("visibilitychange",()=>{ if(pageVisible()) load(); });
 </script>
 </body>

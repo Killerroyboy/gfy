@@ -5503,6 +5503,9 @@ const nowW = Date.now();
   const afterHiddenTickX54 = fetchCountX54;
 
   Object.defineProperty(docX54, "hidden", { configurable: true, get: () => false });
+  // FT tiers (08-28): a load() only fetches DUE tabs — age all history past
+  // COLD_MS so the wake fetch is observable; the seam remains what's tested.
+  domX54.window.eval("Object.keys(LAST_GOT).forEach(t=>{LAST_GOT[t].reqAt-=COLD_MS+1000})");
   docX54.dispatchEvent(new domX54.window.Event("visibilitychange"));
   // settle, not a tight until(): fetchCountX54 jumps synchronously the instant
   // load()'s Promise.all(TABS.map(pull)) fires each pull()'s first fetch() call,
@@ -5514,6 +5517,8 @@ const nowW = Date.now();
   await settle(300);
   const afterWakeX54 = fetchCountX54; // wake fires load() immediately, no 60s wait
 
+  // FT tiers: age history again so the visible tick's fetch is observable.
+  domX54.window.eval("Object.keys(LAST_GOT).forEach(t=>{LAST_GOT[t].reqAt-=COLD_MS+1000})");
   domX54.window.refreshTick();
   await settle(300); // same reasoning: let this tick's full load() cycle finish
   const afterTickX54 = fetchCountX54; // a subsequent visible refreshTick() still loads
@@ -5551,6 +5556,9 @@ const nowW = Date.now();
   // X54) so this refreshTick() actually re-loads, per the brief's mechanism.
   Object.defineProperty(docX55, "hidden", { configurable: true, get: () => false });
   domX55.window.fetch = () => Promise.reject(new Error("network down"));
+  // FT tiers (08-28): age the history so this refreshTick's load() actually
+  // attempts the (failing) fetches — the stamp honesty is what's tested.
+  domX55.window.eval("Object.keys(LAST_GOT).forEach(t=>{LAST_GOT[t].reqAt-=COLD_MS+1000})");
   domX55.window.refreshTick();
   await until(() => /^Couldn't refresh/.test(docX55.querySelector("#homeSync")?.textContent || ""));
   const failTextX55 = docX55.querySelector("#homeSync")?.textContent || "";
@@ -6785,6 +6793,9 @@ const nowW = Date.now();
   }));
   await until(() => domT4l.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
   phaseT4l = 2;
+  // FT tiers (08-28): age the history so the second load() actually refetches
+  // scores — the paint()-capture seam is what's tested, not the cadence.
+  domT4l.window.eval("Object.keys(LAST_GOT).forEach(t=>{LAST_GOT[t].reqAt-=COLD_MS+1000})");
   await domT4l.window.load(); // second REAL paint — the same load() path X26 exercises
   const liveOrderT4l = [...domT4l.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
   const rowForT4l = (k) => domT4l.window.document.querySelector('#lbBody .lb-row[data-player="' + k + '"]');
@@ -7255,6 +7266,96 @@ const nowW = Date.now();
       && subs.length === 2 && /handicap/i.test(subs[0]) && /captain/i.test(subs[1]),
     "lab=" + JSON.stringify(lab && lab.textContent) + " subs=" + JSON.stringify(subs));
   domFV10.window.close();
+}
+
+/* ---------------------------------------------------------------------
+   GROUP FT — fetch tiers + jitter (refine wave 2, Riley-approved 08-27).
+   Grounding: published-CSV rate-limits bursts AND lags the sheet ~1-5min,
+   so 60s polling of archive tabs oversamples its own source; lodge-wifi
+   NAT amplifies. HOT tabs keep 60s during the event window; everything
+   else (and everything off-season) refreshes at 5min; the timer jitters
+   ±10s to desynchronize clients behind one NAT.
+   --------------------------------------------------------------------- */
+
+// FT1: dueTabs(now, lastAt, phase) pure matrix — hot-only at 60s in event
+// phase; NOTHING due at 60s off-season; everything due at 301s or with no
+// history. Cadence changes must fail here first.
+{
+  const domFT1 = makeDom("");
+  await until(() => (domFT1.window.document.querySelectorAll("#lbBody .lb-row").length) > 0);
+  const w = domFT1.window;
+  const tabs = w.eval("TABS");
+  const HOT = w.eval("CONFIG.REFRESH_MS"), COLD = w.eval("COLD_MS");   // harness sets REFRESH_MS=1h; COLD_MS=5x — derive, never assume 60s
+  const NOW = 1e12;
+  const mk = ms => { const o = {}; for (const t of tabs) o[t] = NOW - ms; return o; };
+  const due = (last, phase) => w.eval(`dueTabs(${NOW}, ${JSON.stringify(last)}, ${JSON.stringify(phase)})`);
+  const dueEvHot = due(mk(HOT + 1000), "event");
+  const dueOffHot = due(mk(HOT + 1000), "off");
+  const dueEvCold = due(mk(COLD + 1000), "event");
+  const dueEmpty = due({}, "off");
+  check("FT1: dueTabs — event@hot-elapsed = hot set only (scores/info/announce in, champions/rooms out); off@hot-elapsed = none; @cold-elapsed and empty history = all (cadences derived from the page, never assumed)",
+    ["scores", "info", "announce", "field"].every(t => dueEvHot.includes(t))
+      && !dueEvHot.includes("champions") && !dueEvHot.includes("rooms")
+      && dueOffHot.length === 0
+      && dueEvCold.length === tabs.length && dueEmpty.length === tabs.length
+      && COLD > HOT,
+    "evHot=" + JSON.stringify(dueEvHot) + " offHot=" + JSON.stringify(dueOffHot));
+  domFT1.window.close();
+}
+
+// FT2: the REAL load() honors the tiers — counted per-tab through the fetch
+// layer: an immediate second load() fetches NOTHING; +61s in event phase
+// fetches EXACTLY the hot set; +301s fetches everything. Reused (skipped)
+// tabs keep painting their last rows (board still renders after a
+// zero-fetch load — partial-load regression guard).
+{
+  const counts = {};
+  const countingOverride = {};
+  for (const t of Object.keys(FIXTURES)) {
+    countingOverride[t] = () => { counts[t] = (counts[t] || 0) + 1;
+      return Promise.resolve({ ok: true, status: 200, text: async () => FIXTURES[t] }); };
+  }
+  const domFT2 = makeDom("", withOverride(countingOverride));
+  await until(() => (domFT2.window.document.querySelectorAll("#lbBody .lb-row").length) > 0);
+  const w = domFT2.window;
+  const snap = () => JSON.parse(JSON.stringify(counts));
+  const delta = (a, b) => Object.keys(b).filter(t => (b[t] || 0) > (a[t] || 0));
+  const HOT2 = w.eval("CONFIG.REFRESH_MS"), COLD2 = w.eval("COLD_MS");
+  const s0 = snap();
+  await w.load();                                            // immediate: nothing due
+  const dNone = delta(s0, snap());
+  const nowIso = new Date().toISOString().slice(0, 10) + "T09:00:00-06:00";
+  w.eval(`Object.keys(LAST_GOT).forEach(t=>{LAST_GOT[t].reqAt-=${HOT2 + 1000}})`);
+  w.eval(`INFO.first_tee=${JSON.stringify(nowIso)}`);        // ±3d window → event phase; paint() re-clobbers, so set right before EACH load
+  const s1 = snap();
+  await w.load();
+  const dHot = delta(s1, snap());
+  w.eval(`Object.keys(LAST_GOT).forEach(t=>{LAST_GOT[t].reqAt-=${COLD2 + 1000}})`);
+  const s2 = snap();
+  await w.load();
+  const dAll = delta(s2, snap());
+  const boardRows = w.document.querySelectorAll("#lbBody .lb-row").length;
+  check("FT2: load() tiering measured at the fetch layer — 0 fetches immediately; hot-only at +61s (event); all at +301s; board still rendered after the zero-fetch load",
+    dNone.length === 0
+      && dHot.includes("scores") && dHot.includes("info") && !dHot.includes("champions") && !dHot.includes("rooms")
+      && dAll.length === Object.keys(FIXTURES).length
+      && boardRows > 0,
+    "none=" + JSON.stringify(dNone) + " hot=" + JSON.stringify(dHot) + " all=" + dAll.length + " rows=" + boardRows);
+  domFT2.window.close();
+}
+
+// FT3: jitter + seam survival — structural: the fixed setInterval(refreshTick)
+// is gone, replaced by a self-rescheduling bounded-jitter timer; refreshTick
+// still exists and still gates through pageVisible(); the wake listener stays.
+{
+  const idxFT3 = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  check("FT3: no fixed setInterval(refreshTick); scheduleRefresh jitters via Math.random with a floor; pageVisible seam + visibilitychange wake path intact",
+    !/setInterval\(refreshTick/.test(idxFT3)
+      && /function scheduleRefresh/.test(idxFT3)
+      && /scheduleRefresh[\s\S]{0,200}Math\.random/.test(idxFT3)
+      && /Math\.max\(\s*15000/.test(idxFT3)
+      && /function refreshTick\(\)\{ if\(pageVisible\(\)\) load\(\); \}/.test(idxFT3)
+      && /visibilitychange/.test(idxFT3));
 }
 
 /* ---------------------------------------------------------------------
