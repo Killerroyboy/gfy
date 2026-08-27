@@ -3124,6 +3124,17 @@ function seasonPhase(){
   return (now>=t-win && now<=t+win) ? "event" : "off";
 }
 
+/* §24 H-NOWNEXT. Truth rule: compare INSTANTS only. A schedule row's instant is
+   its resolved event-window date + its time cell, interpreted in the UTC OFFSET
+   carried by the effective first_tee string — the offset has ONE owner. Times are
+   DISPLAYED as the sheet's own text; nothing is re-rendered into device wall time.
+   Unresolvable label/time ⇒ at:null ⇒ the row can never be claimed Now/Next. */
+const WEEKDAYS=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+function teeOffsetMs(){
+  const m=String(INFO.first_tee||CONFIG.FIRST_TEE||"").match(/([+-])(\d{2}):(\d{2})\s*$/);
+  return m ? (m[1]==="-"?-1:1)*((+m[2])*60+(+m[3]))*60000 : null;
+}
+
 /* S25a B-NAME: honest round-context chip. Event phase only; Round = highest
    round with any posted score this season (data, never the clock); weekday
    from the tee offset (ONE owner, S24). Anything underivable falls back to
@@ -3135,7 +3146,7 @@ function renderMastChip(){
   if(seasonPhase()==="event"){
     const off=teeOffsetMs();
     const rds=[...new Set(buildPlayers(activeSeason()).flatMap(p=>Object.keys(p.rounds)))]
-      .map(Number).filter(n=>!isNaN(n));
+      .map(Number).filter(n=>n===1||n===2);
     if(off!==null&&rds.length){
       const wd=WEEKDAYS[new Date(Date.now()+off).getUTCDay()];
       label="Round "+Math.max(...rds)+" \u00b7 "+wd[0].toUpperCase()+wd.slice(1);
@@ -3145,16 +3156,6 @@ function renderMastChip(){
   if(ctx) ctx.textContent=label;
 }
 
-/* §24 H-NOWNEXT. Truth rule: compare INSTANTS only. A schedule row's instant is
-   its resolved event-window date + its time cell, interpreted in the UTC OFFSET
-   carried by the effective first_tee string — the offset has ONE owner. Times are
-   DISPLAYED as the sheet's own text; nothing is re-rendered into device wall time.
-   Unresolvable label/time ⇒ at:null ⇒ the row can never be claimed Now/Next. */
-const WEEKDAYS=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
-function teeOffsetMs(){
-  const m=String(INFO.first_tee||CONFIG.FIRST_TEE||"").match(/([+-])(\d{2}):(\d{2})\s*$/);
-  return m ? (m[1]==="-"?-1:1)*((+m[2])*60+(+m[3]))*60000 : null;
-}
 function parseClock(t){
   const m=String(t||"").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
   if(!m) return null;

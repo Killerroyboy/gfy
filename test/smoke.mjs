@@ -6131,22 +6131,136 @@ const nowW = Date.now();
     && /body\[data-view="home"\] #mastBar\{[^}]*display:\s*none/.test(idxT3),
     "bar=" + !!bar + " mark=" + !!(bar && bar.querySelector('svg use[href="#mark"]')));
   const board = d.querySelector('[data-view="board"]');
-  check("S25a-T3b: Board masthead — existing copy intact + double rule + chip slot",
+  const boardH2T3b = board && board.querySelector("h2");
+  check("S25a-T3b: Board masthead — existing copy intact + double rule + chip slot + Leaderboard heading (fix round 1, M7)",
     !!board && /Live from the course/.test(board.textContent || "")
     && /Gross decides The Bird/.test(board.textContent || "")
-    && !!board.querySelector(".mast-rule") && !!board.querySelector("#mastChip"),
-    "rule=" + !!(board && board.querySelector(".mast-rule")) + " chip=" + !!(board && board.querySelector("#mastChip")));
-  let chipText = null, t3Err = "";
-  const t3Ready = await until(() => typeof domT3.window.renderMastChip === "function");
-  try {
-    if (!t3Ready) throw new Error("page scripts never exposed renderMastChip");
-    domT3.window.eval("renderMastChip()"); chipText = (d.querySelector("#mastChip") || {}).textContent;
-  }
-  catch (e) { t3Err = String((e && e.message) || e); }
+    && !!board.querySelector(".mast-rule") && !!board.querySelector("#mastChip")
+    && !!boardH2T3b && boardH2T3b.textContent.trim() === "Leaderboard",
+    "rule=" + !!(board && board.querySelector(".mast-rule")) + " chip=" + !!(board && board.querySelector("#mastChip"))
+      + " h2=" + JSON.stringify(boardH2T3b && boardH2T3b.textContent));
   domT3.window.close();
-  check("S25a-T3c: chip honest off-phase — est line verbatim, never a fabricated round/day (fixture first_tee 2026-08-15 window has passed)",
-    chipText === "McCall, Idaho \u00b7 Est. 2019" && !/Round \d/.test(chipText || "") && !t3Err,
-    "chip=" + JSON.stringify(chipText) + (t3Err ? " err=" + t3Err : ""));
+
+  // S25a-T3c (fix round 1, M1): the fixture default first_tee (2026-08-15) is
+  // a real calendar date that drifts into/out of the ±3-day event window as
+  // wall-clock time passes — anchoring the off-phase assertion to it is a
+  // time-bomb. Force off-phase explicitly via the dynInfo() idiom (X53)
+  // instead: a first_tee ~1 year out is unambiguously outside the ±3-day
+  // window regardless of when this suite runs.
+  const offPhaseInfoT3c = dynInfo(365);
+  const domT3c = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => offPhaseInfoT3c }),
+  }));
+  let chipTextC = null, t3cErr = "";
+  const t3cReady = await until(() => typeof domT3c.window.renderMastChip === "function");
+  try {
+    if (!t3cReady) throw new Error("page scripts never exposed renderMastChip");
+    domT3c.window.eval("renderMastChip()");
+    chipTextC = (domT3c.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3cErr = String((e && e.message) || e); }
+  domT3c.window.close();
+  check("S25a-T3c: chip honest off-phase — est line verbatim, never a fabricated round/day (first_tee forced ~1yr out via dynInfo(365), never the real calendar — fix round 1, M1)",
+    chipTextC === "McCall, Idaho · Est. 2019" && !/Round \d/.test(chipTextC || "") && !t3cErr,
+    "chip=" + JSON.stringify(chipTextC) + (t3cErr ? " err=" + t3cErr : ""));
+
+  // S25a-T3d/e/f (fix round 1, I1): event-phase branch coverage — zero prior
+  // coverage let two mutations survive: dropping the `rds.length` guard
+  // (event + no scores ⇒ Math.max(...[]) ⇒ "Round -Infinity") and replacing
+  // the `off!==null` guard with a device-clock fallback (event + an
+  // unparseable offset ⇒ a guessed weekday instead of refusing). Each check
+  // below isolates one guard; T3d is the baseline positive path.
+  const inWindowInfoT3 = dynInfo(1);
+
+  const domT3d = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT3 }),
+  }));
+  let chipTextD = null, t3dErr = "";
+  const t3dReady = await until(() => typeof domT3d.window.renderMastChip === "function");
+  try {
+    if (!t3dReady) throw new Error("page scripts never exposed renderMastChip");
+    domT3d.window.eval("renderMastChip()");
+    chipTextD = (domT3d.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3dErr = String((e && e.message) || e); }
+  domT3d.window.close();
+  check("S25a-T3d: chip event-phase — fixture scores derive a real Round 1|2 + weekday (fix round 1, I1); weekday not pinned since it derives from the relative dynInfo() date",
+    /^Round [12] · [A-Z][a-z]+$/.test(chipTextD || "") && !t3dErr,
+    "chip=" + JSON.stringify(chipTextD) + (t3dErr ? " err=" + t3dErr : ""));
+
+  const emptyScoresT3e = FIXTURES.scores.split(/\r\n|\n/)[0] + "\r\n";
+  const domT3e = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT3 }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => emptyScoresT3e }),
+  }));
+  let chipTextE = null, t3eErr = "";
+  const t3eReady = await until(() => typeof domT3e.window.renderMastChip === "function");
+  try {
+    if (!t3eReady) throw new Error("page scripts never exposed renderMastChip");
+    domT3e.window.eval("renderMastChip()");
+    chipTextE = (domT3e.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3eErr = String((e && e.message) || e); }
+  domT3e.window.close();
+  check("S25a-T3e: chip event-phase — EMPTY scores tab (no rounds at all) falls back to the est line, never 'Round -Infinity' (fix round 1, I1 — guards the rds.length check)",
+    chipTextE === "McCall, Idaho · Est. 2019" && !/Round/.test(chipTextE || "") && !t3eErr,
+    "chip=" + JSON.stringify(chipTextE) + (t3eErr ? " err=" + t3eErr : ""));
+
+  const noOffsetInfoT3f = FIXTURES.info.replace(
+    "2026-08-15T09:00:00-06:00", dynFirstTee(1).replace(/[+-]\d{2}:\d{2}$/, ""));
+  const domT3f = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => noOffsetInfoT3f }),
+  }));
+  let chipTextF = null, t3fErr = "";
+  const t3fReady = await until(() => typeof domT3f.window.renderMastChip === "function");
+  try {
+    if (!t3fReady) throw new Error("page scripts never exposed renderMastChip");
+    domT3f.window.eval("renderMastChip()");
+    chipTextF = (domT3f.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3fErr = String((e && e.message) || e); }
+  domT3f.window.close();
+  check("S25a-T3f: chip event-phase — first_tee with no parseable UTC offset falls back to the est line, never a device-clock-guessed weekday (fix round 1, I1 — guards the off!==null check)",
+    chipTextF === "McCall, Idaho · Est. 2019" && !/Round \d/.test(chipTextF || "") && !t3fErr,
+    "chip=" + JSON.stringify(chipTextF) + (t3fErr ? " err=" + t3fErr : ""));
+
+  // S25a-T3g (fix round 1, I2): the round domain is bounded to exactly {1,2}
+  // — the authoritative domain per tools/sheet-triggers.gs:65 and the board's
+  // own R1/R2 rendering. A hand-typed Scores round of "3" or "2026" must
+  // never headline the chip; if no round survives the filter, fall back to
+  // the est line rather than guess.
+  const bogusPlusValidT3g = FIXTURES.scores +
+    "\n2026,Duck,3,4,4,4,5,4,4,4,4,5,4,5,3,4,4,4,3,5,4,,\n";
+  const domT3g1 = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT3 }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => bogusPlusValidT3g }),
+  }));
+  let chipTextG1 = null, t3g1Err = "";
+  const t3g1Ready = await until(() => typeof domT3g1.window.renderMastChip === "function");
+  try {
+    if (!t3g1Ready) throw new Error("page scripts never exposed renderMastChip");
+    domT3g1.window.eval("renderMastChip()");
+    chipTextG1 = (domT3g1.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3g1Err = String((e && e.message) || e); }
+  domT3g1.window.close();
+
+  const allBogusT3g = FIXTURES.scores.split(/\r\n|\n/)[0] + "\r\n" +
+    "2026,Duck,3,4,4,4,5,4,4,4,4,5,4,5,3,4,4,4,3,5,4,,\n" +
+    "2026,Sully,2026,4,4,4,5,4,4,4,4,5,4,5,3,4,4,4,3,5,4,,\n";
+  const domT3g2 = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT3 }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => allBogusT3g }),
+  }));
+  let chipTextG2 = null, t3g2Err = "";
+  const t3g2Ready = await until(() => typeof domT3g2.window.renderMastChip === "function");
+  try {
+    if (!t3g2Ready) throw new Error("page scripts never exposed renderMastChip");
+    domT3g2.window.eval("renderMastChip()");
+    chipTextG2 = (domT3g2.window.document.querySelector("#mastChip") || {}).textContent;
+  } catch (e) { t3g2Err = String((e && e.message) || e); }
+  domT3g2.window.close();
+
+  check("S25a-T3g: round domain bounded to {1,2} (fix round 1, I2) — a bogus round ('3') alongside a valid Round 2 row still headlines 'Round 2', never '3'; when ONLY bogus rounds exist ('3'/'2026'), falls back to the est line rather than guess",
+    /^Round 2 · [A-Z][a-z]+$/.test(chipTextG1 || "") && !t3g1Err
+    && chipTextG2 === "McCall, Idaho · Est. 2019" && !/Round/.test(chipTextG2 || "") && !t3g2Err,
+    "bogusPlusValid=" + JSON.stringify(chipTextG1) + (t3g1Err ? " err1=" + t3g1Err : "")
+      + " allBogus=" + JSON.stringify(chipTextG2) + (t3g2Err ? " err2=" + t3g2Err : ""));
 }
 
 /* ---------------------------------------------------------------------
