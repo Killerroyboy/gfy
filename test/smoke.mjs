@@ -5498,6 +5498,9 @@ const nowW = Date.now();
   const afterInitialLoadX54 = fetchCountX54; // unconditional first load(): TABS.length fetches
 
   Object.defineProperty(docX54, "hidden", { configurable: true, get: () => true });
+  // FT tiers: age history BEFORE the hidden tick too — otherwise nothing is
+  // due and a DELETED seam would still fetch zero (mutation-proven vacuous).
+  domX54.window.eval("Object.keys(LAST_GOT).forEach(t=>{LAST_GOT[t].reqAt-=COLD_MS+1000})");
   domX54.window.refreshTick();
   await settle(300); // give a (buggy) hidden-tab fetch every chance to land before asserting there isn't one
   const afterHiddenTickX54 = fetchCountX54;
@@ -7215,8 +7218,12 @@ const nowW = Date.now();
   const btnFut = domFut.window.document.querySelector("#icsBtn");
   const shownFut = !!btnFut && btnFut.hidden !== true;
   domFut.window.close();
-  check("FV8: stale-event calendar honesty — #icsBtn hidden when first_tee >7d past (default fixtures), visible with a future first_tee",
-    hiddenPast && shownFut,
+  // jsdom has no cascade: the hidden ATTRIBUTE alone is invisible-blind when
+  // an author display rule wins (review 08-28, mutation-proven) — so also
+  // assert the companion `.btn[hidden]` rule exists in the source.
+  const idxFV8 = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  check("FV8: stale-event calendar honesty — #icsBtn hidden when first_tee >7d past (default fixtures), visible with a future first_tee; companion .btn[hidden]{display:none} cascade rule present",
+    hiddenPast && shownFut && /\.btn\[hidden\]\{display:none\}/.test(idxFV8),
     "hiddenPast=" + hiddenPast + " shownFut=" + shownFut);
 }
 

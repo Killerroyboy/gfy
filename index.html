@@ -413,6 +413,11 @@
   /* Polish 2026-08-28: NAME lists are not money columns — .mn-net's
      text-align:right orphaned every funnel/rooms name at the far right edge
      (live defect since v2.2). Names read left; color modifiers preserved. */
+  /* Review 08-28 BLOCK: [hidden] loses to the author .btn display rule in a
+     real browser (same cascade class as the sg-legend S11 finding) — the
+     companion rule every other JS-toggled element already carries. Fixes
+     #icsBtn's stale-event hide AND the pre-existing #installBtn instance. */
+  .btn[hidden]{display:none}
   .name-list{list-style-position:inside;font-size:1rem;color:var(--bone)}
   .name-list.up{color:var(--brass)}
   .name-list.down{color:var(--rust)}
