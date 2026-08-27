@@ -1,0 +1,140 @@
+{
+  "lbMvRow-mobile": {
+    "viewportW": 390,
+    "rowScrollWidth": 342,
+    "rowClientWidth": 342,
+    "overflow": false,
+    "wrapW": 0,
+    "mvCellW": 32
+  },
+  "masthead-board-event-mobile": {
+    "viewportW": 390,
+    "navInnerCenterX": 195,
+    "mastBarContentLeft": 11.7,
+    "wrapLeft": 0,
+    "mastHeadLeft": 24,
+    "mastChipRight": 366,
+    "mastChipWraps": true
+  },
+  "lbMvRow-desktop": {
+    "viewportW": 1440,
+    "rowScrollWidth": 1052,
+    "rowClientWidth": 1052,
+    "overflow": false,
+    "wrapW": 0,
+    "mvCellW": 35.1875
+  },
+  "masthead-board-event-desktop": {
+    "viewportW": 1440,
+    "navInnerCenterX": 720,
+    "mastBarContentLeft": 498.1,
+    "wrapLeft": 0,
+    "mastHeadLeft": 194,
+    "mastChipRight": 1246,
+    "mastChipWraps": false
+  },
+  "ringGeometry-round1-mobile": {
+    "under": null,
+    "blowup": {
+      "cellW": 35.1875,
+      "cellH": 31.421875,
+      "afterW": 21.9375,
+      "afterH": 19.2969,
+      "maxSpread": 3,
+      "insetTop": 6.0624875,
+      "insetLeft": 6.625,
+      "clearanceTop": 3.06,
+      "clearanceLeft": 3.63
+    }
+  },
+  "ringGeometry-round2-under-mobile": {
+    "under": {
+      "cellW": 35.1875,
+      "cellH": 31.421875,
+      "afterW": 21.75,
+      "afterH": 21.75,
+      "borderRadius": "50%",
+      "aspectRatio": 1
+    },
+    "blowup": null
+  },
+  "underBoxFound-mobile": true,
+  "blowupBoxFound-mobile": true,
+  "ringGeometry-round1-desktop": {
+    "under": null,
+    "blowup": {
+      "cellW": 35.1875,
+      "cellH": 31.421875,
+      "afterW": 21.9375,
+      "afterH": 19.2969,
+      "maxSpread": 3,
+      "insetTop": 6.0624875,
+      "insetLeft": 6.625,
+      "clearanceTop": 3.06,
+      "clearanceLeft": 3.63
+    }
+  },
+  "ringGeometry-round2-under-desktop": {
+    "under": {
+      "cellW": 35.1875,
+      "cellH": 31.421875,
+      "afterW": 21.75,
+      "afterH": 21.75,
+      "borderRadius": "50%",
+      "aspectRatio": 1
+    },
+    "blowup": null
+  },
+  "underBoxFound-desktop": true,
+  "blowupBoxFound-desktop": true,
+  "homeFold-mobile": {
+    "present": true,
+    "bottom": 1308.1,
+    "linkBottom": 1307.6,
+    "fitsAboveFold": false,
+    "viewportH": 844
+  },
+  "homeFold-desktop": {
+    "present": true,
+    "bottom": 1461.3,
+    "linkBottom": 1461.2,
+    "fitsAboveFold": false,
+    "viewportH": 900
+  },
+  "masthead-schedule-event-mobile": {
+    "viewportW": 390,
+    "navInnerCenterX": 195,
+    "mastBarContentLeft": 11.7,
+    "wrapLeft": 0,
+    "mastHeadLeft": 0,
+    "mastChipRight": 0,
+    "mastChipWraps": true
+  },
+  "masthead-schedule-event-desktop": {
+    "viewportW": 1440,
+    "navInnerCenterX": 720,
+    "mastBarContentLeft": 498.1,
+    "wrapLeft": 0,
+    "mastHeadLeft": 0,
+    "mastChipRight": 0,
+    "mastChipWraps": true
+  },
+  "masthead-board-off-mobile": {
+    "viewportW": 390,
+    "navInnerCenterX": 195,
+    "mastBarContentLeft": 16.4,
+    "wrapLeft": 0,
+    "mastHeadLeft": 24,
+    "mastChipRight": 366,
+    "mastChipWraps": true
+  },
+  "masthead-board-off-desktop": {
+    "viewportW": 1440,
+    "navInnerCenterX": 720,
+    "mastBarContentLeft": 476.8,
+    "wrapLeft": 0,
+    "mastHeadLeft": 194,
+    "mastChipRight": 1246,
+    "mastChipWraps": false
+  }
+}

@@ -267,7 +267,18 @@
   .sg-t td.under,.sg-t td.bogey,.sg-t td.blowup{position:relative}
   .sg-t td.under::after,.sg-t td.bogey::after,.sg-t td.blowup::after{
     content:"";position:absolute;inset:15%;pointer-events:none;border:1px solid var(--score-under)}
-  .sg-t td.under::after{border-radius:50%}
+  /* render-close finding (S11, watch-list): a percentage inset on a
+     non-square <td> (measured ~35.2x31.4 border-box) renders an ELLIPSE
+     (~21.9x19.3, aspect ~1.14), not a circle — border-radius:50% only
+     rounds an ellipse's corners, it can't correct the aspect ratio. A
+     fixed-size box in em units (relative to the cell's own .85rem
+     font-size), centered independent of the td's own W/H, gives a true
+     circle regardless of viewport/table-layout width. bogey/blowup stay on
+     the shared inset:15% rectangle above — only the ring (under/eagle)
+     needs to be circular. */
+  .sg-t td.under::after{border-radius:50%;
+    inset:auto;top:50%;left:50%;width:1.6em;height:1.6em;margin:0;
+    transform:translate(-50%,-50%)}
   .sg-t td.under.eagle::after{box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-under)}
   .sg-t td.bogey::after{border-color:var(--score-bogey)}
   .sg-t td.blowup::after{border-color:var(--score-blowup);
@@ -288,6 +299,16 @@
     box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-blowup)}
   .sg-legend{display:flex;flex-wrap:wrap;gap:22px;align-items:center;margin-top:14px;
     padding-top:12px;border-top:1px solid rgba(200,162,74,.2)}
+  /* render-close finding (S11): .sg-legend's own display:flex is the SAME
+     specificity as the UA [hidden]{display:none} default, and — being an
+     author rule declared after it in the cascade — silently wins. Every
+     sibling toggle in this exact feature (.sg-controls[hidden] below,
+     .card-drop[hidden] above) already carries this companion override; this
+     one was missed, so renderScoreGrid()'s legend.hidden=true (the
+     par-suppressed and no-rounds-yet branches) had zero visual effect in a
+     real browser even though it read correctly true in the DOM (jsdom-based
+     smoke suite has no cascade to catch this — real-browser-only defect). */
+  .sg-legend[hidden]{display:none}
   .sg-legend .lg{display:flex;align-items:center;gap:9px;font-size:.62rem;
     letter-spacing:.22em;text-transform:uppercase;color:var(--sage)}
   .sg-legend .gl{display:inline-flex;width:26px;height:26px;align-items:center;
