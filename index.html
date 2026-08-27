@@ -1396,7 +1396,7 @@ const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,
   17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
 let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null,
   scTeam:null, scSeason:null, scPadHole:null, scRoundOverride:null,
-  scPadOtherOpen:false, scConfirmPending:null, scPickerOpen:null, prevBoard:null };
+  scPadOtherOpen:false, scConfirmPending:null, scPickerOpen:null, prevBoard:null, lastBoardOrder:null };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -1875,6 +1875,11 @@ function rankedPlayers(basis,seasonY=STATE.year){
 
 function renderLeaderboard(){
   const players=rankedPlayers("gross");
+  // §25a B-MV (fix round 1, m2): stash the order this render ACTUALLY
+  // produced, once, here — paint() captures STATE.prevBoard from this same
+  // stashed array afterward instead of running a second rankedPlayers("gross")
+  // pass, so the captured basis is byte-identical to what was rendered.
+  STATE.lastBoardOrder = players.map(p=>p.key);
   // SC-PAR-LABEL (§20 amendment 2): courseMap()===null is the SAME
   // suppression signal SC-PAR-VALID's consumers already key off (X33-X36) —
   // reused directly, courseMap() itself untouched. When suppressed, the
@@ -1906,11 +1911,17 @@ function renderLeaderboard(){
   // to the dash + a "paused" footer rather than silently keep showing a
   // stale diff as current (STATE.prevBoard is captured in paint(), AFTER
   // this render fan-out, so it always lags one paint behind on purpose).
-  const basisFresh = STATE.prevBoard && (Date.now()-STATE.prevBoard.at) <= STALE_BASIS_MS;
+  // Fix round 1 (Imp-1): a prior basis from a DIFFERENT year is not a stale
+  // basis, it's the WRONG basis — diffing this year's order against last
+  // year's fabricates movement (an archive-year switch showed "moved up 2"
+  // with nothing actually moved). A year mismatch renders exactly like a
+  // first paint (dashes, empty footer), never "paused".
+  const yearMatch = STATE.prevBoard && STATE.prevBoard.year===STATE.year;
+  const basisFresh = yearMatch && (Date.now()-STATE.prevBoard.at) <= STALE_BASIS_MS;
   const mv = basisFresh ? movementFor(STATE.prevBoard.order, players.map(p=>p.key)) : null;
   const mvBasis=$("#lbMvBasis");
   if(mvBasis) mvBasis.textContent = basisFresh ? "Movement since "+fmtClock(STATE.prevBoard.at)
-    : (STATE.prevBoard ? "Movement paused — last refresh "+fmtClock(STATE.prevBoard.at) : "");
+    : (yearMatch ? "Movement paused — last refresh "+fmtClock(STATE.prevBoard.at) : "");
   $("#lbBody").innerHTML=players.map(p=>{
     const pos=p.pos;
     const lead=(!parsSuppressed && pos===1)?" lead":"";
@@ -4969,7 +4980,12 @@ function paint(data,results){
   // §25a B-MV: captured AFTER the render fan-out above, so this paint's own
   // renderLeaderboard() diffed against the PREVIOUS paint's order — never
   // its own just-rendered board (which would always show zero movement).
-  STATE.prevBoard = { order: rankedPlayers("gross").map(p=>p.key), at: Date.now() };
+  // order comes from STATE.lastBoardOrder (fix round 1, m2) — the exact
+  // array renderLeaderboard() just rendered from, above, rather than a
+  // second rankedPlayers("gross") pass; year is pinned alongside it (fix
+  // round 1, Imp-1) so a later year switch can tell "stale" apart from
+  // "wrong season entirely".
+  STATE.prevBoard = { order: STATE.lastBoardOrder, year: STATE.year, at: Date.now() };
   $("#lbSync").textContent=stampFor("scores",results);
   $("#schedSync").textContent=stampFor("schedule",results);
   $("#calSync").textContent=stampFor("calcutta",results);

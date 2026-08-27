@@ -4522,7 +4522,7 @@ async function cellSettledOk(doc, hole) {
     /grid-template-columns:\s*2\.4rem\s+2\.2rem\s+1fr\s+4rem\s+3\.2rem\s+3\.2rem\s+4rem\s*[};]/.test(mqSliceX37);
   domBX37.window.close();
 
-  check("X37: SC-PAR-LABEL — board label honesty (§20 amendment 2): complete course => #lbToParHead reads 'To par', #leaderboard NOT .lb-suppressed, real to-par form rendered; blank-par-7 course => header flips to 'Total', #leaderboard IS .lb-suppressed, the To-par-column span holds the IDENTICAL plain-digit gross the Total column holds (never a differently-valued or mislabeled figure); STRUCTURAL: the wide-width collapse rule, the pre-existing ≤560px rule that hides the redundant Total column, AND a min-width:561px-scoped 6-track grid-template-columns redefinition for #leaderboard.lb-suppressed .lb-head/.lb-row (no dangling 7th track/dead gutter at wide widths, correctly NOT applying at ≤560px so the narrow 4-track template stays governing there) are all present in the page's own CSS source (whole-branch review Imp-1)",
+  check("X37: SC-PAR-LABEL — board label honesty (§20 amendment 2): complete course => #lbToParHead reads 'To par', #leaderboard NOT .lb-suppressed, real to-par form rendered; blank-par-7 course => header flips to 'Total', #leaderboard IS .lb-suppressed, the To-par-column span holds the IDENTICAL plain-digit gross the Total column holds (never a differently-valued or mislabeled figure); STRUCTURAL: the wide-width collapse rule, the pre-existing ≤560px rule that hides the redundant Total column, AND a min-width:561px-scoped 7-track grid-template-columns redefinition for #leaderboard.lb-suppressed .lb-head/.lb-row (no dangling 8th track/dead gutter at wide widths, correctly NOT applying at ≤560px so the narrow 5-track template — §25a Task 4's mv column — stays governing there; fix round 1 m1: label corrected from the pre-§25a 6/7th/4-track counts) are all present in the page's own CSS source (whole-branch review Imp-1)",
     headOKX37 === "To par" && !!notSuppressedX37 && !!toParFormOKX37 &&
       headBX37 === "Total" && !!suppressedX37 && !!sameValueX37 && wideRuleStructuralX37 && narrowRuleStructuralX37 && gridTemplateRuleStructuralX37,
     `headOK=${headOKX37} notSuppressed=${!!notSuppressedX37} toParFormOK=${!!toParFormOKX37} headB=${headBX37} suppressed=${!!suppressedX37} sameValue=${!!sameValueX37} totalCell=${totalCellBX37 && totalCellBX37.textContent} toParCell=${toParCellBX37 && toParCellBX37.textContent} wideRule=${wideRuleStructuralX37} narrowRule=${narrowRuleStructuralX37} gridTemplateRule=${gridTemplateRuleStructuralX37}`);
@@ -6311,43 +6311,93 @@ const nowW = Date.now();
     "cells=" + mvCellsT4d.length + " allDash=" + allDashT4d + " basis=" + JSON.stringify(basisT4d));
 
   // S25a-T4e: a FRESH basis (STATE.prevBoard just captured, well under the
-  // 10-minute cap) with the live order reversed forces real up/down
-  // movement — proves the mechanism, not just source-text presence (T4b/c
-  // only prove the strings exist somewhere in the file).
+  // 10-minute cap, SAME year) with the live order reversed forces real
+  // up/down movement — proves the mechanism, not just source-text presence
+  // (T4b/c only prove the strings exist somewhere in the file). The injected
+  // STATE.prevBoard carries `year` (fix round 1, Imp-1) matching STATE.year
+  // so this isolates the TIME-based freshness path from the year-match
+  // guard T4h covers separately.
   const domT4e = makeDom("");
   await until(() => domT4e.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearT4e = domT4e.window.eval("STATE.year");
   const liveOrderT4e = [...domT4e.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
-  domT4e.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4e].reverse(), at: Date.now() }) + "; renderLeaderboard();");
+  domT4e.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4e].reverse(), year: yearT4e, at: Date.now() }) + "; renderLeaderboard();");
   const rowsT4e = [...domT4e.window.document.querySelectorAll("#lbBody .lb-row")];
   const firstMvT4e = rowsT4e[0]?.querySelector(".lb-mv");
   const lastMvT4e = rowsT4e[rowsT4e.length - 1]?.querySelector(".lb-mv");
   const basisT4e = domT4e.window.document.querySelector("#lbMvBasis")?.textContent ?? "";
+  // fix round 1 (m4): read every element prop BEFORE closing the window, not
+  // after — consistent with T4d/f/g's idiom, and avoids relying on jsdom
+  // node state surviving window.close().
+  const firstUpT4e = !!firstMvT4e?.classList.contains("up");
+  const firstAriaT4e = firstMvT4e?.getAttribute("aria-label") || "";
+  const firstClassT4e = firstMvT4e && firstMvT4e.className;
+  const lastDownT4e = !!lastMvT4e?.classList.contains("down");
+  const lastAriaT4e = lastMvT4e?.getAttribute("aria-label") || "";
+  const lastClassT4e = lastMvT4e && lastMvT4e.className;
   domT4e.window.close();
+  // fix round 1 (m3): the multi-row precondition is asserted, not ||-ed away
+  // — a fixture that ever collapses to one row must FAIL this check loudly
+  // (nothing to prove movement with) rather than pass vacuously.
   const multiRowT4e = liveOrderT4e.length > 1;
-  const movementOkT4e = !multiRowT4e || (
-    firstMvT4e?.classList.contains("up") && /^moved up \d+$/.test(firstMvT4e.getAttribute("aria-label") || "") &&
-    lastMvT4e?.classList.contains("down") && /^moved down \d+$/.test(lastMvT4e.getAttribute("aria-label") || ""));
-  check("S25a-T4e: fresh basis — reversing the live order produces real aria-labeled up/down arrows + 'Movement since h:mm' footer",
-    liveOrderT4e.length > 0 && movementOkT4e && /^Movement since \d{1,2}:\d{2}/.test(basisT4e),
-    "teams=" + liveOrderT4e.length + " firstClass=" + (firstMvT4e && firstMvT4e.className) +
-      " firstAria=" + (firstMvT4e && firstMvT4e.getAttribute("aria-label")) +
-      " lastClass=" + (lastMvT4e && lastMvT4e.className) + " basis=" + JSON.stringify(basisT4e));
+  const movementOkT4e = firstUpT4e && /^moved up \d+$/.test(firstAriaT4e) &&
+    lastDownT4e && /^moved down \d+$/.test(lastAriaT4e);
+  check("S25a-T4e: fresh basis (same year) — reversing the live order produces real aria-labeled up/down arrows + 'Movement since h:mm' footer",
+    multiRowT4e && movementOkT4e && /^Movement since \d{1,2}:\d{2}/.test(basisT4e),
+    "teams=" + liveOrderT4e.length + " multiRow=" + multiRowT4e + " firstClass=" + firstClassT4e +
+      " firstAria=" + JSON.stringify(firstAriaT4e) +
+      " lastClass=" + lastClassT4e + " basis=" + JSON.stringify(basisT4e));
 
-  // S25a-T4f: a STALE basis (captured >10 minutes ago) suppresses every
-  // arrow back to the dash and swaps the footer to the honest paused copy —
-  // never keep showing an old diff as if it were current.
+  // S25a-T4f: a STALE basis (captured >10 minutes ago, SAME year) suppresses
+  // every arrow back to the dash and swaps the footer to the honest paused
+  // copy — never keep showing an old diff as if it were current.
   const domT4f = makeDom("");
   await until(() => domT4f.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearT4f = domT4f.window.eval("STATE.year");
   const liveOrderT4f = [...domT4f.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
   const staleAtT4f = Date.now() - 11 * 60 * 1000;
-  domT4f.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4f].reverse(), at: staleAtT4f }) + "; renderLeaderboard();");
+  domT4f.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4f].reverse(), year: yearT4f, at: staleAtT4f }) + "; renderLeaderboard();");
   const mvCellsT4f = [...domT4f.window.document.querySelectorAll("#lbBody .lb-mv")];
   const allDashT4f = mvCellsT4f.length > 0 && mvCellsT4f.every(el => el.textContent.trim() === "—");
   const basisT4f = domT4f.window.document.querySelector("#lbMvBasis")?.textContent ?? "";
   domT4f.window.close();
-  check("S25a-T4f: stale basis (>10min old) suppresses every arrow to the dash and shows 'Movement paused — last refresh h:mm'",
+  check("S25a-T4f: stale basis (>10min old, same year) suppresses every arrow to the dash and shows 'Movement paused — last refresh h:mm'",
     mvCellsT4f.length > 0 && allDashT4f && /^Movement paused — last refresh \d{1,2}:\d{2}/.test(basisT4f),
     "cells=" + mvCellsT4f.length + " allDash=" + allDashT4f + " basis=" + JSON.stringify(basisT4f));
+
+  // S25a-T4h (fix round 1, Imp-1): a prior basis from a DIFFERENT year is
+  // not a stale basis, it's the WRONG basis — reviewer reproduced switching
+  // the year picker fabricating "moved up 2" arrows with nothing actually
+  // moved (the old code diffed the new year's order against the old year's
+  // order under a still-fresh timestamp). A year mismatch must render
+  // exactly like a first paint: every row dashed, footer empty — never an
+  // arrow, never "since"/"paused" text.
+  const domT4h = makeDom("");
+  await until(() => domT4h.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearNowT4h = domT4h.window.eval("STATE.year");
+  const liveOrderT4h = [...domT4h.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
+  // a genuinely different (reversed) prior order under the SAME year, fresh
+  // timestamp — exactly what T4e proves DOES produce real arrows — so that
+  // switching the year with the guard removed would show the same
+  // reviewer-reported false arrows if this check regresses.
+  domT4h.window.eval("STATE.prevBoard = " + JSON.stringify({ order: [...liveOrderT4h].reverse(), year: yearNowT4h, at: Date.now() }) + ";");
+  const yearBtnsT4h = [...domT4h.window.document.querySelectorAll("#years .year-btn")].map(b => b.dataset.year);
+  const otherYearT4h = yearBtnsT4h.find(y => y !== yearNowT4h);
+  let mvCellsT4h = [], basisT4h = "";
+  if (otherYearT4h) {
+    // the exact pre-fix code path: only STATE.year changes, STATE.prevBoard
+    // is left completely untouched (renderYears()'s own year-button handler
+    // never mentions STATE.prevBoard).
+    domT4h.window.eval("STATE.year=" + JSON.stringify(otherYearT4h) + "; STATE.open=null; renderLeaderboard();");
+    mvCellsT4h = [...domT4h.window.document.querySelectorAll("#lbBody .lb-mv")];
+    basisT4h = domT4h.window.document.querySelector("#lbMvBasis")?.textContent ?? "";
+  }
+  const allDashT4h = mvCellsT4h.length > 0 && mvCellsT4h.every(el => el.textContent.trim() === "—");
+  domT4h.window.close();
+  check("S25a-T4h: year switch never diffs against the other year's basis — dashes + empty footer, never a fabricated arrow or 'since'/'paused' text",
+    !!otherYearT4h && allDashT4h && basisT4h === "",
+    "years=" + JSON.stringify(yearBtnsT4h) + " from=" + yearNowT4h + " switchedTo=" + otherYearT4h +
+      " cells=" + mvCellsT4h.length + " allDash=" + allDashT4h + " basis=" + JSON.stringify(basisT4h));
 
   // S25a-T4g (ruled scope addition, B-CONV, controller ruling): the Board's
   // to-par cell (renderLeaderboard's last span) gains tier coloring — under,
@@ -6388,6 +6438,41 @@ const nowW = Date.now();
     underOkT4g && evenOkT4g && overOkT4g && nullOkT4g,
     "duck=" + JSON.stringify(byTeamT4g.duck) + " sully=" + JSON.stringify(byTeamT4g.sully) +
       " tex=" + JSON.stringify(byTeamT4g.tex) + " nullCase=" + JSON.stringify(nullClassT4g2));
+
+  // S25a-T4i/T4j (fix round 1, Imp-2): the base and narrow grid templates
+  // had zero structural coverage — reverting EITHER one to its pre-mv track
+  // count (dropping the 2.2rem/2rem mv column) still passed the full suite.
+  // Same slicing idiom X37 established for its own suppressed-variant grid
+  // check: anchor on a stable marker, slice forward, regex the EXACT track
+  // list with a closing `\s*;` boundary so neither a dropped nor an extra
+  // stray track can sneak back in unnoticed.
+  const leaderboardAnchorT4 = idxT4.indexOf("/* leaderboard */");
+  const leaderboardSliceT4 = leaderboardAnchorT4 >= 0 ? idxT4.slice(leaderboardAnchorT4, leaderboardAnchorT4 + 200) : "";
+  const baseGridOkT4i = /\.lb-head,\.lb-row\{display:grid;grid-template-columns:\s*2\.4rem\s+2\.2rem\s+1fr\s+4rem\s+3\.2rem\s+3\.2rem\s+4rem\s+4rem\s*;/.test(leaderboardSliceT4);
+  check("S25a-T4i: base leaderboard grid — EXACTLY 8 tracks (pos, mv, name, thru, r1, r2, total, to-par) — the mv column can't be silently dropped or an extra track silently added",
+    baseGridOkT4i,
+    "slice=" + JSON.stringify(leaderboardSliceT4.slice(0, 160)));
+
+  const narrowMqAnchorT4 = idxT4.indexOf("@media (max-width:560px)");
+  const narrowMqSliceT4 = narrowMqAnchorT4 >= 0 ? idxT4.slice(narrowMqAnchorT4, narrowMqAnchorT4 + 600) : "";
+  const narrowGridOkT4j = /\.lb-head,\.lb-row\{grid-template-columns:\s*1\.9rem\s+2rem\s+1fr\s+3\.4rem\s+4rem\s*;/.test(narrowMqSliceT4);
+  check("S25a-T4j: narrow (≤560px) leaderboard grid — EXACTLY 5 tracks (pos, mv, name, thru, to-par-or-total) — the mv column can't be silently dropped or an extra track silently added",
+    narrowGridOkT4j,
+    "slice=" + JSON.stringify(narrowMqSliceT4.slice(0, 260)));
+
+  // S25a-T4k (fix round 1, Imp-3): head/row column PARITY unguarded —
+  // deleting the aria-hidden mv head cell from the static .lb-head markup
+  // passed the full suite untouched (the grid checks above only assert the
+  // CSS track COUNT, not that the actual rendered markup fills every
+  // track). Layout-free: element childElementCount, not layout geometry.
+  const domT4k = makeDom("");
+  await until(() => domT4k.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const headChildrenT4k = domT4k.window.document.querySelector(".lb-head")?.children.length ?? null;
+  const rowChildrenT4k = domT4k.window.document.querySelector("#lbBody .lb-row")?.children.length ?? null;
+  domT4k.window.close();
+  check("S25a-T4k: lb-head/lb-row column parity — head and a rendered row carry the SAME number of grid children (deleting the mv head cell must not pass silently)",
+    !!headChildrenT4k && headChildrenT4k === rowChildrenT4k,
+    "head=" + headChildrenT4k + " row=" + rowChildrenT4k);
 }
 
 /* ---------------------------------------------------------------------
