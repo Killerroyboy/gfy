@@ -105,7 +105,7 @@
   .band .lede{color:var(--sage);max-width:52ch;margin:0 0 30px}
   .sync{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--brass-dim);
         margin:14px 0 0;min-height:1em}
-  #homeStatus a,#nyBody a{color:var(--brass);text-decoration:none;border-bottom:1px solid var(--brass-dim)}
+  #homeStatus a,#nyBody a,.home-board-link{color:var(--brass);text-decoration:none;border-bottom:1px solid var(--brass-dim)}
 
   .health-strip{position:fixed;right:10px;bottom:10px;z-index:999;
     max-width:min(92vw,420px);max-height:40vh;overflow:auto;
@@ -172,6 +172,13 @@
   .lb-even{color:var(--score-even)}
   .lb-over{color:var(--score-over)}
   .lb-empty,.sched-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
+  /* §25a B-HOME: event-phase top slice on Home — a literal prefix of the
+     Board's own render, sized down. .home-board .lb-row inherits every
+     .lb-row rule above (same grid, same classes) via the shared class. */
+  .home-board{margin-top:18px}
+  .home-board .lb-row{padding:9px 0;font-size:.9em;cursor:default}
+  .home-board-link{display:inline-block;margin-top:12px;font-size:.68rem;
+    letter-spacing:.14em;text-transform:uppercase}
   /* SC-PAR-LABEL (§20 amendment 2): courseMap() null means the second
      .lb-tot column is honestly relabeled "Total" (renderLeaderboard) — at
      widths where the SEPARATE .lb-total column also shows, that would put
@@ -1002,6 +1009,7 @@
     </div>
 
     <div id="nowNext"></div>
+    <div id="homeBoard"></div>
     <div id="homeStatus"></div>
     <div id="homeSync" class="sync"></div>
 
@@ -1873,6 +1881,44 @@ function rankedPlayers(basis,seasonY=STATE.year){
   return players;
 }
 
+/* §25a B-HOME: the single row template shared by the Board (#lbBody,
+   interactive — a <button> that toggles the score card) and Home's
+   top-slice (#homeBoard, non-interactive — a plain <div>, no
+   aria-expanded/aria-controls, no click handler, never a card). One
+   implementation only — a semantic diff between the two render paths is a
+   spec defect (parity is the point of B-HOME). ctx.mv is the movement Map
+   (or null) exactly as renderLeaderboard computes it; Home always passes
+   null (no per-row movement diff on the slice). ctx.open only matters for
+   interactive rows. */
+function lbRowHTML(p, ctx){
+  const {parsSuppressed, wdKeys, mv, open, interactive} = ctx;
+  const pos=p.pos;
+  const lead=(!parsSuppressed && pos===1)?" lead":"";
+  const id=esc(p.key).replace(/ /g,"-");
+  const thru=thruLabel(p);
+  const wdMarker=wdKeys.has(p.key)?" WD":"";
+  const m=mv?mv.get(p.key):null;
+  const mvHtml=!m||m.dir==="same"||m.dir==="new"
+    ? '<span class="lb-mv">—</span>'
+    : m.dir==="up"
+      ? `<span class="lb-mv up" aria-label="moved up ${m.n}"><svg width="8" height="7" viewBox="0 0 9 8"><path d="M4.5 0 L9 8 L0 8 Z" fill="currentColor"></path></svg>${m.n}</span>`
+      : `<span class="lb-mv down" aria-label="moved down ${m.n}"><svg width="8" height="7" viewBox="0 0 9 8"><path d="M4.5 8 L0 0 L9 0 Z" fill="currentColor"></path></svg>${m.n}</span>`;
+  const relCls=p.rel===null?"":(p.rel<0?" lb-under":(p.rel===0?" lb-even":" lb-over"));
+  const cells=`
+        <span class="lb-pos">${parsSuppressed ? "—" : (pos??"—")}</span>
+        ${mvHtml}
+        <span class="lb-name">${captainLabel(p.key, p.name).html}</span>
+        <span class="lb-thru">${thru}${wdMarker}</span>
+        <span class="lb-num lb-r1">${p.roundTotals["1"]??"—"}</span>
+        <span class="lb-num lb-r2">${p.roundTotals["2"]??"—"}</span>
+        <span class="lb-tot lb-total">${p.total??"—"}</span>
+        <span class="lb-tot${relCls}">${p.rel!==null?toPar(p.rel):(p.total??"—")}</span>`;
+  if(!interactive) return `<div class="lb-row${lead}" data-player="${esc(p.key)}">${cells}</div>`;
+  return `<button class="lb-row${lead}" type="button" data-player="${esc(p.key)}"
+              aria-expanded="${open}" aria-controls="card-${id}">${cells}
+      </button>` + (open?cardHTML(p):"");
+}
+
 function renderLeaderboard(){
   const players=rankedPlayers("gross");
   // §25a B-MV (fix round 1, m2): stash the order this render ACTUALLY
@@ -1922,38 +1968,35 @@ function renderLeaderboard(){
   const mvBasis=$("#lbMvBasis");
   if(mvBasis) mvBasis.textContent = basisFresh ? "Movement since "+fmtClock(STATE.prevBoard.at)
     : (yearMatch ? "Movement paused — last refresh "+fmtClock(STATE.prevBoard.at) : "");
-  $("#lbBody").innerHTML=players.map(p=>{
-    const pos=p.pos;
-    const lead=(!parsSuppressed && pos===1)?" lead":"";
-    const id=esc(p.key).replace(/ /g,"-");
-    const open=STATE.open===p.key;
-    const thru=thruLabel(p);
-    const wdMarker=wdKeys.has(p.key)?" WD":"";
-    const m=mv?mv.get(p.key):null;
-    const mvHtml=!m||m.dir==="same"||m.dir==="new"
-      ? '<span class="lb-mv">—</span>'
-      : m.dir==="up"
-        ? `<span class="lb-mv up" aria-label="moved up ${m.n}"><svg width="8" height="7" viewBox="0 0 9 8"><path d="M4.5 0 L9 8 L0 8 Z" fill="currentColor"></path></svg>${m.n}</span>`
-        : `<span class="lb-mv down" aria-label="moved down ${m.n}"><svg width="8" height="7" viewBox="0 0 9 8"><path d="M4.5 8 L0 0 L9 0 Z" fill="currentColor"></path></svg>${m.n}</span>`;
-    const relCls=p.rel===null?"":(p.rel<0?" lb-under":(p.rel===0?" lb-even":" lb-over"));
-    return `<button class="lb-row${lead}" type="button" data-player="${esc(p.key)}"
-              aria-expanded="${open}" aria-controls="card-${id}">
-        <span class="lb-pos">${parsSuppressed ? "—" : (pos??"—")}</span>
-        ${mvHtml}
-        <span class="lb-name">${captainLabel(p.key, p.name).html}</span>
-        <span class="lb-thru">${thru}${wdMarker}</span>
-        <span class="lb-num lb-r1">${p.roundTotals["1"]??"—"}</span>
-        <span class="lb-num lb-r2">${p.roundTotals["2"]??"—"}</span>
-        <span class="lb-tot lb-total">${p.total??"—"}</span>
-        <span class="lb-tot${relCls}">${p.rel!==null?toPar(p.rel):(p.total??"—")}</span>
-      </button>` + (open?cardHTML(p):"");
-  }).join("");
+  $("#lbBody").innerHTML=players.map(p=>
+    lbRowHTML(p,{parsSuppressed,wdKeys,mv,open:STATE.open===p.key,interactive:true})
+  ).join("");
 
   $("#lbBody").querySelectorAll(".lb-row").forEach(b=>b.addEventListener("click",()=>{
     STATE.open = STATE.open===b.dataset.player ? null : b.dataset.player;
     renderLeaderboard();
   }));
   renderScoreGrid(players);
+}
+
+/* §25a B-HOME: event-phase top slice — a literal prefix of the Board's
+   render. Phase authority is seasonPhase() (the SAME call the mast chip
+   and the Now/Next strip already gate on — never a second clock
+   computation). Ties at the cut INCLUDE every tied row (slice may exceed
+   5): players.length<=5 keeps everyone; otherwise the first 5 plus any
+   player sharing the 5th-place player's pos. */
+function renderHomeBoard(){
+  const el=$("#homeBoard"); if(!el) return;
+  if(seasonPhase()!=="event"){ el.innerHTML=""; return; }
+  const players=rankedPlayers("gross");
+  if(!players.length){ el.innerHTML=""; return; }
+  const parsSuppressed=!courseMap();
+  const cut=players.length<=5?players.length
+    :players.filter((p,i)=>i<5||(p.pos!==null&&p.pos===players[4].pos)).length;
+  const wdKeys=wdKeySet();
+  el.innerHTML=`<div class="home-board"><p class="eyebrow">Leaderboard</p>`
+    + players.slice(0,cut).map(p=>lbRowHTML(p,{parsSuppressed,wdKeys,mv:null,interactive:false})).join("")
+    + `<a class="home-board-link" href="#board">Full leaderboard &rarr;</a></div>`;
 }
 
 /* ---------- v2.3 hole-by-hole grid (G-GRID) ---------- */
@@ -3111,7 +3154,7 @@ function renderChampions(){
 }
 
 function renderAll(){
-  renderYears(); renderLeaderboard(); renderBoardScoreBtn(); renderField(); renderDraft(); renderPairings(); renderMastChip();
+  renderYears(); renderLeaderboard(); renderBoardScoreBtn(); renderField(); renderDraft(); renderPairings(); renderMastChip(); renderHomeBoard();
   renderCalcutta(); renderNextYear(); renderRooms(); renderMoney(); renderShame(); renderSchedule(); renderChampions();
 }
 

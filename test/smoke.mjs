@@ -6475,6 +6475,162 @@ const nowW = Date.now();
     "head=" + headChildrenT4k + " row=" + rowChildrenT4k);
 }
 
+{ // T5: event-phase Home leaderboard top-slice (S25a B-HOME) — a literal
+  // prefix of the Board's own render. Fresh throwaway doms per scenario
+  // (same hazard T3/T4 hit — the shared `dom` is long closed by this
+  // point), phase forced via the dynInfo()/withOverride() idiom T3d..T3h
+  // established rather than raced against the real calendar.
+  const rowSig = (row) => ({
+    name: row.querySelector(".lb-name")?.textContent ?? null,
+    pos: row.querySelector(".lb-pos")?.textContent ?? null,
+    topar: row.querySelectorAll(".lb-tot")[1]?.textContent ?? null,
+  });
+  const inWindowInfoT5 = dynInfo(1);
+  const offPhaseInfoT5 = dynInfo(365);
+
+  // T5a: structural — #homeBoard sits right after #nowNext (phase-independent).
+  const domT5a = makeDom("");
+  await until(() => domT5a.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const dT5a = domT5a.window.document;
+  const nnT5a = dT5a.querySelector("#nowNext"), hbT5a = dT5a.querySelector("#homeBoard");
+  const adjacentT5a = !!nnT5a && !!hbT5a && nnT5a.nextElementSibling === hbT5a;
+  domT5a.window.close();
+  check("S25a-T5a: #homeBoard exists right after #nowNext",
+    adjacentT5a, "nn=" + !!nnT5a + " hb=" + !!hbT5a + " adjacent=" + adjacentT5a);
+
+  // T5b: event-phase parity — home slice rows equal the board's top rows,
+  // in order (name + pos text + to-par text).
+  const domT5b = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const dT5b = domT5b.window.document;
+  const boardRowsT5b = [...dT5b.querySelectorAll("#lbBody .lb-row")].map(rowSig);
+  const homeRowsT5b = [...dT5b.querySelectorAll("#homeBoard .lb-row")].map(rowSig);
+  domT5b.window.close();
+  check("S25a-T5b: event-phase — home slice rows = board's top rows, in order (name + pos text + to-par text)",
+    homeRowsT5b.length > 0 && homeRowsT5b.length <= boardRowsT5b.length
+      && homeRowsT5b.every((r, i) => r.name === boardRowsT5b[i].name && r.pos === boardRowsT5b[i].pos && r.topar === boardRowsT5b[i].topar),
+    "home=" + JSON.stringify(homeRowsT5b) + " board=" + JSON.stringify(boardRowsT5b));
+
+  // T5c (the brief's SKELETON, completed): off-phase Home carries no board —
+  // a real phase-gating assertion, not the brief's `return true` stub.
+  const domT5c = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => offPhaseInfoT5 }),
+  }));
+  await until(() => domT5c.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  domT5c.window.eval("renderHomeBoard()");
+  const homeHtmlT5c = domT5c.window.document.querySelector("#homeBoard")?.innerHTML;
+  domT5c.window.close();
+  check("S25a-T5c: off-phase Home carries no board (real phase toggle via dynInfo(365), never the real calendar)",
+    homeHtmlT5c === "",
+    "homeBoard.innerHTML=" + JSON.stringify(homeHtmlT5c));
+
+  // T5d: non-interactive — <div> rows, no aria-expanded/aria-controls, a
+  // click never opens a card (home rows carry no click handler at all).
+  const domT5d = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5d.window.document.querySelectorAll("#homeBoard .lb-row").length > 0);
+  const homeRowElsT5d = [...domT5d.window.document.querySelectorAll("#homeBoard .lb-row")];
+  const allDivsT5d = homeRowElsT5d.length > 0 && homeRowElsT5d.every(r => r.tagName === "DIV");
+  const noAriaT5d = homeRowElsT5d.every(r => !r.hasAttribute("aria-expanded") && !r.hasAttribute("aria-controls"));
+  homeRowElsT5d[0]?.dispatchEvent(new domT5d.window.Event("click", { bubbles: true }));
+  const noCardT5d = !domT5d.window.document.querySelector("#homeBoard .card-drop");
+  domT5d.window.close();
+  check("S25a-T5d: Home rows are non-interactive — <div> not <button>, no aria-expanded/aria-controls, a click never opens a card",
+    allDivsT5d && noAriaT5d && noCardT5d,
+    "allDivs=" + allDivsT5d + " noAria=" + noAriaT5d + " noCardAfterClick=" + noCardT5d);
+
+  // T5e: suppressed-pars state (parsSuppressed) flows through ctx identically
+  // on Home — reuses X34's blank-hole-7 course fixture idiom.
+  const courseBlank7T5e = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
+    .join("\n");
+  const domT5e = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7T5e }),
+  }));
+  await until(() => domT5e.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const dT5e = domT5e.window.document;
+  const boardRowsT5e = [...dT5e.querySelectorAll("#lbBody .lb-row")].map(rowSig);
+  const homeRowsT5e = [...dT5e.querySelectorAll("#homeBoard .lb-row")].map(rowSig);
+  domT5e.window.close();
+  check("S25a-T5e: suppressed-pars state flows through ctx identically on Home — dash positions + gross-total fallback match the Board row for row",
+    homeRowsT5e.length > 0 && homeRowsT5e.every(r => r.pos === "—")
+      && homeRowsT5e.every((r, i) => r.name === boardRowsT5e[i].name && r.pos === boardRowsT5e[i].pos && r.topar === boardRowsT5e[i].topar),
+    "home=" + JSON.stringify(homeRowsT5e) + " board=" + JSON.stringify(boardRowsT5e));
+
+  // T5f: ties at the cut include every tied row (slice may exceed 5). 7
+  // custom teams, 4 clean ranks then a 3-way tie for 5th — the brief's cut
+  // algorithm must keep all three tied rows, not clip to 5.
+  const tieTeamsT5f = [["Alp", 140], ["Bly", 145], ["Cor", 150], ["Dex", 155],
+    ["Efn", 160], ["Fen", 160], ["Gan", 160]];
+  const scoresHeaderT5f = FIXTURES.scores.split(/\r\n|\n/)[0];
+  const totalsRowT5f = (team, r1, r2) => [2026, team, "", ...Array(18).fill(""), r1, r2].join(",");
+  const scoresT5f = scoresHeaderT5f + "\n"
+    + tieTeamsT5f.map(([t, tot]) => totalsRowT5f(t, Math.round(tot / 2), tot - Math.round(tot / 2))).join("\n");
+  const fieldHeaderT5f = FIXTURES.field.split(/\r\n|\n/)[0];
+  const fieldT5f = fieldHeaderT5f + "\n"
+    + tieTeamsT5f.map(([t]) => `2026,${t},${t},2019,8,In,TRUE,,`).join("\n");
+  const domT5f = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresT5f }),
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldT5f }),
+  }));
+  await until(() => domT5f.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const dT5f = domT5f.window.document;
+  const boardNamesT5f = [...dT5f.querySelectorAll("#lbBody .lb-row .lb-name")].map(e => e.textContent);
+  const homeNamesT5f = [...dT5f.querySelectorAll("#homeBoard .lb-row .lb-name")].map(e => e.textContent);
+  domT5f.window.close();
+  check("S25a-T5f: ties at the cut include every tied row — a 3-way tie for 5th keeps the slice at 7, not clipped to 5",
+    boardNamesT5f.length === 7 && homeNamesT5f.length === 7
+      && homeNamesT5f.every((n, i) => n === boardNamesT5f[i]),
+    "boardCount=" + boardNamesT5f.length + " homeCount=" + homeNamesT5f.length
+      + " board=" + JSON.stringify(boardNamesT5f) + " home=" + JSON.stringify(homeNamesT5f));
+
+  // T5g: the "Full leaderboard" link — exact copy + #board href.
+  const domT5g = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5g.window.document.querySelectorAll("#homeBoard .lb-row").length > 0);
+  const linkT5g = domT5g.window.document.querySelector("#homeBoard .home-board-link");
+  const linkOkT5g = !!linkT5g && linkT5g.getAttribute("href") === "#board"
+    && linkT5g.textContent.trim() === "Full leaderboard →";
+  domT5g.window.close();
+  check("S25a-T5g: 'Full leaderboard →' link present with href=#board, exact copy",
+    linkOkT5g,
+    "href=" + (linkT5g && linkT5g.getAttribute("href")) + " text=" + JSON.stringify(linkT5g && linkT5g.textContent));
+
+  // T5h: empty players (zero score rows) → Home carries no board either,
+  // same honest-empty rule as the Board's own #lbBody. No positive DOM
+  // marker to poll for (zero rows is the expected steady state), so settle
+  // instead of until — same idiom as the pre-existing B2 empty-scores check.
+  const emptyScoresT5h = FIXTURES.scores.split(/\r\n|\n/)[0] + "\r\n";
+  const domT5h = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => emptyScoresT5h }),
+  }));
+  await settle();
+  const homeHtmlT5h = domT5h.window.document.querySelector("#homeBoard")?.innerHTML;
+  domT5h.window.close();
+  check("S25a-T5h: empty players (no cards posted) → #homeBoard empty even in event phase",
+    homeHtmlT5h === "",
+    "homeBoard.innerHTML=" + JSON.stringify(homeHtmlT5h));
+
+  // T5i: no second timestamp — the slice inherits the §24 strip's stamp
+  // above it; #homeBoard itself must never render its own sync/stamp text.
+  const domT5i = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5i.window.document.querySelectorAll("#homeBoard .lb-row").length > 0);
+  const homeHtmlT5i = domT5i.window.document.querySelector("#homeBoard").innerHTML;
+  domT5i.window.close();
+  check("S25a-T5i: no second timestamp inside #homeBoard (the §24 strip's stamp above it is the only one)",
+    !/class="sync"/i.test(homeHtmlT5i) && !/Checked |Updated |Couldn't refresh|Saved copy/.test(homeHtmlT5i),
+    "homeBoard.innerHTML=" + JSON.stringify(homeHtmlT5i.slice(0, 200)));
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
