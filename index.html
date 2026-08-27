@@ -186,8 +186,14 @@
      redundant, not dishonest, but noisy); hide the separate one so exactly
      ONE correctly-labeled Total column shows, at every width. The pre-existing
      ≤560px rule already hides .lb-total unconditionally — this rule covers
-     the WIDE-width case that one doesn't reach. */
-  #leaderboard.lb-suppressed .lb-total{display:none}
+     the WIDE-width case that one doesn't reach.
+     Fix round 1 (Imp-1): this rule was scoped to the #leaderboard id only,
+     so Home's suppressed slice (.home-board.lb-suppressed, same honest-
+     fallback semantics via the shared lbRowHTML) showed the gross total
+     TWICE — the raw .lb-total span never hid on Home. Added as a second
+     selector on the SAME rule (never a separate .home-board-only rule) so
+     the two surfaces can't drift apart again. */
+  #leaderboard.lb-suppressed .lb-total,.home-board.lb-suppressed .lb-total{display:none}
   /* Whole-branch review Imp-1: hiding one item out of the explicit 7-track
      grid (line ~104) does NOT redefine the template — the remaining To-par
      column auto-flows into track 6 and the 7th track (4rem + a 10px gutter)
@@ -199,9 +205,15 @@
      ≤560px breakpoint: an unscoped id-selector rule would out-specify (id
      beats class) the ≤560px 4-track rule and regress phones, since
      .lb-suppressed is a data-state class independent of viewport width — a
-     narrow suppressed board must keep using the narrow 4-track template. */
+     narrow suppressed board must keep using the narrow 4-track template.
+     Fix round 1 (Imp-1): same dangling-track bug applied to Home's slice
+     (.home-board carries the identical .lb-row grid via the shared class,
+     and its own 3-class .home-board.lb-suppressed .lb-row selector would
+     out-specify the ≤560px narrow rule exactly like the id-selector case
+     above if left unscoped) — .home-board.lb-suppressed .lb-row joins the
+     SAME min-width:561px-scoped rule rather than a duplicate one. */
   @media (min-width:561px){
-    #leaderboard.lb-suppressed .lb-head,#leaderboard.lb-suppressed .lb-row{
+    #leaderboard.lb-suppressed .lb-head,#leaderboard.lb-suppressed .lb-row,.home-board.lb-suppressed .lb-row{
       grid-template-columns:2.4rem 2.2rem 1fr 4rem 3.2rem 3.2rem 4rem}
   }
 
@@ -1913,10 +1925,13 @@ function lbRowHTML(p, ctx){
         <span class="lb-num lb-r2">${p.roundTotals["2"]??"—"}</span>
         <span class="lb-tot lb-total">${p.total??"—"}</span>
         <span class="lb-tot${relCls}">${p.rel!==null?toPar(p.rel):(p.total??"—")}</span>`;
-  if(!interactive) return `<div class="lb-row${lead}" data-player="${esc(p.key)}">${cells}</div>`;
+  // fix round 1 (fold-in): non-interactive rows carry no data-player —
+  // nothing reads it here, and a stray delegated click handler added later
+  // (elsewhere in the file) matching ".lb-row[data-player]" would silently
+  // start treating Home rows as clickable board rows.
+  if(!interactive) return `<div class="lb-row${lead}">${cells}</div>`;
   return `<button class="lb-row${lead}" type="button" data-player="${esc(p.key)}"
-              aria-expanded="${open}" aria-controls="card-${id}">${cells}
-      </button>` + (open?cardHTML(p):"");
+              aria-expanded="${open}" aria-controls="card-${id}">${cells}</button>` + (open?cardHTML(p):"");
 }
 
 function renderLeaderboard(){
@@ -1984,17 +1999,26 @@ function renderLeaderboard(){
    and the Now/Next strip already gate on — never a second clock
    computation). Ties at the cut INCLUDE every tied row (slice may exceed
    5): players.length<=5 keeps everyone; otherwise the first 5 plus any
-   player sharing the 5th-place player's pos. */
+   player sharing the 5th-place player's pos.
+   Fix round 1 (Imp-2, RULED): the hero sits under a live countdown, so it
+   is pinned to the ACTIVE season regardless of what year the Board's own
+   year picker happens to be showing — flipping that picker must never
+   rewrite the Home slice out from under a running clock. rankedPlayers and
+   wdKeySet both take the explicit activeSeason() rather than defaulting to
+   STATE.year. courseMap() (parsSuppressed's source) is season-independent
+   (reads STATE.data.course directly, no year param at all — one Course
+   tab covers every year) so no pinning is needed there. */
 function renderHomeBoard(){
   const el=$("#homeBoard"); if(!el) return;
   if(seasonPhase()!=="event"){ el.innerHTML=""; return; }
-  const players=rankedPlayers("gross");
+  const season=activeSeason();
+  const players=rankedPlayers("gross",season);
   if(!players.length){ el.innerHTML=""; return; }
   const parsSuppressed=!courseMap();
   const cut=players.length<=5?players.length
     :players.filter((p,i)=>i<5||(p.pos!==null&&p.pos===players[4].pos)).length;
-  const wdKeys=wdKeySet();
-  el.innerHTML=`<div class="home-board"><p class="eyebrow">Leaderboard</p>`
+  const wdKeys=wdKeySet(season);
+  el.innerHTML=`<div class="home-board${parsSuppressed?" lb-suppressed":""}"><p class="eyebrow">Leaderboard</p>`
     + players.slice(0,cut).map(p=>lbRowHTML(p,{parsSuppressed,wdKeys,mv:null,interactive:false})).join("")
     + `<a class="home-board-link" href="#board">Full leaderboard &rarr;</a></div>`;
 }
@@ -2612,13 +2636,18 @@ function roomsModel(){
   return {open:true,anchor,priorYear,props,queue};
 }
 
-/* W-WD helper: compute the set of withdrawn team keys for the current year.
-   Shared by renderCalcutta (payout logic) and renderLeaderboard (row annotation).
-   Flags each withdrawn team once. */
-function wdKeySet(){
-  const roster=rosterMap();
+/* W-WD helper: compute the set of withdrawn team keys for `seasonY`.
+   Shared by renderCalcutta (payout logic) and renderLeaderboard (row
+   annotation) — both existing callers keep passing nothing, so the
+   STATE.year default preserves their behavior byte-for-byte. §25a B-HOME
+   fix round 1 (Imp-2, RULED): renderHomeBoard passes activeSeason()
+   explicitly so a WD marker can never leak across a year boundary while
+   the Home hero is pinned off the Board's own year picker. Flags each
+   withdrawn team once. */
+function wdKeySet(seasonY=STATE.year){
+  const roster=rosterMap(seasonY);
   const fieldStatusByKey={};
-  (STATE.data.field||[]).filter(r=>r.player&&r.year===STATE.year).forEach(r=>{
+  (STATE.data.field||[]).filter(r=>r.player&&r.year===seasonY).forEach(r=>{
     fieldStatusByKey[nkey(r.player)]=String(r.status||"").trim().toLowerCase();
   });
   const wdKeys=new Set();
@@ -2627,14 +2656,14 @@ function wdKeySet(){
       const names=[t.captain,...t.members].filter(Boolean);
       if(names.some(n=>fieldStatusByKey[nkey(n)]==="wd")){
         wdKeys.add(k);
-        flag('Team "'+(t.captain||k)+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
+        flag('Team "'+(t.captain||k)+'" is marked wd (withdrawn) for '+seasonY+' — excluded from the Final/Projected completeness check');
       }
     });
   } else {
     Object.keys(fieldStatusByKey).forEach(k=>{
       if(fieldStatusByKey[k]==="wd"){
         wdKeys.add(k);
-        flag('"'+k+'" is marked wd (withdrawn) for '+STATE.year+' — excluded from the Final/Projected completeness check');
+        flag('"'+k+'" is marked wd (withdrawn) for '+seasonY+' — excluded from the Final/Projected completeness check');
       }
     });
   }

@@ -4494,8 +4494,14 @@ async function cellSettledOk(doc, hole) {
     totalCellBX37.textContent.trim() === toParCellBX37.textContent.trim() &&
     /^\d+$/.test(toParCellBX37.textContent.trim());
   // STRUCTURAL: the new wide-width collapse rule is present in source.
+  // Fix round 1 (§25a B-HOME Imp-1): the Board's #leaderboard.lb-suppressed
+  // .lb-total rule must carry Home's .home-board.lb-suppressed .lb-total
+  // as a SECOND selector on the very same declaration (never a duplicate
+  // rule elsewhere) — that's what keeps the two surfaces from drifting
+  // apart again. The regex now requires both selectors on one rule.
   const cssTextX37 = [...docBX37.querySelectorAll("style")].map(s => s.textContent).join("");
-  const wideRuleStructuralX37 = /#leaderboard\.lb-suppressed\s*\.lb-total\s*\{\s*display:\s*none/.test(cssTextX37);
+  const wideRuleStructuralX37 =
+    /#leaderboard\.lb-suppressed\s*\.lb-total\s*,\s*\.home-board\.lb-suppressed\s*\.lb-total\s*\{\s*display:\s*none/.test(cssTextX37);
   // STRUCTURAL: the pre-existing ≤560px rule that already hides the SAME
   // redundant column unconditionally is still present, untouched — the
   // narrow-width half of "both widths".
@@ -4515,14 +4521,19 @@ async function cellSettledOk(doc, hole) {
   // closing `\s*[};]` after the 7th value guards against a regression that
   // leaves a stray 8th track back in (must be EXACTLY 7 tracks, not
   // 7-then-more).
+  // Fix round 1 (§25a B-HOME Imp-1): .home-board.lb-suppressed .lb-row must
+  // join this SAME min-width:561px-scoped rule (third selector, after the
+  // pre-existing two) — a separate/unscoped .home-board-only rule would
+  // reopen exactly the id-beats-class narrow-width regression the comment
+  // above this block warns about.
   const mqStartX37 = cssTextX37.indexOf("@media (min-width:561px)");
   const mqSliceX37 = mqStartX37 >= 0 ? cssTextX37.slice(mqStartX37, mqStartX37 + 300) : "";
   const gridTemplateRuleStructuralX37 =
-    /#leaderboard\.lb-suppressed\s*\.lb-head\s*,\s*#leaderboard\.lb-suppressed\s*\.lb-row/.test(mqSliceX37) &&
+    /#leaderboard\.lb-suppressed\s*\.lb-head\s*,\s*#leaderboard\.lb-suppressed\s*\.lb-row\s*,\s*\.home-board\.lb-suppressed\s*\.lb-row\s*\{/.test(mqSliceX37) &&
     /grid-template-columns:\s*2\.4rem\s+2\.2rem\s+1fr\s+4rem\s+3\.2rem\s+3\.2rem\s+4rem\s*[};]/.test(mqSliceX37);
   domBX37.window.close();
 
-  check("X37: SC-PAR-LABEL — board label honesty (§20 amendment 2): complete course => #lbToParHead reads 'To par', #leaderboard NOT .lb-suppressed, real to-par form rendered; blank-par-7 course => header flips to 'Total', #leaderboard IS .lb-suppressed, the To-par-column span holds the IDENTICAL plain-digit gross the Total column holds (never a differently-valued or mislabeled figure); STRUCTURAL: the wide-width collapse rule, the pre-existing ≤560px rule that hides the redundant Total column, AND a min-width:561px-scoped 7-track grid-template-columns redefinition for #leaderboard.lb-suppressed .lb-head/.lb-row (no dangling 8th track/dead gutter at wide widths, correctly NOT applying at ≤560px so the narrow 5-track template — §25a Task 4's mv column — stays governing there; fix round 1 m1: label corrected from the pre-§25a 6/7th/4-track counts) are all present in the page's own CSS source (whole-branch review Imp-1)",
+  check("X37: SC-PAR-LABEL — board label honesty (§20 amendment 2): complete course => #lbToParHead reads 'To par', #leaderboard NOT .lb-suppressed, real to-par form rendered; blank-par-7 course => header flips to 'Total', #leaderboard IS .lb-suppressed, the To-par-column span holds the IDENTICAL plain-digit gross the Total column holds (never a differently-valued or mislabeled figure); STRUCTURAL: the wide-width collapse rule, the pre-existing ≤560px rule that hides the redundant Total column, AND a min-width:561px-scoped 7-track grid-template-columns redefinition for #leaderboard.lb-suppressed .lb-head/.lb-row (no dangling 8th track/dead gutter at wide widths, correctly NOT applying at ≤560px so the narrow 5-track template — §25a Task 4's mv column — stays governing there; fix round 1 m1: label corrected from the pre-§25a 6/7th/4-track counts) are all present in the page's own CSS source (whole-branch review Imp-1); Task 5 fix round 1 (§25a B-HOME Imp-1): both rules now also carry .home-board.lb-suppressed as a joint selector on the SAME declaration, never a separate Home-only rule",
     headOKX37 === "To par" && !!notSuppressedX37 && !!toParFormOKX37 &&
       headBX37 === "Total" && !!suppressedX37 && !!sameValueX37 && wideRuleStructuralX37 && narrowRuleStructuralX37 && gridTemplateRuleStructuralX37,
     `headOK=${headOKX37} notSuppressed=${!!notSuppressedX37} toParFormOK=${!!toParFormOKX37} headB=${headBX37} suppressed=${!!suppressedX37} sameValue=${!!sameValueX37} totalCell=${totalCellBX37 && totalCellBX37.textContent} toParCell=${toParCellBX37 && toParCellBX37.textContent} wideRule=${wideRuleStructuralX37} narrowRule=${narrowRuleStructuralX37} gridTemplateRule=${gridTemplateRuleStructuralX37}`);
@@ -6499,11 +6510,16 @@ const nowW = Date.now();
     adjacentT5a, "nn=" + !!nnT5a + " hb=" + !!hbT5a + " adjacent=" + adjacentT5a);
 
   // T5b: event-phase parity — home slice rows equal the board's top rows,
-  // in order (name + pos text + to-par text).
+  // in order (name + pos text + to-par text). Fix round 1 (Imp-2): the
+  // comparison basis is explicitly the Board rendered ON the active season
+  // (STATE.year=activeSeason() forced before capturing board rows) — Home
+  // is now pinned there internally, so this is the correct apples-to-apples
+  // basis regardless of whatever year the fixture happens to default to.
   const domT5b = makeDom("", withOverride({
     info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
   }));
   await until(() => domT5b.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  domT5b.window.eval("STATE.year=activeSeason(); STATE.open=null; renderLeaderboard();");
   const dT5b = domT5b.window.document;
   const boardRowsT5b = [...dT5b.querySelectorAll("#lbBody .lb-row")].map(rowSig);
   const homeRowsT5b = [...dT5b.querySelectorAll("#homeBoard .lb-row")].map(rowSig);
@@ -6543,7 +6559,13 @@ const nowW = Date.now();
     "allDivs=" + allDivsT5d + " noAria=" + noAriaT5d + " noCardAfterClick=" + noCardT5d);
 
   // T5e: suppressed-pars state (parsSuppressed) flows through ctx identically
-  // on Home — reuses X34's blank-hole-7 course fixture idiom.
+  // on Home — reuses X34/X37's blank-hole-7 course fixture idiom. Fix round 1
+  // (Imp-1) extends this to the mechanism half of the CSS fix: X37 already
+  // proves the Board's two .lb-tot spans hold an IDENTICAL plain-digit value
+  // when suppressed (so hiding either one loses no information); this check
+  // now proves the SAME honesty semantics on Home's rows, plus that the
+  // .home-board wrapper actually carries lb-suppressed (the class the fixed
+  // CSS selectors above key off — without it the hiding rule never engages).
   const courseBlank7T5e = FIXTURES.course.split("\n")
     .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l)
     .join("\n");
@@ -6552,14 +6574,30 @@ const nowW = Date.now();
     course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7T5e }),
   }));
   await until(() => domT5e.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  // fix round 1 (Imp-2): board rendered explicitly ON the active season —
+  // same reasoning as T5b.
+  domT5e.window.eval("STATE.year=activeSeason(); STATE.open=null; renderLeaderboard();");
   const dT5e = domT5e.window.document;
   const boardRowsT5e = [...dT5e.querySelectorAll("#lbBody .lb-row")].map(rowSig);
   const homeRowsT5e = [...dT5e.querySelectorAll("#homeBoard .lb-row")].map(rowSig);
+  const homeWrapperT5e = dT5e.querySelector("#homeBoard .home-board");
+  const homeWrapperSuppressedT5e = !!homeWrapperT5e && homeWrapperT5e.classList.contains("lb-suppressed");
+  // exactly ONE total-ish semantic value per home row: the raw .lb-tot.lb-total
+  // span and the to-par-fallback .lb-tot span must hold the identical
+  // plain-digit gross total — same idiom X37 uses on the Board side.
+  const homeRowElsT5e = [...dT5e.querySelectorAll("#homeBoard .lb-row")];
+  const sameValueHomeT5e = homeRowElsT5e.length > 0 && homeRowElsT5e.every(r => {
+    const spans = r.querySelectorAll(".lb-tot");
+    const raw = spans[0]?.textContent.trim(), fallback = spans[1]?.textContent.trim();
+    return raw !== undefined && raw === fallback && /^\d+$/.test(fallback || "");
+  });
   domT5e.window.close();
-  check("S25a-T5e: suppressed-pars state flows through ctx identically on Home — dash positions + gross-total fallback match the Board row for row",
+  check("S25a-T5e: suppressed-pars state flows through ctx identically on Home — dash positions + gross-total fallback match the Board row for row; .home-board wrapper carries lb-suppressed; each home row's raw-total and to-par-fallback spans hold the IDENTICAL plain-digit value (fix round 1, Imp-1 — same honesty semantics X37 asserts on the Board)",
     homeRowsT5e.length > 0 && homeRowsT5e.every(r => r.pos === "—")
-      && homeRowsT5e.every((r, i) => r.name === boardRowsT5e[i].name && r.pos === boardRowsT5e[i].pos && r.topar === boardRowsT5e[i].topar),
-    "home=" + JSON.stringify(homeRowsT5e) + " board=" + JSON.stringify(boardRowsT5e));
+      && homeRowsT5e.every((r, i) => r.name === boardRowsT5e[i].name && r.pos === boardRowsT5e[i].pos && r.topar === boardRowsT5e[i].topar)
+      && homeWrapperSuppressedT5e && sameValueHomeT5e,
+    "home=" + JSON.stringify(homeRowsT5e) + " board=" + JSON.stringify(boardRowsT5e)
+      + " wrapperSuppressed=" + homeWrapperSuppressedT5e + " sameValueHome=" + sameValueHomeT5e);
 
   // T5f: ties at the cut include every tied row (slice may exceed 5). 7
   // custom teams, 4 clean ranks then a 3-way tie for 5th — the brief's cut
@@ -6579,6 +6617,9 @@ const nowW = Date.now();
     field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldT5f }),
   }));
   await until(() => domT5f.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  // fix round 1 (Imp-2): board rendered explicitly ON the active season —
+  // same reasoning as T5b.
+  domT5f.window.eval("STATE.year=activeSeason(); STATE.open=null; renderLeaderboard();");
   const dT5f = domT5f.window.document;
   const boardNamesT5f = [...dT5f.querySelectorAll("#lbBody .lb-row .lb-name")].map(e => e.textContent);
   const homeNamesT5f = [...dT5f.querySelectorAll("#homeBoard .lb-row .lb-name")].map(e => e.textContent);
@@ -6629,6 +6670,86 @@ const nowW = Date.now();
   check("S25a-T5i: no second timestamp inside #homeBoard (the §24 strip's stamp above it is the only one)",
     !/class="sync"/i.test(homeHtmlT5i) && !/Checked |Updated |Couldn't refresh|Saved copy/.test(homeHtmlT5i),
     "homeBoard.innerHTML=" + JSON.stringify(homeHtmlT5i.slice(0, 200)));
+
+  // T5j (fix round 1, Imp-3): T5b/T5e only compare three TEXT fields (name,
+  // pos, to-par) — a Home-only divergence in the to-par TIER CLASS, the
+  // `lead` class, or the " WD" marker would change none of those three
+  // strings and pass both checks silently. Per-index STRUCTURAL comparison
+  // instead: home row innerHTML with the .lb-mv span stripped (Home always
+  // passes mv:null while the Board may show a real arrow — that's an
+  // intentional, already-asserted difference, not a defect) must equal the
+  // board row's identically-stripped innerHTML, AND the row wrapper's own
+  // className must match (the interactive button-vs-div TAG itself is the
+  // only allowed difference — asserted separately by T5d). Reuses V6's
+  // exact WD-fixture idiom so the WD-marker path is actually exercised
+  // (default fixture never has a wd team); the default fixture's own
+  // tied-for-1st rows already exercise `lead`, and its spread of rel
+  // values already exercises all three to-par tier classes.
+  const fieldTexWdT5j = FIXTURES.field.replace("2026,Tex,Tex,2019,18,In,TRUE,", "2026,Tex,Tex,2019,18,wd,TRUE,");
+  const domT5j = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+    field: () => Promise.resolve({ ok: true, status: 200, text: async () => fieldTexWdT5j }),
+  }));
+  await until(() => domT5j.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  domT5j.window.eval("STATE.year=activeSeason(); STATE.open=null; renderLeaderboard();");
+  const dT5j = domT5j.window.document;
+  const stripMvT5j = (el) => {
+    const clone = el.cloneNode(true);
+    const mv = clone.querySelector(".lb-mv");
+    if (mv) mv.remove();
+    return clone.innerHTML;
+  };
+  const boardRowElsT5j = [...dT5j.querySelectorAll("#lbBody .lb-row")];
+  const homeRowElsT5j = [...dT5j.querySelectorAll("#homeBoard .lb-row")];
+  const innerMatchT5j = homeRowElsT5j.length > 0
+    && homeRowElsT5j.every((r, i) => stripMvT5j(r) === stripMvT5j(boardRowElsT5j[i]));
+  const classMatchT5j = homeRowElsT5j.every((r, i) => r.className === boardRowElsT5j[i].className);
+  const wdExercisedT5j = homeRowElsT5j.some(r => /\bWD\b/.test(r.textContent));
+  const tierExercisedT5j = boardRowElsT5j.some(r => /lb-under|lb-even|lb-over/.test(r.innerHTML));
+  const leadExercisedT5j = boardRowElsT5j.some(r => r.className.includes("lead"));
+  domT5j.window.close();
+  check("S25a-T5j: per-index STRUCTURAL parity (fix round 1, Imp-3) — home row innerHTML with .lb-mv stripped equals the board row's (WD marker + to-par tier class both included, not just name/pos/to-par text), and the row wrapper's own className matches (lead class included)",
+    innerMatchT5j && classMatchT5j && wdExercisedT5j && tierExercisedT5j && leadExercisedT5j,
+    "innerMatch=" + innerMatchT5j + " classMatch=" + classMatchT5j + " wdExercised=" + wdExercisedT5j
+      + " tierExercised=" + tierExercisedT5j + " leadExercised=" + leadExercisedT5j
+      + " homeClasses=" + JSON.stringify(homeRowElsT5j.map(r => r.className))
+      + " boardClasses=" + JSON.stringify(boardRowElsT5j.map(r => r.className)));
+
+  // T5k (fix round 1, Imp-2, RULED): the year picker flipped to an archive
+  // year must NOT rewrite Home's hero out from under a live countdown —
+  // Home stays pinned to activeSeason() even while the Board itself now
+  // shows a different year's (different) roster. Reuses T4h's own
+  // otherYear/.year-btn idiom (the default fixture reliably carries a 2025
+  // archive row alongside 2026, same precondition T4h already depends on).
+  // Must FAIL if the activeSeason() pin in renderHomeBoard/wdKeySet is
+  // removed (Home would then follow STATE.year like the Board does).
+  const domT5k = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => inWindowInfoT5 }),
+  }));
+  await until(() => domT5k.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const dT5k = domT5k.window.document;
+  const activeSeasonT5k = domT5k.window.eval("activeSeason()");
+  const homeNamesBeforeT5k = [...dT5k.querySelectorAll("#homeBoard .lb-row .lb-name")].map(e => e.textContent);
+  const yearBtnsT5k = [...dT5k.querySelectorAll("#years .year-btn")];
+  const otherBtnT5k = yearBtnsT5k.find(b => b.dataset.year !== activeSeasonT5k);
+  let switchedToT5k = null, boardNamesAfterT5k = null, homeNamesAfterT5k = null;
+  if (otherBtnT5k) {
+    otherBtnT5k.click();
+    switchedToT5k = domT5k.window.eval("STATE.year");
+    boardNamesAfterT5k = [...dT5k.querySelectorAll("#lbBody .lb-row .lb-name")].map(e => e.textContent);
+    homeNamesAfterT5k = [...dT5k.querySelectorAll("#homeBoard .lb-row .lb-name")].map(e => e.textContent);
+  }
+  domT5k.window.close();
+  check("S25a-T5k: fix round 1 (Imp-2, RULED) — year picker flipped to an archive year: Home's slice stays pinned to the active season (unchanged names before/after), even though the Board itself now shows the archive year's different roster",
+    !!otherBtnT5k && switchedToT5k !== activeSeasonT5k
+      && homeNamesBeforeT5k.length > 0 && homeNamesAfterT5k !== null
+      && JSON.stringify(homeNamesAfterT5k) === JSON.stringify(homeNamesBeforeT5k)
+      && JSON.stringify(boardNamesAfterT5k) !== JSON.stringify(homeNamesBeforeT5k),
+    "activeSeason=" + activeSeasonT5k + " years=" + JSON.stringify(yearBtnsT5k.map(b => b.dataset.year))
+      + " switchedTo=" + switchedToT5k
+      + " homeBefore=" + JSON.stringify(homeNamesBeforeT5k)
+      + " homeAfter=" + JSON.stringify(homeNamesAfterT5k)
+      + " boardAfter=" + JSON.stringify(boardNamesAfterT5k));
 }
 
 /* ---------------------------------------------------------------------
