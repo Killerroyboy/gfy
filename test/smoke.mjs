@@ -7299,6 +7299,62 @@ const nowW = Date.now();
     "rows=" + rowsT2f.length + " flashAny=" + flashAnyT2f);
 }
 
+{ // S25b-T2g (fix round 1, review Important — capture-seam coverage): T2d/
+  // e/f all hand-prime STATE.prevVals directly and call renderLeaderboard()
+  // themselves, so BOTH real capture lines — the STATE.lastBoardVals stash
+  // in renderLeaderboard() and its promotion into STATE.prevVals in paint()
+  // — are removable with the whole suite still green. Exactly the risk
+  // class S25a-T4l guards for prevBoard/arrows; this is that SAME guard for
+  // prevVals/flash. Mirrors T4l's idiom verbatim: drives the REAL
+  // load()/paint() path TWICE via a mutable fetch-stub phase flag, with
+  // ONLY Duck's total changed between paints (Sully/Tex totals held fixed,
+  // so their to-par text is byte-identical both paints — a same-value
+  // control the flash gate must NOT fire on).
+  let phaseT2g = 1;
+  const scoresHeaderT2g = FIXTURES.scores.split(/\r\n|\n/)[0];
+  const totalsRowT2g = (team, r1, r2) => [2026, team, "", ...Array(18).fill(""), r1, r2].join(",");
+  const scoresPhase1T2g = scoresHeaderT2g + "\n"
+    + totalsRowT2g("Duck", 70, 70) + "\n"
+    + totalsRowT2g("Sully", 75, 75) + "\n"
+    + totalsRowT2g("Tex", 80, 80);
+  const scoresPhase2T2g = scoresHeaderT2g + "\n"
+    + totalsRowT2g("Duck", 75, 70) + "\n"   // Duck's total (+5) — to-par text must change
+    + totalsRowT2g("Sully", 75, 75) + "\n"  // unchanged — control
+    + totalsRowT2g("Tex", 80, 80);          // unchanged — control
+  const domT2g = makeDom("", withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => phaseT2g === 1 ? scoresPhase1T2g : scoresPhase2T2g }),
+  }));
+  await until(() => domT2g.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearT2g = domT2g.window.eval("STATE.year");
+  // shape asserted right after the FIRST real paint — must already reflect
+  // paint()'s own capture line, not a test-side stand-in.
+  const prevValsShapeT2g = domT2g.window.eval(
+    "(function(){var v=STATE.prevVals; return v && {isMap: v.vals instanceof Map, size: (v.vals&&v.vals.size)||0, year: v.year, atType: typeof v.at};})()"
+  );
+  const rowForT2g = (k) => domT2g.window.document.querySelector('#lbBody .lb-row[data-player="' + k + '"]');
+  const duckParFirstT2g = rowForT2g("duck")?.querySelectorAll(".lb-tot")[1]?.textContent;
+  phaseT2g = 2;
+  // age the history so the second load() actually refetches scores (same
+  // idiom S25a-T4l uses) — the paint()-capture seam is what's tested.
+  domT2g.window.eval("Object.keys(LAST_GOT).forEach(t=>{LAST_GOT[t].reqAt-=COLD_MS+1000})");
+  await domT2g.window.load(); // second REAL paint — the same load() path T4l exercises
+  const duckRowT2g = rowForT2g("duck"), sullyRowT2g = rowForT2g("sully"), texRowT2g = rowForT2g("tex");
+  const duckParSecondT2g = duckRowT2g?.querySelectorAll(".lb-tot")[1]?.textContent;
+  const duckFlashT2g = !!duckRowT2g?.classList.contains("lb-flash");
+  const sullyFlashT2g = !!sullyRowT2g?.classList.contains("lb-flash");
+  const texFlashT2g = !!texRowT2g?.classList.contains("lb-flash");
+  domT2g.window.close();
+  const parChangedT2g = duckParFirstT2g !== undefined && duckParSecondT2g !== undefined && duckParFirstT2g !== duckParSecondT2g;
+  const shapeOkT2g = !!prevValsShapeT2g && prevValsShapeT2g.isMap === true && prevValsShapeT2g.size > 0
+    && prevValsShapeT2g.year === yearT2g && prevValsShapeT2g.atType === "number";
+  const flashOkT2g = duckFlashT2g && !sullyFlashT2g && !texFlashT2g;
+  check("S25b-T2g (fix round 1, review Important): capture-seam coverage — the REAL load()/paint() path, driven TWICE with Duck's total changed between paints (S25a-T4l's own dyn fixture-override idiom), leaves STATE.prevVals holding {vals:Map,year,at:number} after the FIRST paint (paint()'s own promotion line, never hand-primed), Duck's to-par text is proven to actually differ between paints, and the SECOND paint flashes Duck ONLY — Sully/Tex (unchanged totals, same-value control) never flash",
+    parChangedT2g && shapeOkT2g && flashOkT2g,
+    "duckParFirst=" + JSON.stringify(duckParFirstT2g) + " duckParSecond=" + JSON.stringify(duckParSecondT2g) +
+      " prevValsShape=" + JSON.stringify(prevValsShapeT2g) + " year=" + JSON.stringify(yearT2g) +
+      " duckFlash=" + duckFlashT2g + " sullyFlash=" + sullyFlashT2g + " texFlash=" + texFlashT2g);
+}
+
 /* ---------------------------------------------------------------------
    GROUP FV (cont.) — 2026-08-28 polish wave (Riley-approved):
    FV7 name-list class split, FV8 stale-calendar CTA, FV9 phase-aware

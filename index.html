@@ -397,10 +397,14 @@
      (.sg-p-crop, already bordered pre-T2 at .25 alpha) gets the frame
      instead — bumped to the same .28 alpha + pine-3 ground, but
      deliberately NO padding here (unlike the other two): .sg-p-crop-inner's
-     width:350% resolves against the wrapper's own content box, so adding
-     padding would shrink that basis and skew the JS pin-centering math
-     (wrap.clientWidth/clientHeight in renderHolePanel) against the fixed
-     300x210 the crop was tuned for. */
+     width:350% resolves against the wrapper's own content box (box-sizing:
+     border-box), so padding here would carve a PERMANENT visible pine-3
+     gutter out of the fixed 300x210 viewport, shrinking the actual cropped
+     area the reader sees the map through (renderHolePanel's
+     wrap.clientWidth/clientHeight math itself keeps working fine either
+     way — it reads live layout, not a literal — the loss is visual real
+     estate, not broken centering). Not worth it for a 4px mat around a
+     peep-hole crop. */
   .sg-p-crop{position:relative;overflow:hidden;max-width:300px;height:210px;border:1px solid rgba(200,162,74,.28);background:var(--pine-3);margin:10px 0}
   .sg-p-crop-inner{position:relative;width:350%}
   .sg-p-crop-inner img{width:100%;display:block}
