@@ -490,15 +490,23 @@ check("C1: Field tab groups 5 teams", teamGroups.length === 5, "count=" + teamGr
    GROUP G — calcutta collections (Task 7)
    --------------------------------------------------------------------- */
 {
-  const tiles = {
-    pot: doc.querySelector("#calPot")?.textContent,
-    rake: doc.querySelector("#calRake")?.textContent,
-    payable: doc.querySelector("#calPayable")?.textContent,
-    top: doc.querySelector("#calTop")?.textContent,
-  };
-  check("G1: calcutta tiles pot/rake/payable/top exactly per table",
-    tiles.pot === "$400" && tiles.rake === "$40 (10%)" && tiles.payable === "$360" && tiles.top === "$120 · Duck",
-    JSON.stringify(tiles));
+  // 2026-09-01 (Riley): the dollar amount is the tile's ONLY big line — Jost
+  // semibold tabular figures (Bodoni hairlines were unreadable at 1.6rem on
+  // the dark ground); annotations (rake %, top-lot owner) demote to the
+  // existing .pot dd small sub-line, matching Outstanding's shape.
+  const bigLine = el => el ? [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim() : null;
+  const smallOf = el => el && el.querySelector("small") ? el.querySelector("small").textContent : null;
+  const rakeEl = doc.querySelector("#calRake"), topEl = doc.querySelector("#calTop");
+  const idxG1 = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const potDD = (idxG1.match(/\.pot dd\{[^}]*\}/) || [""])[0];
+  check("G1: calcutta tiles — pot/payable plain amounts; rake and top-lot are amount-only big lines with their annotations ('10% rake', 'Duck') in small sub-lines; .pot dd set in var(--ui) semibold (no Bodoni hairlines)",
+    doc.querySelector("#calPot")?.textContent === "$400"
+      && bigLine(rakeEl) === "$40" && smallOf(rakeEl) === "10% rake"
+      && doc.querySelector("#calPayable")?.textContent === "$360"
+      && bigLine(topEl) === "$120" && smallOf(topEl) === "Duck"
+      && /var\(--ui\)/.test(potDD) && /font-weight:600/.test(potDD) && !/var\(--display\)/.test(potDD),
+    JSON.stringify({ pot: doc.querySelector("#calPot")?.textContent, rakeBig: bigLine(rakeEl), rakeSmall: smallOf(rakeEl),
+      topBig: bigLine(topEl), topSmall: smallOf(topEl), potDD }));
 }
 
 {

@@ -470,7 +470,12 @@
   .pot div{background:var(--pine);padding:20px 22px;flex:1}
   .band-alt .pot div{background:var(--pine-2)}
   .pot dt{font-size:.6rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage);margin:0 0 8px}
-  .pot dd{margin:0;font-family:var(--display);font-size:1.6rem;color:var(--bone);font-variant-numeric:tabular-nums}
+  /* 2026-09-01 (Riley): money numerals in the workhorse sans — Bodoni's
+     hairline strokes were unreadable at this size on the dark ground.
+     Labels keep the small-caps ceremony; the NUMBER is for reading.
+     (Broadcast idiom: serif mastheads, sans figures.) */
+  .pot dd{margin:0;font-family:var(--ui);font-weight:600;font-size:1.5rem;letter-spacing:.01em;
+          color:var(--bone);font-variant-numeric:tabular-nums lining-nums}
   .mn-head,.mn-row{display:grid;grid-template-columns:1fr 5rem 5rem 5.5rem;gap:10px;
                    align-items:baseline;padding:13px 6px}
   .mn-head{font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);
@@ -2914,9 +2919,11 @@ function renderCalcutta(){
   }
 
   $("#calPot").textContent=money(pot);
-  $("#calRake").textContent=rakePct?money(rake)+" ("+rakePct+"%)":"None";
+  // Riley 2026-09-01: the big line is ONLY the dollar figure — annotations
+  // demote to the small sub-line (same shape Outstanding already uses).
+  $("#calRake").innerHTML=rakePct?money(rake)+"<small>"+esc(rakePct)+"% rake</small>":"None";
   $("#calPayable").textContent=money(payable);
-  $("#calTop").textContent=money(lots[0].price)+" · "+lots[0].team;
+  $("#calTop").innerHTML=money(lots[0].price)+"<small>"+esc(lots[0].team)+"</small>";
 
   const outTotal=outstanding.reduce((s,o)=>s+o.total,0);
   $("#calOut").innerHTML=outstanding.length
