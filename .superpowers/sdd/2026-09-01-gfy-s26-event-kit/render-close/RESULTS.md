@@ -250,7 +250,7 @@ below).
   `score_endpoint`, a missing 2026-08-16 schedule row, 3 Calcutta teams
   with no matching Field row, first-time-invitee sponsor WARNs). None of
   this is caused by this task's diff (CSS + two JS-adjacent tool files,
-  nowhere near sheet-content parsing). Exit code 0.
+  nowhere near sheet-content parsing). Exit 1 (48 pre-existing sheet-content FAILs — sample residue, unarmed scorer, calcutta cross-tab; identical at base becf0a1, none caused by this diff).
 - Final HEAD before this task: `5122934` (Tasks 1-3, verified matching the
   wave's stated base).
 
