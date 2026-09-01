@@ -1059,12 +1059,21 @@
      for anyone", not a prefers-reduced-motion carve-out, so there is
      nothing to guard here. Canvas: tv-canvas-reference.md (Riley-approved
      canvas artifact c7f7775e, TVMode board) — fix round 1 review brought
-     this block into alignment with it (I6/rest). */
+     this block into alignment with it (I6/rest).
+     Task 4 render-close finding: the page's own site-wide <footer> (crest +
+     "GFY" + "McCall, Idaho · Est. 2019") was NOT in this hide-list — it
+     never overlaps the visible frame (it is simply the next sibling after
+     #tvMode in normal flow, so on a real fixed-resolution kiosk with no
+     scroll it is never seen), but it inflates document scrollHeight and
+     would leak into view on any hardware/software combination that DOES
+     allow a scroll or resize past the physical frame — a real gap against
+     this block's own "the normal chrome... hides entirely" claim. */
   body[data-view="tv"] .nav,
   body[data-view="tv"] #mastBar,
   body[data-view="tv"] #announceBar,
   body[data-view="tv"] #healthStrip,
-  body[data-view="tv"] #debugPanel{display:none!important}
+  body[data-view="tv"] #debugPanel,
+  body[data-view="tv"] footer{display:none!important}
   body[data-view="tv"]{cursor:none}
   #tvMode{padding:0;background:var(--pine-3)}
   .tv-wrap{min-height:100vh;display:flex;flex-direction:column;background:var(--pine-3)}
@@ -1102,6 +1111,18 @@
   .tv-scale .lb-name{font-size:36px}
   .tv-scale .lb-thru{font-size:24px}
   .tv-scale .lb-tot{font-size:50px;font-weight:600}
+  /* Task 4 render-close finding: .lb-tot is shared between the DATA cells
+     (meant to get the 50px numeral treatment above) and the HEAD row's own
+     "To par"/"Total" column-label cells (#tvToParHead carries the identical
+     .lb-tot class) — without this, the 50px/600 rule also inflated the
+     header label, which then word-wrapped ("TO"/"PAR") inside its 190px
+     column and pushed the whole panel's content taller than a 1280x720
+     viewport, hiding the footer (dots + "Rotates every 20 seconds") off the
+     bottom of the screen entirely. Scoped to .lb-head so it wins on
+     specificity over the rule above without touching the data cells; the
+     header keeps a single readable line, matching how the Board's own
+     (non-TV) .lb-head/.lb-tot pairing already keeps header text small. */
+  .tv-scale .lb-head .lb-tot{font-size:20px}
   .tv-scale .lb-row.lead{background:rgba(200,162,74,.07)}
   /* the round toggle has no click wiring on the TV grid (no listener is
      bound to #tvGridRounds — only #sgRounds, the Board's own), and I7 pins
@@ -1127,6 +1148,48 @@
   .tv-dot.on + .tv-dot-label{color:var(--bone)}
   .tv-rotate-note{font-size:13px;letter-spacing:.24em;text-transform:uppercase;
     color:var(--brass-dim);margin:0}
+  /* Task 4 render-close finding: at a 1280x720 kiosk (a real, in-scope TV
+     resolution, not just 1920x1080) the Leaderboard content ran past the
+     viewport bottom at the sizes above, hiding .tv-foot (the dots strip +
+     "Rotates every 20 seconds") off-screen entirely with no scroll
+     mechanism a kiosk could use to reveal it — true even for the plain
+     5-row case, and worse for the 6-row "5-plus-ties" cut a real tie at
+     rank 5 produces (tvLeaderboardCut() is not capped at 5). Scoped to a
+     max-height query (never max-width — this is a vertical-fit problem,
+     not a narrow-screen one) so 1920x1080 and taller keeps the full
+     "large-type-first" scale verbatim; only the constrained-height case
+     steps down. Empirically verified against BOTH the 5-row default
+     fixture and a 12-team fixture with a real tie at rank 5 (6 rows) —
+     footer fully on-screen with room to spare in each case, not a
+     hairline fit. A tie wide enough to seat a 7th+ row is not covered
+     (unbounded in principle; not attempted — real Calcutta fields rarely
+     produce 3-plus-way ties at the cut line, and there is no scroll
+     fallback to build toward for a kiosk regardless). */
+  @media (max-height:720px){
+    /* .tv-panel{min-height:60vh} (432px of the 720px budget on its own) was
+       the dominant, previously-unaccounted-for cost — content-driven sizing
+       here so a tied 6th row (12-team-fixture "5-plus-ties" cut, the real
+       worst case tvLeaderboardCut() can produce) has room instead of
+       fighting a fixed floor that never shrinks. */
+    .tv-panel{min-height:auto}
+    .tv-panels{padding-top:16px;padding-bottom:16px}
+    .tv-scale .lb-head,.tv-scale .lb-row{padding:8px 8px}
+    .tv-scale .lb-pos{font-size:32px}
+    .tv-scale .lb-name{font-size:24px}
+    .tv-scale .lb-thru{font-size:16px}
+    .tv-scale .lb-tot{font-size:32px}
+    .tv-scale .lb-head .lb-tot{font-size:16px}
+    /* Same finding, Card panel: #tvGrid's row padding + .tv-foot's own
+       padding (48px vertical, 18+30) left the dots strip's CONTENT below
+       the fold even after the .tv-panels trim above (measured: footer
+       border visible right at the bottom edge, but .tv-dots itself landed
+       3-24px past window.innerHeight depending on roster size) — trimmed
+       both by the same amount the Leaderboard rows lost, nothing font-size
+       related here (the grid's own 1.3rem cell type is untouched, only
+       breathing room). */
+    #tvGrid .sg-t th,#tvGrid .sg-t td{padding:6px 7px}
+    .tv-foot{padding:10px 36px 14px}
+  }
   /* ---------- /S26 K-TV CSS ---------- */
 </style>
 </head>

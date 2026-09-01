@@ -197,6 +197,19 @@ export function normalizeFieldYear(raw, seasonY) {
   const n = parseInt(String(raw).trim().replace(/,/g, ""), 10);
   return isNaN(n) ? String(raw) : String(n);
 }
+// Task 4 folded-in fix A: the SAME predicate normalizeFieldYear's own isNaN
+// branch uses (blank is never "unparseable" — it defaults to seasonY above),
+// exported so generateKit() can COUNT unparseable rows without re-deriving
+// the parse rule a second time. Closes the silent-empty-page residual: a
+// Field tab where every year cell is garbage used to drop every row out of
+// rosterMap() with zero visible sign anything was excluded (a genuinely
+// empty Field tab and an all-garbage one rendered the identical "No team
+// captains found" page).
+export function isUnparseableYear(raw) {
+  if (!raw || !String(raw).trim()) return false;
+  const n = parseInt(String(raw).trim().replace(/,/g, ""), 10);
+  return isNaN(n);
+}
 
 /* ---------- roster / captain ----------
    Mirrors index.html's rosterMap() (lines 1955-1966) + captainLabel()
@@ -480,6 +493,16 @@ export function generateKit({ fieldCsv, infoCsv, now = new Date() }) {
   const warnings = [];
   if (maxFieldYear !== null && maxFieldYear > seasonNum) {
     warnings.push(`Field contains rows for ${maxFieldYear} — verify season before printing`);
+  }
+  // Task 4 folded-in fix A: unparseable-year rows are silently excluded from
+  // rosterMap() (I2's own "row excluded from year filtering" comment) — loud
+  // on the same two channels I3 already uses (stderr via main()'s warnings
+  // loop, and the visible .cards-warn note via buildCardsHtml), so an
+  // all-garbage Field tab reads as "excluded, N rows" rather than looking
+  // identical to a genuinely empty one.
+  const unparseableCount = field.rows.filter(r => isUnparseableYear(r.year)).length;
+  if (unparseableCount > 0) {
+    warnings.push(`${unparseableCount} Field rows had unparseable years and were excluded`);
   }
 
   const stamp = genStamp(now);

@@ -894,6 +894,10 @@ tools/gfy-promote.gs          Apps Script GFY menu — Promote committed → Fie
 tools/presend-check.mjs       the pre-send checker — vault diff, DNI check, email-leak watchdog (see above)
 tools/check_template.py       drift check: xlsx templates vs their generators (npm run check-template)
 tools/gid-check.mjs           drift check: config.js gids vs the live published sheet (npm run check-gids)
+tools/print/make-kit.mjs      generates the lodge poster + captain cards from the published Field/Info tabs (npm run make-kit; writes tools/print/out/, gitignored)
+tools/print/qr.mjs            QR-svg API used by make-kit.mjs, over the vendored encoder in tools/print/qr-vendor.mjs
+tools/print/qr.test.mjs       QR encoder/API test, incl. a decode-side round-trip proof (npm run check-qr)
+tools/print/make-kit.test.mjs make-kit.mjs's own test — vault guard, structural guard, year rules (npm run check-kit)
 fixtures/                     sample CSVs mirroring the 14 tabs, incl. edge cases
 test/smoke.mjs                headless render test against the fixtures
 ```

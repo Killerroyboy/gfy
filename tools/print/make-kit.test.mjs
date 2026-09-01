@@ -18,7 +18,7 @@
 // guard testable at all without standing up a fake Google Sheets endpoint.
 import {
   parseCsv, vaultGuardHeaders, assertNoAt, assertFieldsNoAt, currentSeason,
-  rosterMap, normalizeFieldYear, genStamp, cardStamp, scoreUrlFor,
+  rosterMap, normalizeFieldYear, isUnparseableYear, genStamp, cardStamp, scoreUrlFor,
   posterQrSvg, cardQrSvg, generateKit, SITE_ROOT,
 } from "./make-kit.mjs";
 
@@ -300,6 +300,35 @@ const NOW = new Date("2026-09-01T14:32:00-06:00");
     && kitDivergent.teamCount === kitNormal.teamCount
     && kitNormal.warnings.length === 0
     && !kitNormal.cards.includes("verify season before printing"));
+}
+
+/* ---------- (o) Task 4 folded-in fix A: unparseable-year rows, both channels ---------- */
+{
+  // Every row's year is garbage (never blank — blank defaults to seasonY and
+  // is not "unparseable") -> rosterMap() has nothing to match the season
+  // against, so the roster is empty and the page falls back to its "No team
+  // captains found" copy — but warnings must say WHY, not render identically
+  // to a genuinely-empty Field tab.
+  const allGarbageFieldCsv = `year,player,team,since
+xyz,Wade Johnson,Wade Johnson,2022
+n/a,Duck,Duck,2019
+???,Hammer,Duck,2019`;
+  const kitGarbage = generateKit({ fieldCsv: allGarbageFieldCsv, infoCsv: INFO_CSV, now: NOW });
+  const kitNormal = generateKit({ fieldCsv: FIELD_CSV, infoCsv: INFO_CSV, now: NOW });
+
+  check("K-KIT-s (Task 4 fix A): isUnparseableYear(\"\")===false (blank defers to seasonY, never counted as unparseable) and isUnparseableYear(\"xyz\")===true",
+    isUnparseableYear("") === false
+    && isUnparseableYear("   ") === false
+    && isUnparseableYear("xyz") === true
+    && isUnparseableYear("2,026") === false // comma-stripped -> parses fine
+    && isUnparseableYear("2026.0") === false); // parseInt truncates -> parses fine
+
+  check("K-KIT-s (Task 4 fix A): an all-garbage-year Field fixture (3 rows, no row matches the season) -> kit.warnings contains \"3 Field rows had unparseable years and were excluded\" VERBATIM, the identical string is visible on the captain-cards page, teamCount is 0 (still zero cards, never a hard abort), and a NORMAL fixture (no garbage years) carries no such warning on either side",
+    kitGarbage.teamCount === 0
+    && kitGarbage.warnings.includes("3 Field rows had unparseable years and were excluded")
+    && kitGarbage.cards.includes("3 Field rows had unparseable years and were excluded")
+    && kitNormal.warnings.every(w => !/unparseable/.test(w))
+    && !kitNormal.cards.includes("unparseable"));
 }
 
 /* ---------- (n) m7: whole-document "@" count is pinned, not just body-scoped ---------- */

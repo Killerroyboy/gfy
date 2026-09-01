@@ -7680,9 +7680,16 @@ const nowW = Date.now();
   // #tv elsewhere, but a fresh one keeps this check independent of suite
   // order like T3's own mastBar check does). Fix round 1, m2: #announceBar
   // joins the hidden set (undismissable on a kiosk — no cursor to dismiss
-  // it with, and it must never survive on-screen forever).
+  // it with, and it must never survive on-screen forever). Task 4
+  // render-close finding: the page's own site-wide <footer> joins it too —
+  // it never overlaps the visible TV frame (next sibling after #tvMode in
+  // normal flow, invisible on a real fixed-resolution kiosk), but it was
+  // inflating document scrollHeight and would leak into view on any
+  // hardware/software combination that allows a scroll/resize past the
+  // physical frame — a real gap against this rule's own "hides entirely"
+  // claim.
   const idxT1a = readFileSync(path.join(ROOT, "index.html"), "utf8");
-  const hidesChrome = /body\[data-view="tv"\]\s*\.nav,\s*body\[data-view="tv"\]\s*#mastBar,\s*body\[data-view="tv"\]\s*#announceBar,\s*body\[data-view="tv"\]\s*#healthStrip,\s*body\[data-view="tv"\]\s*#debugPanel\{[^}]*display:\s*none\s*!important\}/.test(idxT1a);
+  const hidesChrome = /body\[data-view="tv"\]\s*\.nav,\s*body\[data-view="tv"\]\s*#mastBar,\s*body\[data-view="tv"\]\s*#announceBar,\s*body\[data-view="tv"\]\s*#healthStrip,\s*body\[data-view="tv"\]\s*#debugPanel,\s*body\[data-view="tv"\]\s*footer\{[^}]*display:\s*none\s*!important\}/.test(idxT1a);
   const hidesCursor = /body\[data-view="tv"\]\{[^}]*cursor:\s*none\}/.test(idxT1a);
 
   const domT1a = makeDom("");
@@ -7699,7 +7706,7 @@ const nowW = Date.now();
     && !!dT1a.getElementById("tvClock");
   domT1a.window.close();
 
-  check("S26-T1a: #tv route renders #tvMode and hides every other .view (showView DOM assert); CSS hides .nav/#mastBar/#announceBar/#healthStrip/#debugPanel under body[data-view=\"tv\"] (fix round 1, m2 adds #announceBar — undismissable on a kiosk) AND sets cursor:none on it (source assert, exact selectors)",
+  check("S26-T1a: #tv route renders #tvMode and hides every other .view (showView DOM assert); CSS hides .nav/#mastBar/#announceBar/#healthStrip/#debugPanel/footer under body[data-view=\"tv\"] (fix round 1, m2 adds #announceBar — undismissable on a kiosk; Task 4 render-close adds the page's own <footer> — never overlaps the frame, but was leaking into scrollHeight) AND sets cursor:none on it (source assert, exact selectors)",
     hidesChrome && hidesCursor && routeOk,
     "hidesChrome=" + hidesChrome + " hidesCursor=" + hidesCursor + " routeOk=" + routeOk);
 }
