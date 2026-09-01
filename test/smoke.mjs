@@ -7366,6 +7366,89 @@ const nowW = Date.now();
 }
 
 /* ---------------------------------------------------------------------
+   GROUP AY — a11y + accepted follow-ups wave (BACKLOG #5, 2026-08-31).
+   Sheet focus/keyboard, instant board-btn on confirm (+ season-pin),
+   suppressed-board on-surface explainer. Hole-panel-head hardening was
+   found ALREADY carried by the D3-era sgPanel checks — not duplicated.
+   --------------------------------------------------------------------- */
+
+// AY1: score-sheet focus contract — opening the pad moves focus INTO the
+// dialog; Tab wraps within it; Escape closes via the SAME shared closeSheet
+// the veil uses (keep-then-reopen — nothing destructive) and focus RETURNS
+// to the invoking hole's cell in the rebuilt card. The keydown wiring binds
+// to the shared `pad` const (#scConSheet||#scSheet), so the conflict sheet
+// rides the same path (source-asserted; behavioral proof on #scSheet).
+{
+  const domAY1 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());  // scorer is armed-gated: no endpoint = no card
+  const w = domAY1.window;
+  const d = await openScorer(domAY1);
+  d.querySelector('.sc-cell[data-hole="3"]').click();
+  await until(() => { const sh = d.querySelector("#scSheet"); return !!sh && !sh.hidden; });
+  const sheet = d.querySelector("#scSheet");
+  const focusIn = !!d.activeElement && sheet.contains(d.activeElement);
+  const btns = [...sheet.querySelectorAll("button:not([disabled])")];
+  btns[btns.length - 1].focus();
+  sheet.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+  const wrapped = d.activeElement === btns[0];
+  btns[0].focus();
+  sheet.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+  const wrappedBack = d.activeElement === btns[btns.length - 1];
+  d.querySelector("#scSheet").dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await until(() => { const sh = d.querySelector("#scSheet"); return !sh || sh.hidden; });
+  const returned = d.activeElement === d.querySelector('.sc-cell[data-hole="3"]');
+  const idxAY = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const sharedWiring = /pad\.addEventListener\("keydown"/.test(idxAY);
+  check("AY1: pad focus contract — focus enters the open sheet; Tab and Shift+Tab wrap; Escape closes (shared closeSheet) and focus returns to the invoking cell; keydown bound to the shared pad const (conflict sheet same path)",
+    focusIn && wrapped && wrappedBack && returned && sharedWiring,
+    "focusIn=" + focusIn + " wrapped=" + wrapped + " wrappedBack=" + wrappedBack +
+      " returned=" + returned + " shared=" + sharedWiring +
+      " active=" + (d.activeElement && (d.activeElement.id || d.activeElement.className)));
+  domAY1.window.close();
+}
+
+// AY3: identity confirm renders the board button IMMEDIATELY (no <=60s
+// renderAll wait — the accepted rev-3 residual, now closed), and the button
+// stays scorerSeason-pinned when the archive year picker moves.
+{
+  const domAY3 = makeDom("#score?team=" + encodeURIComponent("Duck"), withScEndpoint());
+  const w = domAY3.window, d = w.document;
+  await until(() => !!d.querySelector("#scConfirmBtn"));
+  d.querySelector("#scConfirmBtn").click();
+  const instant = !!d.querySelector("#boardScoreBtn");   // synchronous — no until() before this read
+  w.eval("STATE.year='2025'; renderAll();");
+  const afterPoke = d.querySelector("#boardScoreBtn");
+  check("AY3: #boardScoreBtn exists synchronously after Confirm (no renderAll wait) and survives a year-picker poke still naming Team Duck (scorerSeason pin)",
+    instant && !!afterPoke && /Duck/.test(afterPoke.textContent || ""),
+    "instant=" + instant + " afterPoke=" + JSON.stringify(afterPoke && afterPoke.textContent));
+  domAY3.window.close();
+}
+
+// AY4: suppressed-board on-surface explainer (§21 follow-up) — with a
+// null courseMap (blank par) the Board itself SAYS why Pos is dashes;
+// the normal fixture never shows it. Rendered conditionally in JS (no
+// [hidden]-vs-cascade exposure — the .btn[hidden] lesson).
+{
+  const courseBad = ["hole,par,yards"]
+    .concat(Array.from({ length: 18 }, (_, i) => (i + 1) + "," + (i === 6 ? "" : 4) + ",400"))
+    .join("\n");
+  const badFetch = withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBad }),
+  });
+  const domBad = makeDom("", badFetch);
+  await until(() => (domBad.window.document.querySelectorAll("#lbBody .lb-row").length) > 0);
+  const badText = (domBad.window.document.querySelector('[data-view="board"]') || {}).textContent || "";
+  domBad.window.close();
+  const domOk = makeDom("");
+  await until(() => (domOk.window.document.querySelectorAll("#lbBody .lb-row").length) > 0);
+  const okText = (domOk.window.document.querySelector('[data-view="board"]') || {}).textContent || "";
+  domOk.window.close();
+  check("AY4: suppressed board carries its own explainer (/need all 18 pars/ + raw gross) on-surface; absent on a complete course",
+    /need all 18 pars/.test(badText) && /raw gross/.test(badText)
+      && !/need all 18 pars/.test(okText),
+    "bad=" + badText.slice(0, 260));
+}
+
+/* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
 const groupTally = {};
