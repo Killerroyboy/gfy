@@ -1,0 +1,411 @@
+{
+  "lbFresh-1280x720": {
+    "pageHorizontalOverflow": false,
+    "pageVerticalOverflow": false,
+    "footBorderTop": "1px solid rgba(200, 162, 74, 0.25)",
+    "footJustify": "space-between",
+    "noteAlign": 1244,
+    "noteColor": "rgb(111, 90, 38)",
+    "noteText": "Rotates every 20 seconds",
+    "dots": [
+      {
+        "on": true,
+        "bg": "rgb(200, 162, 74)"
+      },
+      {
+        "on": false,
+        "bg": "rgba(233, 227, 211, 0.25)"
+      },
+      {
+        "on": false,
+        "bg": "rgba(233, 227, 211, 0.25)"
+      }
+    ],
+    "dotLabels": [
+      {
+        "text": "Leaderboard",
+        "color": "rgb(233, 227, 211)"
+      },
+      {
+        "text": "The Card",
+        "color": "rgb(138, 155, 140)"
+      },
+      {
+        "text": "Schedule",
+        "color": "rgb(138, 155, 140)"
+      }
+    ],
+    "mastMarkSize": {
+      "w": 44,
+      "h": 57
+    },
+    "mastNameFontSize": "26px",
+    "bodyBg": "rgb(14, 32, 25)",
+    "rowCount": 5,
+    "leadRowBg": "rgba(200, 162, 74, 0.07)",
+    "posFontSize": "32px",
+    "nameFontSize": "24px",
+    "totFontSize": "32px",
+    "clockText": "Checked 2:00pm"
+  },
+  "lbStale-1280x720": {
+    "clockText": "Checked 1:54pm — data stale"
+  },
+  "cardFull-1280x720": {
+    "scrollWidth": 1208,
+    "clientWidth": 1208,
+    "horizontalCut": false,
+    "holeCount": 18,
+    "roundLabel": "Round 2",
+    "docScrollWidth": 1280,
+    "viewportWidth": 1280
+  },
+  "schedFresh-1280x720": {
+    "text": "9:00 am\n        Round One — shotgun start\n        Meadow Creek",
+    "slotCount": 1
+  },
+  "lbFresh-1920x1080": {
+    "pageHorizontalOverflow": false,
+    "pageVerticalOverflow": false,
+    "footBorderTop": "1px solid rgba(200, 162, 74, 0.25)",
+    "footJustify": "space-between",
+    "noteAlign": 1884,
+    "noteColor": "rgb(111, 90, 38)",
+    "noteText": "Rotates every 20 seconds",
+    "dots": [
+      {
+        "on": true,
+        "bg": "rgb(200, 162, 74)"
+      },
+      {
+        "on": false,
+        "bg": "rgba(233, 227, 211, 0.25)"
+      },
+      {
+        "on": false,
+        "bg": "rgba(233, 227, 211, 0.25)"
+      }
+    ],
+    "dotLabels": [
+      {
+        "text": "Leaderboard",
+        "color": "rgb(233, 227, 211)"
+      },
+      {
+        "text": "The Card",
+        "color": "rgb(138, 155, 140)"
+      },
+      {
+        "text": "Schedule",
+        "color": "rgb(138, 155, 140)"
+      }
+    ],
+    "mastMarkSize": {
+      "w": 44,
+      "h": 57
+    },
+    "mastNameFontSize": "26px",
+    "bodyBg": "rgb(14, 32, 25)",
+    "rowCount": 5,
+    "leadRowBg": "rgba(200, 162, 74, 0.07)",
+    "posFontSize": "48px",
+    "nameFontSize": "36px",
+    "totFontSize": "50px",
+    "clockText": "Checked 2:00pm"
+  },
+  "lbStale-1920x1080": {
+    "clockText": "Checked 1:54pm — data stale"
+  },
+  "cardFull-1920x1080": {
+    "scrollWidth": 1848,
+    "clientWidth": 1848,
+    "horizontalCut": false,
+    "holeCount": 18,
+    "roundLabel": "Round 2",
+    "docScrollWidth": 1920,
+    "viewportWidth": 1920
+  },
+  "schedFresh-1920x1080": {
+    "text": "9:00 am\n        Round One — shotgun start\n        Meadow Creek",
+    "slotCount": 1
+  },
+  "lbSuppressed-1280x720": {
+    "headerText": "Total",
+    "noteHidden": false,
+    "noteText": "Standings need all 18 pars on the Course tab — order shown is raw gross, no rank claims.",
+    "scaleHasSuppressedClass": true
+  },
+  "lbSuppressed-1920x1080": {
+    "headerText": "Total",
+    "noteHidden": false,
+    "noteText": "Standings need all 18 pars on the Course tab — order shown is raw gross, no rank claims.",
+    "scaleHasSuppressedClass": true
+  },
+  "lbEmpty-1280x720": {
+    "text": "No cards posted yet. Scores appear here as the sheet fills in.",
+    "color": "rgb(138, 155, 140)"
+  },
+  "schedEmpty-1280x720": {
+    "text": "Schedule not loaded yet — it lives in the sheet's Schedule tab."
+  },
+  "lbEmpty-1920x1080": {
+    "text": "No cards posted yet. Scores appear here as the sheet fills in.",
+    "color": "rgb(138, 155, 140)"
+  },
+  "schedEmpty-1920x1080": {
+    "text": "Schedule not loaded yet — it lives in the sheet's Schedule tab."
+  },
+  "cardEmpty-1280x720": {
+    "hidden": false,
+    "text": "No hole-by-hole cards yet — totals only so far."
+  },
+  "cardEmpty-1920x1080": {
+    "hidden": false,
+    "text": "No hole-by-hole cards yet — totals only so far."
+  },
+  "lb12TeamTies-1280x720": {
+    "rowCount": 6,
+    "positions": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "5"
+    ],
+    "footTop": 673.5625,
+    "lastRowBottom": 621.9375,
+    "overlapsFooter": false,
+    "pageVerticalOverflow": false
+  },
+  "lb12TeamTies-1920x1080": {
+    "rowCount": 6,
+    "positions": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "5"
+    ],
+    "footTop": 1012.890625,
+    "lastRowBottom": 984.890625,
+    "overlapsFooter": false,
+    "pageVerticalOverflow": true
+  },
+  "printFixtureKit": {
+    "teamCount": 5,
+    "season": "2026",
+    "warnings": [
+      "Field contains rows for 2027 — verify season before printing"
+    ]
+  },
+  "posterPage": {
+    "title": "The Good Friends Yearly — Poster",
+    "hasDates": true,
+    "datesText": "Aug 14–16",
+    "venueText": "Meadow Creek · Bear Creek Lodge",
+    "conditionsText": "CONDITIONS OF COMPETITION POSTED AT THE FIRST TEE",
+    "stampText": "Generated 2026-09-01 11:34am PDT",
+    "crestSrcOk": true
+  },
+  "cardsPage": {
+    "title": "The Good Friends Yearly — Captain Cards",
+    "cardCount": 5,
+    "headText": "CAPTAIN CARDS · 2026 SEASON",
+    "atCount": 0
+  },
+  "print15TeamKit": {
+    "teamCount": 15,
+    "season": "2026"
+  },
+  "pdfPagination": {
+    "numPages": 4,
+    "teamCount": 15,
+    "headerCount": 15,
+    "stampCount": 15,
+    "splitCount": 0,
+    "pairs": [
+      {
+        "i": 0,
+        "header": {
+          "page": 1,
+          "text": "T E A M C A R D 0 1"
+        },
+        "stamp": {
+          "page": 1,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 1,
+        "header": {
+          "page": 1,
+          "text": "T E A M C A R D 0 2"
+        },
+        "stamp": {
+          "page": 1,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 2,
+        "header": {
+          "page": 1,
+          "text": "T E A M C A R D 0 3"
+        },
+        "stamp": {
+          "page": 1,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 3,
+        "header": {
+          "page": 1,
+          "text": "T E A M C A R D 0 4"
+        },
+        "stamp": {
+          "page": 1,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 4,
+        "header": {
+          "page": 2,
+          "text": "T E A M C A R D 0 5"
+        },
+        "stamp": {
+          "page": 2,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 5,
+        "header": {
+          "page": 2,
+          "text": "T E A M C A R D 0 6"
+        },
+        "stamp": {
+          "page": 2,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 6,
+        "header": {
+          "page": 2,
+          "text": "T E A M C A R D 0 7"
+        },
+        "stamp": {
+          "page": 2,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 7,
+        "header": {
+          "page": 2,
+          "text": "T E A M C A R D 0 8"
+        },
+        "stamp": {
+          "page": 2,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 8,
+        "header": {
+          "page": 3,
+          "text": "T E A M C A R D 0 9"
+        },
+        "stamp": {
+          "page": 3,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 9,
+        "header": {
+          "page": 3,
+          "text": "T E A M C A R D 1 0"
+        },
+        "stamp": {
+          "page": 3,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 10,
+        "header": {
+          "page": 3,
+          "text": "T E A M C A R D 1 1"
+        },
+        "stamp": {
+          "page": 3,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 11,
+        "header": {
+          "page": 3,
+          "text": "T E A M C A R D 1 2"
+        },
+        "stamp": {
+          "page": 3,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 12,
+        "header": {
+          "page": 4,
+          "text": "T E A M C A R D 1 3"
+        },
+        "stamp": {
+          "page": 4,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 13,
+        "header": {
+          "page": 4,
+          "text": "T E A M C A R D 1 4"
+        },
+        "stamp": {
+          "page": 4,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      },
+      {
+        "i": 14,
+        "header": {
+          "page": 4,
+          "text": "T E A M C A R D 1 5"
+        },
+        "stamp": {
+          "page": 4,
+          "text": "Generated 2026-09-01 11:34am PDT · 2026"
+        },
+        "split": false
+      }
+    ]
+  }
+}
