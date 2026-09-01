@@ -8146,6 +8146,37 @@ const nowW = Date.now();
     "states=" + JSON.stringify(states));
 }
 
+{ // S26-T2a: K-QR vendored encoder — file presence + license-header gate.
+  // The actual QR logic (finder/timing patterns, determinism, the pinned
+  // sha256 change-detector, both real kit URLs) is exercised by
+  // tools/print/qr.test.mjs, run standalone via `node tools/print/qr.test.mjs`
+  // (also wired as the `check-qr` npm script). This suite has no existing
+  // precedent for shelling out to a child tool test (no child_process usage
+  // anywhere in smoke.mjs — presend-check/event-ready/gid-check are instead
+  // dynamically imported and their exported pure functions are called
+  // in-process, or their source text is read and pattern-matched), so this
+  // check follows THAT precedent: it asserts the vendored file's license
+  // header is verbatim, the provenance line is present, and the ESM export
+  // + qr.mjs API surface exist — a change-detector for the vendoring
+  // contract, not a re-run of qr.test.mjs's own assertions.
+  const vendorSrc = readFileSync(path.join(ROOT, "tools", "print", "qr-vendor.mjs"), "utf8");
+  const apiSrc = readFileSync(path.join(ROOT, "tools", "print", "qr.mjs"), "utf8");
+  let testFileExists = true;
+  try { readFileSync(path.join(ROOT, "tools", "print", "qr.test.mjs"), "utf8"); }
+  catch { testFileExists = false; }
+
+  const licenseOk = vendorSrc.includes("Copyright (c) 2009 Kazuhiko Arase")
+    && vendorSrc.includes("Licensed under the MIT license:")
+    && vendorSrc.includes("http://www.opensource.org/licenses/mit-license.php");
+  const provenanceOk = /Vendored from:\s*qrcode-generator \(Kazuhiko Arase\),\s*v[\d.]+/.test(vendorSrc);
+  const esmExportOk = /export default qrcode;/.test(vendorSrc);
+  const apiOk = /export function qrSvg\(/.test(apiSrc) && /export function qrEncode\(/.test(apiSrc);
+
+  check("S26-T2a: tools/print/qr-vendor.mjs carries the MIT license header verbatim (Copyright + license line + URL) plus a one-line provenance comment (upstream name + version), ESM-wraps the factory (`export default qrcode;`, no behavioral edits); tools/print/qr.mjs exports qrSvg/qrEncode; tools/print/qr.test.mjs exists and runs standalone via `node tools/print/qr.test.mjs`",
+    licenseOk && provenanceOk && esmExportOk && apiOk && testFileExists,
+    "license=" + licenseOk + " provenance=" + provenanceOk + " esmExport=" + esmExportOk + " api=" + apiOk + " testFile=" + testFileExists);
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
