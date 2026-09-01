@@ -15,21 +15,39 @@
 //
 //---------------------------------------------------------------------
 //
-// Vendored from: qrcode-generator (Kazuhiko Arase), v1.4.4
+// Reconstructed from: qrcode-generator (Kazuhiko Arase), v1.4.4
 // https://github.com/kazuhikoarase/qrcode-generator
+//
+// IMPORTANT: this file was reconstructed from memory (no network access to
+// fetch the actual upstream source at authoring time), not copy-pasted from
+// a verified upstream checkout — "vendored" would overstate its provenance.
+// The reconstruction pass also re-typed/re-styled the source rather than
+// transcribing it verbatim, and that rewrite is what let a real bug slip in
+// at first cut: createBytes() called the single-BIT accessor QRBitBuffer
+// .get(index) where upstream reads the raw byte array, silently truncating
+// every data codeword to 0/1 while leaving the Reed-Solomon EC codewords
+// (computed correctly over that garbage) internally consistent — so every
+// structural check (finder/timing patterns, RS validity) passed while the
+// payload was empty. Fixed by adding QRBitBuffer.prototype.getBuffer() and
+// reading buffer.getBuffer()[i + offset] at that call site. See
+// tools/print/qr.test.mjs's decode-side round-trip tests (K-QR-f1/f2),
+// added specifically because structural validity does not imply a correct
+// payload — only decoding the emitted matrix back to the original string
+// does.
 //
 // This file is the upstream single-file encoding core (matrix generation:
 // addData / make / isDark / getModuleCount), ESM-wrapped only (module scope
 // replaces the upstream UMD footer; the default export is the `qrcode`
-// factory). No behavioral edits within the vendored matrix-generation logic.
+// factory). No intentional behavioral edits within the matrix-generation
+// logic — see the bug note above for the one unintentional edit and its fix.
 // Rendering-target helpers from the upstream file (createTableTag /
 // createSvgTag / createDataURL / createImgTag and their canvas/GIF-encoder
-// internals) are intentionally not vendored — out of scope for "core", and
-// unused here since tools/print/qr.mjs renders its own SVG from isDark().
-// QRKanji is retained for fidelity but is dead code under the default
-// (Latin-1) stringToBytes, exactly as upstream — Kanji mode needs a Shift-JIS
-// byte producer, which upstream ships in a separate add-on file not vendored
-// here.
+// internals) are intentionally not reconstructed — out of scope for "core",
+// and unused here since tools/print/qr.mjs renders its own SVG from
+// isDark(). QRKanji is retained for fidelity but is dead code under the
+// default (Latin-1) stringToBytes, exactly as upstream — Kanji mode needs a
+// Shift-JIS byte producer, which upstream ships in a separate add-on file
+// not reconstructed here.
 //
 //---------------------------------------------------------------------
 
@@ -271,7 +289,7 @@ var qrcode = function(typeNumber, errorCorrectionLevel) {
       dcdata[r] = new Array(dcCount);
 
       for (var i = 0; i < dcdata[r].length; i += 1) {
-        dcdata[r][i] = 0xff & buffer.get(i + offset);
+        dcdata[r][i] = 0xff & buffer.getBuffer()[i + offset];
       }
       offset += dcCount;
 
@@ -1184,6 +1202,10 @@ QRBitBuffer.prototype = {
   get : function(index) {
     var bufIndex = Math.floor(index / 8);
     return ( (this.buffer[bufIndex] >>> (7 - index % 8) ) & 1) == 1;
+  },
+
+  getBuffer : function() {
+    return this.buffer;
   },
 
   put : function(num, length) {

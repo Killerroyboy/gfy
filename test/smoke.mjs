@@ -8168,7 +8168,7 @@ const nowW = Date.now();
   const licenseOk = vendorSrc.includes("Copyright (c) 2009 Kazuhiko Arase")
     && vendorSrc.includes("Licensed under the MIT license:")
     && vendorSrc.includes("http://www.opensource.org/licenses/mit-license.php");
-  const provenanceOk = /Vendored from:\s*qrcode-generator \(Kazuhiko Arase\),\s*v[\d.]+/.test(vendorSrc);
+  const provenanceOk = /Reconstructed from:\s*qrcode-generator \(Kazuhiko Arase\),\s*v[\d.]+/.test(vendorSrc);
   const esmExportOk = /export default qrcode;/.test(vendorSrc);
   const apiOk = /export function qrSvg\(/.test(apiSrc) && /export function qrEncode\(/.test(apiSrc);
 
