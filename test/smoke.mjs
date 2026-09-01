@@ -8177,6 +8177,40 @@ const nowW = Date.now();
     "license=" + licenseOk + " provenance=" + provenanceOk + " esmExport=" + esmExportOk + " api=" + apiOk + " testFile=" + testFileExists);
 }
 
+{ // S26-T3a: K-PRINT poster + captain-cards generator — file presence +
+  // exported-surface gate, following S26-T2a's own precedent exactly: the
+  // actual generator logic (vault guard, structural guard, dates/venue
+  // fallbacks, generation stamp, encoded QR targets, roster/captain
+  // mirroring) is exercised by tools/print/make-kit.test.mjs, run
+  // standalone via `node tools/print/make-kit.test.mjs`. This suite has no
+  // child_process precedent (see S26-T2a's comment), so this check instead
+  // asserts make-kit.mjs's pure exports and make-kit.test.mjs's presence —
+  // a change-detector for the module's public surface, not a re-run of
+  // make-kit.test.mjs's own assertions.
+  const kitSrc = readFileSync(path.join(ROOT, "tools", "print", "make-kit.mjs"), "utf8");
+  let testFileExists = true;
+  try { readFileSync(path.join(ROOT, "tools", "print", "make-kit.test.mjs"), "utf8"); }
+  catch { testFileExists = false; }
+
+  const exportsOk = [
+    "export function readConfig(", "export function parseCsv(",
+    "export function vaultGuardHeaders(", "export function assertNoAt(",
+    "export function currentSeason(", "export function rosterMap(",
+    "export function genStamp(", "export function scoreUrlFor(",
+    "export function posterQrSvg(", "export function cardQrSvg(",
+    "export function generateKit(", "export const SITE_ROOT",
+  ].every(sig => kitSrc.includes(sig));
+  const qrImportOk = /import\s*\{\s*qrSvg\s*\}\s*from\s*"\.\/qr\.mjs"/.test(kitSrc);
+  const importLines = kitSrc.split("\n").filter(l => /^import\b/.test(l));
+  const nonNodeImports = importLines.filter(l => !/from\s+"node:/.test(l));
+  const noOtherImportsOk = nonNodeImports.length === 1 && /from\s*"\.\/qr\.mjs"/.test(nonNodeImports[0]);
+  const gitignoreOk = readFileSync(path.join(ROOT, ".gitignore"), "utf8").includes("tools/print/out/");
+
+  check("S26-T3a: tools/print/make-kit.mjs exists, imports qrSvg from ./qr.mjs (and no non-node-builtin dependency beyond it), and exports the pure generator surface (readConfig/parseCsv/vaultGuardHeaders/assertNoAt/currentSeason/rosterMap/genStamp/scoreUrlFor/posterQrSvg/cardQrSvg/generateKit/SITE_ROOT); tools/print/make-kit.test.mjs exists and runs standalone via `node tools/print/make-kit.test.mjs`; .gitignore excludes tools/print/out/",
+    exportsOk && qrImportOk && noOtherImportsOk && testFileExists && gitignoreOk,
+    "exports=" + exportsOk + " qrImport=" + qrImportOk + " noOtherImports=" + noOtherImportsOk + " testFile=" + testFileExists + " gitignore=" + gitignoreOk);
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
