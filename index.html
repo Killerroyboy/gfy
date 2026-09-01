@@ -2017,16 +2017,11 @@ function renderLeaderboard(){
   // AY (BACKLOG #5, §21 follow-up): the suppressed board SAYS why on-surface
   // — dashes-with-no-explanation read as broken to a cold viewer. Rendered
   // conditionally in JS (never a [hidden] toggle — the .btn[hidden] cascade
-  // lesson); copy stays in the pinned §20/§21 phrasing family.
-  {
-    const old=board&&board.querySelector("#lbSuppNote");
-    if(old) old.remove();
-    if(parsSuppressed&&board){
-      const head=board.querySelector(".mast-rule")||board.querySelector(".lede");
-      if(head) head.insertAdjacentHTML("afterend",
-        '<p class="basis" id="lbSuppNote">Standings need all 18 pars on the Course tab — order shown is raw gross, no rank claims.</p>');
-    }
-  }
+  // lesson); copy stays in the pinned §20/§21 phrasing family. Review F3:
+  // note is inserted AFTER the zero-players early return below — an empty
+  // board has no "order shown" to describe.
+  const oldSuppNote=board&&board.querySelector("#lbSuppNote");
+  if(oldSuppNote) oldSuppNote.remove();
   if(!players.length){
     // S-STALE (live bug, fixed here): this used to just `return`, leaving
     // whatever rows were already in #lbBody on screen under a fresh
@@ -2038,6 +2033,11 @@ function renderLeaderboard(){
     const mvBasisEmpty=$("#lbMvBasis"); if(mvBasisEmpty) mvBasisEmpty.textContent="";
     renderScoreGrid([]);
     return;
+  }
+  if(parsSuppressed&&board){
+    const suppHead=board.querySelector(".mast-rule")||board.querySelector(".lede");
+    if(suppHead) suppHead.insertAdjacentHTML("afterend",
+      '<p class="basis" id="lbSuppNote">Standings need all 18 pars on the Course tab — order shown is raw gross, no rank claims.</p>');
   }
   const wdKeys=wdKeySet();
   // §25a B-MV: movement diffs against the PREVIOUS successful paint only,
@@ -4025,7 +4025,7 @@ function scShowCard(seasonY,team){
   $("#scPicker").hidden=true;
   if(STATE.scTeam!==team||STATE.scSeason!==seasonY){
     // fresh team/season — don't let a stale open pad or round override leak across.
-    STATE.scPadHole=null; STATE.scRoundOverride=null;
+    STATE.scPadHole=null; STATE.scRoundOverride=null; STATE.scPadReturnHole=null; // review F2: never carry focus-return across views
     STATE.scPadOtherOpen=false; STATE.scOldRoundExpanded=null;
   }
   STATE.scTeam=team; STATE.scSeason=seasonY;
@@ -4050,6 +4050,7 @@ function scShowInert(){
 }
 function scShowPicker(seasonY){
   STATE.scConfirmPending=null;
+  STATE.scPadReturnHole=null;   // review F2: a team switch must not carry focus-return to the NEW team's card
   // SC-SWITCH-GUARD (task 3, fix round 1, Important #2): #scSwitch makes
   // this reachable from an ALREADY-confirmed card view now (rev 2's
   // #scNotYou only ever fired pre-confirm) — "the picker is the
@@ -4976,10 +4977,18 @@ function scWireCard(){
   pad.addEventListener("keydown",e=>{
     if(e.key==="Escape"){ e.preventDefault(); closeSheet(); return; }
     if(e.key==="Tab"){
-      const f=[...pad.querySelectorAll("button:not([disabled])")];
+      // Review F1: VISIBLE buttons only — the closed "Other" overflow row
+      // (.sc-numrow, display:none unless .on) always sits LAST in the DOM;
+      // counting its unfocusable buttons made `last` unreachable, so
+      // forward-Tab escaped the dialog behind the veil in real browsers
+      // (jsdom is display-blind — the third instance of that class). The
+      // container itself (tabindex=-1, focused on open) counts as
+      // before-first so backward wrap can't escape either.
+      const f=[...pad.querySelectorAll("button:not([disabled])")]
+        .filter(b=>{ const row=b.closest(".sc-numrow"); return !row||row.classList.contains("on"); });
       if(!f.length) return;
       const first=f[0],last=f[f.length-1];
-      if(e.shiftKey&&document.activeElement===first){ e.preventDefault(); last.focus(); }
+      if(e.shiftKey&&(document.activeElement===first||document.activeElement===pad)){ e.preventDefault(); last.focus(); }
       else if(!e.shiftKey&&document.activeElement===last){ e.preventDefault(); first.focus(); }
     }
   });
@@ -5155,6 +5164,7 @@ function renderScorer(){
     // `STATE.scPadHole!=null` guard) so a no-op case just re-clears
     // already-empty state — one fewer branch to get wrong.
     STATE.scPadHole=null; STATE.scPadOtherOpen=false;
+    STATE.scPadReturnHole=null;   // review F2: the navigate-away reset is a leave path too — never carry focus-return back in
     const sheetHost=$("#scSheetHost");
     if(sheetHost) sheetHost.innerHTML="";
     return;

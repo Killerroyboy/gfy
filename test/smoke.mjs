@@ -7386,21 +7386,34 @@ const nowW = Date.now();
   await until(() => { const sh = d.querySelector("#scSheet"); return !!sh && !sh.hidden; });
   const sheet = d.querySelector("#scSheet");
   const focusIn = !!d.activeElement && sheet.contains(d.activeElement);
-  const btns = [...sheet.querySelectorAll("button:not([disabled])")];
+  // Review F1: the trap must wrap over VISIBLE buttons — the closed Other
+  // overflow row (.sc-numrow, display:none) always sits LAST in the DOM and
+  // jsdom is display-blind, so this list is built INDEPENDENTLY of the
+  // handler's own selector (validating a trap against its own list was how
+  // the escape shipped). Fresh pad = numrow closed = these differ.
+  const btns = [...sheet.querySelectorAll("button:not([disabled])")]
+    .filter(b => !b.closest(".sc-numrow"));
+  const hadHiddenTail = sheet.querySelectorAll(".sc-numrow button").length > 0;
   btns[btns.length - 1].focus();
   sheet.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
   const wrapped = d.activeElement === btns[0];
   btns[0].focus();
   sheet.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
   const wrappedBack = d.activeElement === btns[btns.length - 1];
+  // container itself counts as before-first: Shift+Tab from the freshly
+  // focused pad must wrap to the last VISIBLE button, never escape.
+  sheet.focus();
+  sheet.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+  const containerBack = d.activeElement === btns[btns.length - 1];
   d.querySelector("#scSheet").dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   await until(() => { const sh = d.querySelector("#scSheet"); return !sh || sh.hidden; });
   const returned = d.activeElement === d.querySelector('.sc-cell[data-hole="3"]');
   const idxAY = readFileSync(path.join(ROOT, "index.html"), "utf8");
   const sharedWiring = /pad\.addEventListener\("keydown"/.test(idxAY);
-  check("AY1: pad focus contract — focus enters the open sheet; Tab and Shift+Tab wrap; Escape closes (shared closeSheet) and focus returns to the invoking cell; keydown bound to the shared pad const (conflict sheet same path)",
-    focusIn && wrapped && wrappedBack && returned && sharedWiring,
-    "focusIn=" + focusIn + " wrapped=" + wrapped + " wrappedBack=" + wrappedBack +
+  const visibleFilter = /closest\("\.sc-numrow"\)/.test(idxAY);   // F1: the handler filters the hidden overflow row
+  check("AY1: pad focus contract — focus enters the open sheet; Tab and Shift+Tab wrap over VISIBLE buttons (hidden Other-row tail excluded, container counts as before-first); Escape closes (shared closeSheet) and focus returns to the invoking cell; keydown bound to the shared pad const (conflict sheet same path)",
+    focusIn && wrapped && wrappedBack && containerBack && hadHiddenTail && visibleFilter && returned && sharedWiring,
+    "focusIn=" + focusIn + " wrapped=" + wrapped + " wrappedBack=" + wrappedBack + " containerBack=" + containerBack +
       " returned=" + returned + " shared=" + sharedWiring +
       " active=" + (d.activeElement && (d.activeElement.id || d.activeElement.className)));
   domAY1.window.close();
@@ -7442,10 +7455,21 @@ const nowW = Date.now();
   await until(() => (domOk.window.document.querySelectorAll("#lbBody .lb-row").length) > 0);
   const okText = (domOk.window.document.querySelector('[data-view="board"]') || {}).textContent || "";
   domOk.window.close();
-  check("AY4: suppressed board carries its own explainer (/need all 18 pars/ + raw gross) on-surface; absent on a complete course",
+  // Review F3: an EMPTY suppressed board has no "order shown" to describe —
+  // the note must not contradict the empty state above it.
+  const emptyBadFetch = withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBad }),
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => "year,team,player\n" }),
+  });
+  const domEmpty = makeDom("", emptyBadFetch);
+  await until(() => /No cards posted yet/.test(domEmpty.window.document.querySelector("#lbBody")?.textContent || ""));
+  const emptyText = (domEmpty.window.document.querySelector('[data-view="board"]') || {}).textContent || "";
+  domEmpty.window.close();
+  check("AY4: suppressed board carries its own explainer (/need all 18 pars/ + raw gross) on-surface; absent on a complete course; absent again on an EMPTY suppressed board (no order to describe)",
     /need all 18 pars/.test(badText) && /raw gross/.test(badText)
-      && !/need all 18 pars/.test(okText),
-    "bad=" + badText.slice(0, 260));
+      && !/need all 18 pars/.test(okText)
+      && !/need all 18 pars/.test(emptyText) && /No cards posted yet/.test(emptyText),
+    "bad=" + badText.slice(0, 200) + " empty=" + emptyText.slice(0, 120));
 }
 
 /* ---------------------------------------------------------------------
