@@ -1029,6 +1029,47 @@
     text-decoration:none;cursor:pointer;display:inline-block}
   .sc-board-btn:hover{border-color:var(--brass);color:var(--bone)}
   .sc-board-btn:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+
+  /* ---------- S26 K-TV: lodge television route ----------
+     A fixed kiosk display, not a page a person scrolls or clicks — the
+     normal chrome (nav, #mastBar, the diagnostic strips) hides entirely and
+     the cursor hides with it. Panel swap is a HARD CUT: nothing in this
+     block carries transition/animation — the spec's reduced-motion ruling
+     is "no transition/animation on the swap for anyone", not a
+     prefers-reduced-motion carve-out, so there is nothing to guard here. */
+  body[data-view="tv"] .nav,
+  body[data-view="tv"] #mastBar,
+  body[data-view="tv"] #healthStrip,
+  body[data-view="tv"] #debugPanel{display:none!important}
+  body[data-view="tv"]{cursor:none}
+  #tvMode{padding:0}
+  .tv-wrap{min-height:100vh;display:flex;flex-direction:column}
+  .tv-mast{display:flex;align-items:center;gap:14px;padding:18px 32px;
+    background:rgba(10,23,18,.6);border-bottom:1px solid rgba(200,162,74,.2)}
+  .tv-mast .mast-mark{width:24px;height:31px}
+  .tv-mast .mast-name{font-size:1.15rem}
+  .tv-clock{margin-left:auto;font-size:.85rem;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--brass);white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  .tv-panels{flex:1;padding:28px 36px}
+  .tv-panel{min-height:60vh}
+  .tv-panel .eyebrow{font-size:.9rem}
+  /* K-TV-SCALE: large-type leaderboard — a CSS transform on a wrapper class,
+     never a second row template (lbRowHTML is reused verbatim, same ctx
+     idiom renderHomeBoard already uses: mv:null, interactive:false). The
+     compensating width keeps the scaled content inside the panel instead of
+     overflowing it (the standard 100/scale trick). */
+  .tv-scale{transform:scale(1.6);transform-origin:top left;width:62.5%}
+  /* the round toggle has no click wiring on the TV grid (no listener is
+     bound to #tvGridRounds — only #sgRounds, the Board's own) — a kiosk has
+     no cursor to click it with anyway, so it never renders on TV. */
+  #tvGridRounds{display:none!important}
+  .tv-foot{padding:16px 32px 30px;text-align:center}
+  .tv-dots{display:flex;gap:11px;justify-content:center}
+  .tv-dot{width:9px;height:9px;border-radius:50%;background:rgba(200,162,74,.3);display:inline-block}
+  .tv-dot.on{background:var(--brass)}
+  .tv-rotate-note{font-size:.6rem;letter-spacing:.24em;text-transform:uppercase;
+    color:var(--sage);margin:10px 0 0}
 </style>
 </head>
 <body>
@@ -1387,6 +1428,73 @@
   </div>
 </section>
 
+<!-- S26 K-TV: lodge television route. body[data-view="tv"] CSS hides nav/
+     #mastBar/#healthStrip/#debugPanel and the cursor (see <style> above).
+     renderTv() (script, below) owns all the ids inside: #tvClock, the
+     Leaderboard panel (lbRowHTML reused verbatim via #tvLbBody), the Card
+     panel (renderScoreGrid reused verbatim via the TV_SG_IDS target — same
+     sg/sg-controls/sg-scroll/sg-t/sg-panel/sg-legend classes as the Board's
+     own grid, just a different id set, so every [hidden] CSS override
+     already written for those classes applies here too, zero new CSS), the
+     Schedule panel (#tvSchedBody), the dots (#tvDots), and the "no data yet"
+     seed copy below — identical strings to the Board/Schedule empty states,
+     shown until the first paint resolves (same C-FALLBACK precedent as
+     #scheduleBody above). -->
+<section class="band view" data-view="tv" id="tvMode" hidden>
+  <div class="tv-wrap">
+    <div class="tv-mast">
+      <svg class="mast-mark" aria-hidden="true"><use href="#mark"/></svg>
+      <span class="mast-name">THE GOOD FRIENDS YEARLY</span>
+      <span class="tv-clock" id="tvClock"></span>
+    </div>
+    <div class="tv-panels">
+      <div class="tv-panel" id="tvPanelLb" data-tv-panel="0">
+        <p class="eyebrow">Leaderboard</p>
+        <div class="tv-scale">
+          <div class="lb-head">
+            <div>Pos</div><div class="lb-mv" aria-hidden="true"></div><div>Team</div><div>Thru</div>
+            <div class="lb-num lb-r1">R1</div><div class="lb-num lb-r2">R2</div>
+            <div class="lb-tot lb-total">Total</div><div class="lb-tot">To par</div>
+          </div>
+          <div id="tvLbBody">
+            <div class="lb-empty">No cards posted yet. Scores appear here as the sheet fills in.</div>
+          </div>
+        </div>
+      </div>
+      <div class="tv-panel" id="tvPanelCard" data-tv-panel="1" hidden>
+        <p class="eyebrow">The Card</p>
+        <div class="sg" id="tvGrid" hidden>
+          <div class="lb-empty" id="tvGridNote" hidden></div>
+          <div class="sg-controls" id="tvGridRounds" hidden></div>
+          <div class="sg-scroll" id="tvGridScroll"><table class="sg-t" id="tvGridTable"></table></div>
+          <div class="sg-panel card-drop" id="tvGridPanel" hidden></div>
+          <div class="sg-legend" id="tvGridLegend" aria-label="Scorecard legend">
+            <span class="lg"><span class="gl" style="color:var(--score-under);border:1px solid var(--score-under);border-radius:50%;box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-under)">3</span>Eagle</span>
+            <span class="lg"><span class="gl" style="color:var(--score-under);border:1px solid var(--score-under);border-radius:50%">3</span>Birdie</span>
+            <span class="lg"><span class="gl" style="color:var(--bone)">4</span>Par</span>
+            <span class="lg"><span class="gl" style="color:var(--score-bogey);border:1px solid var(--score-bogey)">5</span>Bogey</span>
+            <span class="lg"><span class="gl" style="color:var(--score-over);border:1px solid var(--score-blowup);box-shadow:0 0 0 2px var(--pine),0 0 0 3px var(--score-blowup)">7</span>Double or worse</span>
+          </div>
+        </div>
+      </div>
+      <div class="tv-panel" id="tvPanelSched" data-tv-panel="2" hidden>
+        <p class="eyebrow">Schedule</p>
+        <div id="tvSchedBody">
+          <p class="sched-empty">Schedule not loaded yet — it lives in the sheet's Schedule tab.</p>
+        </div>
+      </div>
+    </div>
+    <div class="tv-foot">
+      <div class="tv-dots" id="tvDots">
+        <span class="tv-dot on" data-dot="0" aria-label="Leaderboard"></span>
+        <span class="tv-dot" data-dot="1" aria-label="The Card"></span>
+        <span class="tv-dot" data-dot="2" aria-label="Schedule"></span>
+      </div>
+      <p class="tv-rotate-note">Rotates every 20 seconds</p>
+    </div>
+  </div>
+</section>
+
 <section class="band view" data-view="rules" id="rules">
   <div class="wrap">
     <p class="eyebrow">Committee decisions, final</p>
@@ -1572,7 +1680,13 @@ let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null,
   scPadOtherOpen:false, scConfirmPending:null, scPickerOpen:null, prevBoard:null, lastBoardOrder:null,
   // §25b T2 (B-FIN): parallel to prevBoard/lastBoardOrder, same one-paint-lag
   // discipline — see renderLeaderboard()/paint() for the capture seam.
-  prevVals:null, lastBoardVals:null };
+  prevVals:null, lastBoardVals:null,
+  // S26 K-TV: tvPanel is the rotation's own state (0|1|2, cycled by
+  // tvNextPanel — see renderTv()). tvLastFetchAt is read from the existing
+  // fetch bookkeeping in paint() (results[scores].at, the SAME instant
+  // stampFor("scores",...) already stamps #lbSync from) — never a second
+  // clock.
+  tvPanel:0, tvLastFetchAt:null };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -2223,15 +2337,25 @@ function renderHomeBoard(){
 }
 
 /* ---------- v2.3 hole-by-hole grid (G-GRID) ---------- */
-function renderScoreGrid(players){
-  const wrap=$("#sgWrap"), note=$("#sgNote"), scroll=$("#sgScroll"), table=$("#sgTable"), legend=$("#sgLegend");
+// S26 K-TV (parameter-with-default refactor, per the ledger's binding
+// constraint): SG_IDS is the Board's own id set, the default so every
+// pre-existing call site (renderScoreGrid([]), renderScoreGrid(players))
+// behaves byte-identically. TV_SG_IDS (below, near renderTv) passes a
+// second target so the SAME builder — same row/table logic, nothing
+// copied — paints into #tvGrid instead. STATE.gridRound/gridHole stay
+// global on purpose (never split per-target): both callers describe the
+// SAME underlying season data, and only one of the two DOM targets is ever
+// actually visible at a time (Board/TV are mutually exclusive routes).
+const SG_IDS={wrap:"sgWrap",note:"sgNote",scroll:"sgScroll",table:"sgTable",legend:"sgLegend",rounds:"sgRounds",panel:"sgPanel"};
+function renderScoreGrid(players,ids=SG_IDS){
+  const wrap=$("#"+ids.wrap), note=$("#"+ids.note), scroll=$("#"+ids.scroll), table=$("#"+ids.table), legend=$("#"+ids.legend);
   if(!wrap) return;
   // G-PANEL: any re-render (refresh, round toggle, or a fresh fetch that
   // no longer matches) closes a stale open hole panel — it must not survive
   // a data change it was drawn against.
   if(STATE.gridHole!==null){
     STATE.gridHole=null;
-    const panel=$("#sgPanel");
+    const panel=$("#"+ids.panel);
     panel.hidden=true; panel.innerHTML="";
   }
   if(!players.length){ wrap.hidden=true; return; }
@@ -2239,7 +2363,7 @@ function renderScoreGrid(players){
   const pars=courseMap();
   if(!pars){
     note.textContent="Hole-by-hole view needs all 18 holes on the Course tab.";
-    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; legend.hidden=true; return;
+    note.hidden=false; scroll.hidden=true; $("#"+ids.rounds).hidden=true; legend.hidden=true; return;
   }
   note.hidden=true; scroll.hidden=false; legend.hidden=false;
   // G-ROUND: only rounds with an actual hole-by-hole card count toward the
@@ -2249,7 +2373,7 @@ function renderScoreGrid(players){
   const rounds=[...new Set(players.flatMap(p=>Object.keys(p.rounds).filter(r=>p.rounds[r].holes)))].sort();
   if(!rounds.length){
     note.textContent="No hole-by-hole cards yet — totals only so far.";
-    note.hidden=false; scroll.hidden=true; $("#sgRounds").hidden=true; legend.hidden=true; return;
+    note.hidden=false; scroll.hidden=true; $("#"+ids.rounds).hidden=true; legend.hidden=true; return;
   }
   const rd=(STATE.gridRound&&rounds.includes(STATE.gridRound))?STATE.gridRound:rounds[0];
   const prevRd=table.dataset.round;   // captured before this render's mutations, for G-FOCUS's same-round guard
@@ -2282,7 +2406,7 @@ function renderScoreGrid(players){
   scroll.scrollLeft=sx;
 
   // G-ROUND toggle
-  const ctr=$("#sgRounds");
+  const ctr=$("#"+ids.rounds);
   if(rounds.length>1){
     ctr.hidden=false;
     ctr.innerHTML=rounds.map(r=>`<button type="button" class="year-btn${r===rd?" on":""}" data-rd="${esc(r)}" aria-pressed="${r===rd}">Round ${esc(r)}</button>`).join("");
@@ -3419,6 +3543,7 @@ function renderChampions(){
 function renderAll(){
   renderYears(); renderLeaderboard(); renderBoardScoreBtn(); renderField(); renderDraft(); renderPairings(); renderMastChip(); renderHomeBoard();
   renderCalcutta(); renderNextYear(); renderRooms(); renderMoney(); renderShame(); renderSchedule(); renderChampions(); renderIcsBtn();
+  renderTv();
 }
 
 function renderHealth(){
@@ -3561,6 +3686,88 @@ function nowNextModel(rows,now){
   const nxt=xs.find(x=>x.at>now)||null;                     // crosses day boundaries
   return {now:cur,next:nxt};
 }
+
+/* ---------- S26 K-TV: lodge television route ----------
+   Render-reuse core: lbRowHTML (mv:null, interactive:false — same ctx idiom
+   renderHomeBoard already uses) for the Leaderboard panel; renderScoreGrid's
+   own builder, targeted at the TV_SG_IDS container set (parameter-with-
+   default, zero copied row/table logic) for the Card panel. The Schedule
+   panel builds its own small "today" template straight off the schedule
+   model (scheduleInstants) — the same precedent paintHome's own Now/Next
+   line() already set (a compact schedule view built directly off the row
+   model, not a renderSchedule() refactor — nothing in the brief authorizes
+   touching renderSchedule, and it group-by-days where TV wants one flat
+   "today" list). Everything here pins to activeSeason(), never STATE.year —
+   same Imp-2 reasoning renderHomeBoard already carries: a live kiosk must
+   never follow whatever archive year happens to be selected elsewhere. */
+const TV_SG_IDS={wrap:"tvGrid",note:"tvGridNote",scroll:"tvGridScroll",
+  table:"tvGridTable",legend:"tvGridLegend",rounds:"tvGridRounds",panel:"tvGridPanel"};
+const TV_STALE_MS=5*60*1000;
+// pure — the whole rotation state machine, driven directly by tests.
+function tvNextPanel(current){ return (current+1)%3; }
+// pure — spec-verbatim honesty stamp. "" (no fabricated claim) when there is
+// no fetch instant to report at all — paired at the call site with each
+// panel's own honest empty-state copy.
+function tvStamp(at){
+  if(!at) return "";
+  return "Checked "+fmtClock(at)+((Date.now()-at)>TV_STALE_MS?" — data stale":"");
+}
+// pure — today's schedule rows: the McCall-midnight-to-midnight day bucket
+// containing `now`, via the SAME scheduleInstants offset resolver
+// nowNextModel already uses (one owner for the day/time mapping, S24
+// H-NOWNEXT). Rows whose label/time is unresolvable (at:null) never match.
+function tvTodayRows(rows,now){
+  return scheduleInstants(rows).filter(x=>x.at!==null)
+    .filter(x=>now>=x.dayEnd-86400000 && now<x.dayEnd).map(x=>x.r);
+}
+function renderTv(){
+  const root=$("#tvMode"); if(!root) return;
+  const season=activeSeason();
+  const players=rankedPlayers("gross",season);
+  const parsSuppressed=!courseMap();
+  const wdKeys=wdKeySet(season);
+
+  const lbHost=$("#tvLbBody");
+  if(lbHost) lbHost.innerHTML = players.length
+    ? players.map(p=>lbRowHTML(p,{parsSuppressed,wdKeys,mv:null,interactive:false})).join("")
+    : '<div class="lb-empty">No cards posted yet. Scores appear here as the sheet fills in.</div>';
+
+  renderScoreGrid(players,TV_SG_IDS);
+
+  const schedHost=$("#tvSchedBody");
+  if(schedHost){
+    const rows=forYear(STATE.data.schedule,season).filter(r=>r.event);
+    const today=tvTodayRows(rows,Date.now());
+    schedHost.innerHTML = today.length
+      ? today.map(r=>`<div class="slot"><div class="slot-time">${esc(r.time||"")}</div>`
+          +`<div class="slot-what">${esc(r.event)}</div><div class="slot-where">${esc(r.location||"")}</div></div>`).join("")
+      : '<p class="sched-empty">Schedule not loaded yet — it lives in the sheet\'s Schedule tab.</p>';
+  }
+
+  root.querySelectorAll(".tv-panel").forEach(el=>{ el.hidden = Number(el.dataset.tvPanel)!==STATE.tvPanel; });
+  root.querySelectorAll(".tv-dot").forEach(el=>{ el.classList.toggle("on", Number(el.dataset.dot)===STATE.tvPanel); });
+  // seasonPhase-gated (S24 eventStampFor's own pattern, reused): off the
+  // event window a "Checked h:mm" claim is not live-monitoring anything
+  // real — honest silence, same as eventStampFor's own off-phase "".
+  const clockEl=$("#tvClock");
+  if(clockEl) clockEl.textContent = seasonPhase()==="event" ? tvStamp(STATE.tvLastFetchAt) : "";
+}
+// One labeled interval for the 20s rotation, alive ONLY while the tv view
+// is active. Neither existing loop fits (tick() is a 30s countdown redraw,
+// refreshTick()/scheduleRefresh() is a REFRESH_MS-cadenced data fetch) so
+// this is a genuine third cadence, not a duplicate of either — started/
+// cleared off a SEPARATE hashchange listener (same pattern as
+// renderScorer's own listener below) rather than the router script (which
+// runs before STATE/renderTv exist — it is deliberately its own script,
+// ahead of config.js, per its own header comment).
+let TV_TIMER=null;
+function tvAdvance(){ STATE.tvPanel=tvNextPanel(STATE.tvPanel); renderTv(); }
+function tvRouteSync(){
+  if(document.body.dataset.view==="tv"){ if(!TV_TIMER) TV_TIMER=setInterval(tvAdvance,20000); }
+  else if(TV_TIMER){ clearInterval(TV_TIMER); TV_TIMER=null; }
+}
+window.addEventListener("hashchange",tvRouteSync);
+tvRouteSync();
 
 function applyNavOrder(){
   const nav=document.querySelector(".nav-links");
@@ -5329,6 +5536,11 @@ window.addEventListener("hashchange",renderScorer);
 function paint(data,results){
   HEALTH=[];
   STATE.data=data;
+  // S26 K-TV: the SAME fetch-bookkeeping instant stampFor("scores",results)
+  // stamps #lbSync from below — set before renderAll() so this paint's
+  // renderTv() (inside renderAll) sees the current stamp, never a stale one
+  // from the previous paint. No parallel clock.
+  STATE.tvLastFetchAt=(results[TABS.indexOf("scores")]||{}).at||null;
   results.forEach((r,i)=>{ if(!r.live&&r.err) flag(TABS[i]+": "+r.err); });
   // renderInfo first: normalizeYears/activeSeason lean on INFO.first_tee
   // (A-SANE's ceiling) and must see the sheet's real value, not just

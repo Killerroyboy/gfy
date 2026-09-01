@@ -7662,6 +7662,227 @@ const nowW = Date.now();
     "bad=" + badText.slice(0, 200) + " empty=" + emptyText.slice(0, 120));
 }
 
+/* =====================================================================
+   §26 K-TV: lodge television route (task 1). Render-reuse core: lbRowHTML
+   (mv:null, interactive:false — the same ctx idiom S25a-T5 already proves
+   for renderHomeBoard) for the Leaderboard panel, renderScoreGrid's own
+   builder (parameter-with-default target ids — SG_IDS/TV_SG_IDS, zero
+   copied row/table logic) for the Card panel. Placed inside the §25a
+   broadcast-core block (no new section header) per the ledger: this task
+   builds directly on §25a/§25b's render-reuse core rather than starting a
+   fresh section.
+   ===================================================================== */
+
+{ // S26-T1a: route + chrome — #tv renders the tv section, hides nav/
+  // #mastBar/the diagnostic strips, hides the cursor. CSS source assert
+  // (the hiding rule + the cursor:none rule, both exact) + a real
+  // showView("tv") DOM assert (fresh dom — the shared `dom` never visits
+  // #tv elsewhere, but a fresh one keeps this check independent of suite
+  // order like T3's own mastBar check does).
+  const idxT1a = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const hidesChrome = /body\[data-view="tv"\]\s*\.nav,\s*body\[data-view="tv"\]\s*#mastBar,\s*body\[data-view="tv"\]\s*#healthStrip,\s*body\[data-view="tv"\]\s*#debugPanel\{[^}]*display:\s*none\s*!important\}/.test(idxT1a);
+  const hidesCursor = /body\[data-view="tv"\]\{[^}]*cursor:\s*none\}/.test(idxT1a);
+
+  const domT1a = makeDom("");
+  const wT1a = domT1a.window;
+  await until(() => wT1a.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  wT1a.location.hash = "#tv";
+  wT1a.dispatchEvent(new wT1a.Event("hashchange"));
+  const dT1a = wT1a.document;
+  const tvSection = dT1a.querySelector('[data-view="tv"]');
+  const boardSection = dT1a.querySelector('[data-view="board"]');
+  const routeOk = dT1a.body.dataset.view === "tv"
+    && !!tvSection && tvSection.hidden === false
+    && !!boardSection && boardSection.hidden === true
+    && !!dT1a.getElementById("tvClock");
+  domT1a.window.close();
+
+  check("S26-T1a: #tv route renders #tvMode and hides every other .view (showView DOM assert); CSS hides .nav/#mastBar/#healthStrip/#debugPanel under body[data-view=\"tv\"] AND sets cursor:none on it (source assert, exact selectors)",
+    hidesChrome && hidesCursor && routeOk,
+    "hidesChrome=" + hidesChrome + " hidesCursor=" + hidesCursor + " routeOk=" + routeOk);
+}
+
+{ // S26-T1b: rotation state machine — tvNextPanel(current) is a pure
+  // 0->1->2->0 cycle (called directly, no interval/timer involved), and
+  // STATE.tvPanel + renderTv() (driven directly, same "drive it directly"
+  // idiom as S25b-T2e/T2f's hand-primed STATE) toggles exactly one
+  // .tv-panel visible per state.
+  const domT1b = makeDom("");
+  const wT1b = domT1b.window;
+  await until(() => wT1b.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const cycleOk = wT1b.tvNextPanel(0) === 1 && wT1b.tvNextPanel(1) === 2 && wT1b.tvNextPanel(2) === 0
+    && wT1b.tvNextPanel(1) !== 0;   // guards against a mutant that always returns (current+1) unmodded
+  const visibleFor = (n) => {
+    wT1b.eval("STATE.tvPanel=" + n + "; renderTv();");
+    const panels = [...wT1b.document.querySelectorAll(".tv-panel")];
+    const visible = panels.filter((p) => !p.hidden).map((p) => p.dataset.tvPanel);
+    return visible.length === 1 && visible[0] === String(n);
+  };
+  const swapOk = visibleFor(0) && visibleFor(1) && visibleFor(2) && visibleFor(1);
+  domT1b.window.close();
+
+  check("S26-T1b: tvNextPanel(current) is a pure 0→1→2→0 cycle; STATE.tvPanel + renderTv() driven directly toggles exactly ONE .tv-panel[data-tv-panel] visible, matching STATE.tvPanel, at every state (0, 1, 2, and back to 1)",
+    cycleOk && swapOk,
+    "cycle=" + cycleOk + " swap=" + swapOk);
+}
+
+{ // S26-T1c: honesty stamp — fresh "Checked h:mm", stale (>5min) "Checked
+  // h:mm — data stale", and "no data + no cache" (a failed scores fetch on
+  // a brand-new dom, no localStorage cache) falls back to the panel's OWN
+  // existing empty copy (zero new user-facing strings) with an honestly
+  // blank clock (no fabricated "Checked" claim for an instant that never
+  // happened). seasonPhase-gated (S24 eventStampFor's own pattern) — the
+  // shared suite fixture (first_tee 2026-08-15) is off-phase against the
+  // real clock, so this needs its own dynInfo(0)-forced event-phase dom,
+  // T3d-style, same reason S25a-T3d/e/f needed it.
+  const eventInfoT1c = dynInfo(0);
+  const domT1c = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => eventInfoT1c }),
+  }));
+  const wT1c = domT1c.window;
+  await until(() => wT1c.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const now = Date.now();
+
+  wT1c.eval("STATE.tvLastFetchAt=" + now + "; renderTv();");
+  const freshText = wT1c.document.getElementById("tvClock").textContent;
+  const freshOk = freshText === "Checked " + wT1c.fmtClock(now);
+
+  const staleAt = now - 6 * 60 * 1000;
+  wT1c.eval("STATE.tvLastFetchAt=" + staleAt + "; renderTv();");
+  const staleText = wT1c.document.getElementById("tvClock").textContent;
+  const staleOk = staleText === "Checked " + wT1c.fmtClock(staleAt) + " — data stale";
+
+  wT1c.eval("STATE.tvLastFetchAt=null; renderTv();");
+  const nullClockText = wT1c.document.getElementById("tvClock").textContent;
+  domT1c.window.close();
+
+  const domT1c2 = makeDom("", withOverride({
+    info: () => Promise.resolve({ ok: true, status: 200, text: async () => eventInfoT1c }),
+    scores: () => Promise.resolve({ ok: false, status: 404, text: async () => "missing" }),
+  }));
+  const wT1c2 = domT1c2.window;
+  // try/catch: STATE is a `let` binding (TDZ) for the brief window before
+  // the main script reaches its own initializer — a poll landing inside
+  // that window must read as "not ready yet", never throw the whole run.
+  await until(() => {
+    try { return wT1c2.eval("!!(STATE.data && STATE.data.scores === null)"); }
+    catch (e) { return false; }
+  });
+  const lbEmptyText = wT1c2.document.getElementById("tvLbBody").textContent;
+  const lbEmptyOk = /No cards posted yet\. Scores appear here as the sheet fills in\./.test(lbEmptyText);
+  const noCacheClockText = wT1c2.document.getElementById("tvClock").textContent;
+  domT1c2.window.close();
+
+  check("S26-T1c: honesty stamp — fresh tvLastFetchAt ⇒ 'Checked h:mm' verbatim; >5min old ⇒ 'Checked h:mm — data stale' verbatim (seasonPhase forced to 'event' via dynInfo(0), T3d-style, since the shared fixture is off-phase against the real clock); no fetch instant at all ⇒ blank clock, never a fabricated claim; a failed scores fetch with no cache (fresh dom, no localStorage) ⇒ the Leaderboard panel falls back to the SAME 'No cards posted yet' string the Board's own empty state uses, clock stays blank",
+    freshOk && staleOk && nullClockText === "" && lbEmptyOk && noCacheClockText === "",
+    "fresh=" + JSON.stringify(freshText) + " stale=" + JSON.stringify(staleText)
+      + " nullClock=" + JSON.stringify(nullClockText) + " lbEmptyOk=" + lbEmptyOk
+      + " noCacheClock=" + JSON.stringify(noCacheClockText));
+}
+
+{ // S26-T1d: labeled-dot indicator — three dots, aria-labeled exactly
+  // "Leaderboard"/"The Card"/"Schedule" (canvas-normative), and driving
+  // STATE.tvPanel + renderTv() directly marks exactly one .on per state.
+  const domT1d = makeDom("");
+  const wT1d = domT1d.window;
+  await until(() => wT1d.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const dots = () => [...wT1d.document.querySelectorAll(".tv-dot")];
+  const d0 = dots();
+  const labelsOk = d0.length === 3
+    && d0[0].getAttribute("aria-label") === "Leaderboard"
+    && d0[1].getAttribute("aria-label") === "The Card"
+    && d0[2].getAttribute("aria-label") === "Schedule";
+  const onFor = (n) => {
+    wT1d.eval("STATE.tvPanel=" + n + "; renderTv();");
+    const on = dots().filter((d) => d.classList.contains("on")).map((d) => d.dataset.dot);
+    return on.length === 1 && on[0] === String(n);
+  };
+  const dotsOk = onFor(0) && onFor(2) && onFor(1);
+  domT1d.window.close();
+
+  check("S26-T1d: three .tv-dot indicators, aria-labeled 'Leaderboard'/'The Card'/'Schedule' verbatim (canvas-normative panel labels); exactly one carries .on, matching STATE.tvPanel, at every state",
+    labelsOk && dotsOk,
+    "labels=" + labelsOk + " dots=" + dotsOk);
+}
+
+{ // S26-T1e: reduced-motion — the panel-swap CSS (the whole S26 K-TV
+  // <style> block: chrome hiding, .tv-panel, .tv-dot, .tv-scale) carries NO
+  // transition/animation property anywhere — a hard cut for everyone, not a
+  // prefers-reduced-motion-guarded carve-out (the simplest compliant form
+  // the ledger calls for). Property-declaration regex (`transition\s*:`),
+  // not a bare word match, so the block's own prose comment explaining the
+  // no-animation rule (which says the words "transition"/"animation" without
+  // a trailing colon) can't produce a false pass.
+  const idxT1e = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const styleStart = idxT1e.indexOf('S26 K-TV: lodge television route ----------');
+  const styleEnd = idxT1e.indexOf("</style>", styleStart);
+  const tvCssBlock = styleStart >= 0 && styleEnd > styleStart ? idxT1e.slice(styleStart, styleEnd) : "";
+  const blockFound = tvCssBlock.length > 0 && /\.tv-panel\{/.test(tvCssBlock) && /\.tv-dot\{/.test(tvCssBlock);
+  const noTransition = !/\btransition\s*:/i.test(tvCssBlock);
+  const noAnimation = !/\banimation\s*:/i.test(tvCssBlock);
+
+  check("S26-T1e: reduced-motion — the S26 K-TV CSS block (chrome hiding + .tv-panel/.tv-dot/.tv-scale) carries no `transition:`/`animation:` declaration anywhere — a hard cut for everyone on the panel swap, never a prefers-reduced-motion-guarded exception",
+    blockFound && noTransition && noAnimation,
+    "blockFound=" + blockFound + " noTransition=" + noTransition + " noAnimation=" + noAnimation);
+}
+
+{ // S26-T1f (beyond the brief's a-e list, added for the ledger's OWN stated
+  // core constraint — render reuse — which a-e's chrome/cycle/stamp/dot/
+  // motion checks never actually exercise): the Leaderboard and Card panels
+  // carry REAL data through the reused builders, not just empty/chrome
+  // plumbing, and tvTodayRows correctly buckets a schedule row by the
+  // McCall day boundary (pure, hand-built fixture — independent of which
+  // real weekday the suite happens to run on).
+  const domT1f = makeDom("");
+  const wT1f = domT1f.window;
+  await until(() => wT1f.document.querySelectorAll("#lbBody .lb-row").length > 0);
+
+  // Leaderboard reuse: same row count as the Board, and the FIRST row's
+  // name/pos text is byte-identical between the two surfaces — same
+  // lbRowHTML call (mv:null, interactive:false), same rankedPlayers data.
+  const boardRows = [...wT1f.document.querySelectorAll("#lbBody .lb-row")];
+  const tvRows = [...wT1f.document.querySelectorAll("#tvLbBody .lb-row")];
+  const rowCountOk = tvRows.length > 0 && tvRows.length === boardRows.length;
+  const firstNameOk = rowCountOk
+    && tvRows[0].querySelector(".lb-name")?.textContent === boardRows[0].querySelector(".lb-name")?.textContent
+    && tvRows[0].querySelector(".lb-pos")?.textContent === boardRows[0].querySelector(".lb-pos")?.textContent;
+
+  // Card grid reuse: the SAME 18-hole head + the SAME team-row count as the
+  // Board's own #sgTable, for the same round — renderScoreGrid(players,
+  // TV_SG_IDS), never a copied table.
+  const boardHoleTh = wT1f.document.querySelectorAll("#sgTable thead th.sg-h").length;
+  const tvHoleTh = wT1f.document.querySelectorAll("#tvGridTable thead th.sg-h").length;
+  const boardTeamRows = wT1f.document.querySelectorAll("#sgTable tbody tr.sg-teamrow").length;
+  const tvTeamRows = wT1f.document.querySelectorAll("#tvGridTable tbody tr.sg-teamrow").length;
+  const gridOk = boardHoleTh === 18 && tvHoleTh === 18 && boardTeamRows > 0 && tvTeamRows === boardTeamRows;
+  domT1f.window.close();
+
+  // tvTodayRows: pure. first_tee pinned via eval (real Saturday, 2026-08-15
+  // — verified against the real calendar, not assumed) so the day buckets
+  // are exact, never relative to whatever real weekday the suite runs on.
+  const domT1f2 = makeDom("");
+  const wT1f2 = domT1f2.window;
+  await until(() => wT1f2.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  wT1f2.eval('INFO.first_tee="2026-08-15T09:00:00-06:00";');
+  const rowsT1f2 = [
+    { day: "Day One", label: "Friday", time: "3:00 pm", event: "Check in", location: "Bear Creek Lodge" },
+    { day: "Day Two", label: "Saturday", time: "9:00 am", event: "Round One", location: "Meadow Creek" },
+    { day: "Day Three", label: "Sunday", time: "2:00 pm", event: "Presentation", location: "18th green" },
+  ];
+  const satAt = new Date("2026-08-15T12:00:00-06:00").getTime();   // Saturday noon, first_tee's own day
+  const fridayAt = new Date("2026-08-14T12:00:00-06:00").getTime(); // Friday noon, the adjacent day
+  const todayPure = wT1f2.tvTodayRows(rowsT1f2, satAt);
+  const todayPureOk = todayPure.length === 1 && todayPure[0].event === "Round One";
+  const fridayPure = wT1f2.tvTodayRows(rowsT1f2, fridayAt);
+  const fridayPureOk = fridayPure.length === 1 && fridayPure[0].event === "Check in";
+  domT1f2.window.close();
+
+  check("S26-T1f: render-reuse content (the ledger's core constraint) — TV Leaderboard panel shows the SAME row count + first-row name/pos text as the Board (same lbRowHTML call, real rankedPlayers data, not an empty render); TV Card panel's grid carries the same 18-hole head + same team-row count as the Board's own #sgTable (renderScoreGrid reuse via TV_SG_IDS); tvTodayRows(rows,now) (pure) buckets a hand-built Friday/Saturday/Sunday fixture correctly by the McCall day boundary — Saturday noon returns ONLY the Saturday row, Friday noon returns ONLY the Friday row",
+    rowCountOk && firstNameOk && gridOk && todayPureOk && fridayPureOk,
+    "rowCount=" + rowCountOk + " firstName=" + firstNameOk + " grid=" + gridOk
+      + " todayPure=" + todayPureOk + " fridayPure=" + fridayPureOk);
+}
+
 /* ---------------------------------------------------------------------
    Tally — per group, then total. Later tasks grep these lines.
    --------------------------------------------------------------------- */
