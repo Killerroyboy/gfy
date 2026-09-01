@@ -1,0 +1,86 @@
+[
+  {
+    "id": "01-board-empty",
+    "vp": "mobile",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "01-board-empty",
+    "vp": "desktop",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "02a-money-empty",
+    "vp": "mobile",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "02a-money-empty",
+    "vp": "desktop",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "02b-photos-empty",
+    "vp": "mobile",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "02b-photos-empty",
+    "vp": "desktop",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "03-hole-panel",
+    "vp": "mobile",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "03-hole-panel",
+    "vp": "desktop",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "04-board-double-digit-mv",
+    "vp": "mobile",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "04-board-double-digit-mv",
+    "vp": "desktop",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "05-sg-t-head-corner",
+    "vp": "mobile",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  },
+  {
+    "id": "05-sg-t-head-corner",
+    "vp": "desktop",
+    "consoleErrors": [
+      "console.error: Failed to load resource: net::ERR_FAILED"
+    ]
+  }
+]
