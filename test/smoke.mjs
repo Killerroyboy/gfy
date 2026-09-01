@@ -8195,8 +8195,10 @@ const nowW = Date.now();
   const exportsOk = [
     "export function readConfig(", "export function parseCsv(",
     "export function vaultGuardHeaders(", "export function assertNoAt(",
-    "export function currentSeason(", "export function rosterMap(",
-    "export function genStamp(", "export function scoreUrlFor(",
+    "export function assertFieldsNoAt(", "export function currentSeason(",
+    "export function normalizeFieldYear(", "export function rosterMap(",
+    "export function genStamp(", "export function cardStamp(",
+    "export function scoreUrlFor(",
     "export function posterQrSvg(", "export function cardQrSvg(",
     "export function generateKit(", "export const SITE_ROOT",
   ].every(sig => kitSrc.includes(sig));
@@ -8206,7 +8208,7 @@ const nowW = Date.now();
   const noOtherImportsOk = nonNodeImports.length === 1 && /from\s*"\.\/qr\.mjs"/.test(nonNodeImports[0]);
   const gitignoreOk = readFileSync(path.join(ROOT, ".gitignore"), "utf8").includes("tools/print/out/");
 
-  check("S26-T3a: tools/print/make-kit.mjs exists, imports qrSvg from ./qr.mjs (and no non-node-builtin dependency beyond it), and exports the pure generator surface (readConfig/parseCsv/vaultGuardHeaders/assertNoAt/currentSeason/rosterMap/genStamp/scoreUrlFor/posterQrSvg/cardQrSvg/generateKit/SITE_ROOT); tools/print/make-kit.test.mjs exists and runs standalone via `node tools/print/make-kit.test.mjs`; .gitignore excludes tools/print/out/",
+  check("S26-T3a: tools/print/make-kit.mjs exists, imports qrSvg from ./qr.mjs (and no non-node-builtin dependency beyond it), and exports the pure generator surface (readConfig/parseCsv/vaultGuardHeaders/assertNoAt/assertFieldsNoAt/currentSeason/normalizeFieldYear/rosterMap/genStamp/cardStamp/scoreUrlFor/posterQrSvg/cardQrSvg/generateKit/SITE_ROOT); tools/print/make-kit.test.mjs exists and runs standalone via `node tools/print/make-kit.test.mjs` (also `npm run check-kit`, T2 symmetry with check-qr); .gitignore excludes tools/print/out/",
     exportsOk && qrImportOk && noOtherImportsOk && testFileExists && gitignoreOk,
     "exports=" + exportsOk + " qrImport=" + qrImportOk + " noOtherImports=" + noOtherImportsOk + " testFile=" + testFileExists + " gitignore=" + gitignoreOk);
 }

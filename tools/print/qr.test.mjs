@@ -44,6 +44,10 @@
 import { createHash } from "node:crypto";
 import { qrSvg, qrEncode, qrMatrix } from "./qr.mjs";
 import qrcodeVendor from "./qr-vendor.mjs";
+// Fix round 1 (RULED): SITE_ROOT was independently declared here AND in
+// make-kit.mjs — single-sourced now from make-kit.mjs (the module that
+// actually owns "what URL does the kit point at"), imported here instead.
+import { SITE_ROOT } from "./make-kit.mjs";
 
 const results = [];
 function check(name, ok, detail = "") {
@@ -51,7 +55,6 @@ function check(name, ok, detail = "") {
   console.log((ok ? "PASS" : "FAIL") + "  " + name + (ok || !detail ? "" : "   [" + detail + "]"));
 }
 
-const SITE_ROOT = "https://killerroyboy.github.io/gfy/";
 const SCORE_URL = "https://killerroyboy.github.io/gfy/#score?team=Wade%20Johnson";
 
 /* ---------- (a) finder patterns at three corners (module-matrix API) ---------- */

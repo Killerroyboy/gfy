@@ -8,7 +8,9 @@
     "event-ready": "node tools/event-ready.mjs",
     "check-template": "python3 tools/check_template.py",
     "check-gids": "node tools/gid-check.mjs",
-    "check-qr": "node tools/print/qr.test.mjs"
+    "check-qr": "node tools/print/qr.test.mjs",
+    "make-kit": "node tools/print/make-kit.mjs",
+    "check-kit": "node tools/print/make-kit.test.mjs"
   },
   "devDependencies": {
     "jsdom": "^29.1.1"
