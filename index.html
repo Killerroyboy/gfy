@@ -164,14 +164,31 @@
   /* leaderboard */
   .lb-head,.lb-row{display:grid;grid-template-columns:2.4rem 2.2rem 1fr 4rem 3.2rem 3.2rem 4rem 4rem;
                    gap:10px;align-items:baseline;padding:13px 6px;text-align:left}
+  /* §25b T1: rules audit — .lb-head was the single, thin var(--brass-dim)
+     hairline every OTHER *-head row also carries (mn-head/auc-head/fld-head/
+     pay-head, untouched — they encode a plain column-header boundary, not
+     the Identity board's own ceremonial edge). The Board is the file's one
+     scoreboard-of-record; its head/body seam gets the SAME two-tone double
+     rule .mast-rule already established (heavier .45 line + a fainter .2
+     second line beneath it), so the Board's masthead-grade emphasis reads
+     consistently top AND bottom of the page. position:relative + an
+     absolutely-positioned ::after keeps the second line out of the grid
+     flow (.lb-head is display:grid — a normal-flow pseudo would land as a
+     9th grid item and desync the column count T4i/T4k guard). */
   .lb-head{font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);
-           border-bottom:1px solid var(--brass-dim);padding-bottom:9px}
+           border-bottom:1px solid rgba(200,162,74,.45);padding-bottom:9px;position:relative}
+  .lb-head::after{content:"";position:absolute;left:0;right:0;bottom:-4px;
+    border-bottom:1px solid rgba(200,162,74,.2)}
   .lb-row{border-bottom:1px solid rgba(200,162,74,.13);transition:background .18s;
           width:100%;background:none;border-left:0;border-right:0;border-top:0;
           color:inherit;font-family:inherit;font-size:inherit;cursor:pointer}
   .lb-row:hover,.lb-row:focus-visible{background:rgba(200,162,74,.06)}
   .lb-row.lead .lb-pos,.lb-row.lead .lb-name{color:var(--brass)}
-  .lb-pos{font-family:var(--display);font-size:1rem;color:var(--sage)}
+  /* §25b T1: numerals audit — position + movement-count each stack down a
+     real grid COLUMN, one per row, same family as .lb-num/.lb-tot below
+     (already tabular) — the two cells that column shared its grid track
+     with were the only Board numerals missed the first time. */
+  .lb-pos{font-family:var(--display);font-size:1rem;color:var(--sage);font-variant-numeric:tabular-nums}
   .lb-name{font-size:1rem}
   .cap{font-weight:600}
   .cap::after{content:"ᶜ";font-size:.6em;vertical-align:super;color:var(--brass)}
@@ -180,7 +197,7 @@
   .lb-tot{text-align:right;font-variant-numeric:tabular-nums;font-size:1rem;color:var(--bone)}
   /* §25a B-MV: movement arrows column. Same-width dash renders in every row
      so the grid stays aligned whether or not there's real movement to show. */
-  .lb-mv{font-size:.7rem;color:var(--sage);display:flex;align-items:center;gap:3px}
+  .lb-mv{font-size:.7rem;color:var(--sage);display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums}
   .lb-mv.up{color:var(--brass)}
   .lb-mv.down{color:var(--sage)}
   /* §25a B-CONV (ruled scope addition): Board to-par cell tier coloring —
@@ -188,7 +205,14 @@
   .lb-under{color:var(--score-under)}
   .lb-even{color:var(--score-even)}
   .lb-over{color:var(--score-over)}
-  .lb-empty,.sched-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
+  /* §25b T1: empty-state ceremony — copy IDENTICAL everywhere this class is
+     used (never touched here), only the dress changes: italic brass-dim
+     "apology" tone replaced with the same small-caps letterspaced kicker
+     register the rest of the file already uses for a quiet, composed
+     non-event (.eyebrow/.nine-lab/.room-label idiom) — sage, not brass,
+     since an empty state is neutral information, not a ceremonial moment. */
+  .lb-empty,.sched-empty{padding:26px 6px;color:var(--sage);font-style:normal;
+    font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;text-align:center}
   /* §25a B-HOME: event-phase top slice on Home — a literal prefix of the
      Board's own render, sized down. .home-board .lb-row inherits every
      .lb-row rule above (same grid, same classes) via the shared class. */
@@ -321,6 +345,21 @@
   .sg-t{border-collapse:collapse}
   .sg-t th,.sg-t td{border:1px solid rgba(200,162,74,.14);text-align:center;
     font-variant-numeric:tabular-nums;min-width:2.2rem;padding:4px 3px;font-size:.85rem}
+  /* §25b T1: rules audit — the scorecard head row (thead, Team + 18 hole
+     numbers) shared the SAME faint .14-alpha grid line as every plain body
+     cell, so it read no heavier than the data under it — the one table on
+     the page whose head/body seam carried no Identity-board emphasis at
+     all. A .lb-head-style ::after two-tone line is unsafe here: .sg-team's
+     row headers are position:sticky;z-index:2 (line below) and would win
+     any stacking fight against an absolutely-positioned, z-index:auto
+     pseudo, silently swallowing half the double rule on that one column.
+     border-style:double sidesteps it entirely — it's the literal CSS
+     keyword for a two-line rule, drawn as a single border (no pseudo, no
+     stacking context), and — ranking above plain "solid" in the
+     border-collapse conflict-resolution order — it reliably wins the
+     shared edge against the tbody's own .14 grid line in every engine,
+     without depending on source-order tie-breaking. */
+  .sg-t thead th{border-bottom:3px double rgba(200,162,74,.45)}
   .sg-t th.sg-h{height:44px;padding:0 3px;cursor:pointer;color:var(--sage);
     font-weight:400;font-size:.7rem;letter-spacing:.08em} /* table cells ignore min-height; height sets the row */
   .sg-t .sg-team{position:sticky;left:0;background:var(--pine-2);text-align:left;
@@ -391,7 +430,9 @@
   .round .when{font-size:.6rem;letter-spacing:.24em;text-transform:uppercase;color:var(--brass);margin:0 0 18px}
   .grp{padding:12px 0;border-top:1px solid rgba(200,162,74,.16);display:grid;
        grid-template-columns:4.2rem 1fr;gap:12px;align-items:baseline}
-  .grp-time{font-family:var(--display);color:var(--brass);font-size:.95rem}
+  /* §25b T1: numerals audit — tee times stack down a column, one .grp-time
+     per pairing group; digits need to align the same way .slot-time's do. */
+  .grp-time{font-family:var(--display);color:var(--brass);font-size:.95rem;font-variant-numeric:tabular-nums}
   .grp-hole{display:block;font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);margin-top:3px}
   .grp-who{font-size:.95rem;color:var(--bone)}
 
@@ -445,7 +486,10 @@
   .pay-head{font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);
             border-bottom:1px solid var(--brass-dim);padding-bottom:9px}
   .pay-row{border-bottom:1px solid rgba(200,162,74,.13)}
-  .pay-place{font-family:var(--display);font-size:1.1rem;color:var(--brass)}
+  /* §25b T1: numerals audit — a payout-order column (1st, 2nd, 3rd…) same
+     as .pay-cut beside it (already tabular); the suffix letters are
+     unaffected by font-variant-numeric, only the leading digit aligns. */
+  .pay-place{font-family:var(--display);font-size:1.1rem;color:var(--brass);font-variant-numeric:tabular-nums}
   .pay-sub{display:block;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sage)}
   .pay-cut{text-align:right;font-variant-numeric:tabular-nums;color:var(--bone)}
   .pay-cut.dim{color:var(--sage)}
@@ -483,7 +527,9 @@
   .day-head span{font-size:.62rem;letter-spacing:.24em;text-transform:uppercase;color:var(--sage);margin-left:auto}
   .slot{display:grid;grid-template-columns:7.5rem 1fr 12rem;gap:16px;align-items:baseline;
         padding:14px 0;border-bottom:1px solid rgba(200,162,74,.14)}
-  .slot-time{font-family:var(--display);font-size:1rem;color:var(--brass);letter-spacing:.06em}
+  /* §25b T1: numerals audit — schedule times stack down the day's slot
+     list; same missed-numeral family as .grp-time/.entry-year/.lb-pos. */
+  .slot-time{font-family:var(--display);font-size:1rem;color:var(--brass);letter-spacing:.06em;font-variant-numeric:tabular-nums}
   .slot-what{font-size:1.02rem;color:var(--bone)}
   .slot-where{font-size:.66rem;letter-spacing:.18em;text-transform:uppercase;color:var(--sage);text-align:right}
 
@@ -513,7 +559,9 @@
          padding:16px 4px;border-bottom:1px solid rgba(200,162,74,.14);
          transition:background .18s,padding-left .18s}
   .entry:hover{background:rgba(200,162,74,.06);padding-left:12px}
-  .entry-year{font-family:var(--display);font-size:1.15rem;color:var(--brass)}
+  /* §25b T1: numerals audit — the Champions ledger stacks a year per row
+     (2025, 2024, 2023…), the clearest missed columnar-numeral case found. */
+  .entry-year{font-family:var(--display);font-size:1.15rem;color:var(--brass);font-variant-numeric:tabular-nums}
   .entry-name{font-size:1.05rem}
   .entry-name.blank{color:var(--brass-dim);font-style:italic;font-size:.95rem}
   .entry-minor{opacity:.72}

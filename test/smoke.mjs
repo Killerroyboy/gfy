@@ -7166,6 +7166,48 @@ const nowW = Date.now();
 }
 
 /* ---------------------------------------------------------------------
+   S25b-T1: finish audits — numerals, hairline rules, empty-state ceremony
+   (2026-08-31-gfy-s25b-finish-polish, task-1). §25a is FROZEN in semantics
+   (tokens, tier classes, masthead/mv/home code) — this wave is FORM only,
+   zero copy changes. Full three-part audit (numerals, rules, gold-as-metal)
+   is in task-1-report.md; these checks encode only the findings that
+   produced a real CSS change.
+   --------------------------------------------------------------------- */
+{
+  const idxB1 = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  check("S25b-T1a: .lb-head carries the Identity-board double hairline (border-bottom rgba(200,162,74,.45) + ::after rgba(200,162,74,.2)), matching .mast-rule's own two-tone convention — the Board's head/body seam now reads with the same masthead-grade emphasis as the top of the page",
+    /\.lb-head\{[^}]*border-bottom:1px solid rgba\(200,162,74,\.45\)/.test(idxB1)
+    && /\.lb-head::after\{[^}]*rgba\(200,162,74,\.2\)/.test(idxB1),
+    "lb-head rules");
+  check("S25b-T1b: empty states styled as ceremony (small-caps letterspaced sage, centered, not an italic brass-dim apology) — the WORDS are untouched, only the dress changed",
+    /\.lb-empty,\.sched-empty\{[^}]*letter-spacing:\.24em/.test(idxB1)
+    && /\.lb-empty,\.sched-empty\{[^}]*text-align:center/.test(idxB1)
+    && !/\.lb-empty,\.sched-empty\{[^}]*font-style:italic/.test(idxB1),
+    "empty-state css");
+  // T1c: numerals audit — every selector the audit found holding a digit
+  // that stacks down a real column (or ticks in place) without
+  // font-variant-numeric:tabular-nums. Money/scorecard/countdown numerals
+  // (.mn-*/.pot dd/.sg-t td/.sc-tile-v/.cd-num/etc.) already carried it —
+  // confirmed present in the audit, not re-asserted here (already covered
+  // by earlier S25a checks; re-asserting would test frozen rules, not this
+  // task's own findings).
+  const numT1c = {
+    "lb-pos": /\.lb-pos\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+    "lb-mv": /\.lb-mv\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+    "entry-year": /\.entry-year\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+    "pay-place": /\.pay-place\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+    "grp-time": /\.grp-time\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+    "slot-time": /\.slot-time\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+  };
+  check("S25b-T1c: numerals audit additions — .lb-pos (Board position column), .lb-mv (movement-count column), .entry-year (Champions ledger year column), .pay-place (payout place column), .grp-time (pairing tee-time column), .slot-time (schedule slot-time column) all gained font-variant-numeric:tabular-nums",
+    Object.values(numT1c).every(Boolean),
+    "found=" + JSON.stringify(numT1c));
+  check("S25b-T1d: rules audit — .sg-t thead th carries a double-rule head/body seam (border-bottom:3px double rgba(200,162,74,.45)) instead of the plain .14-alpha grid line every body cell shares; border-style:double (not a .lb-head-style ::after) because the sticky .sg-team column immediately below is position:sticky;z-index:2 and would win any stacking fight against an absolutely-positioned, z-index:auto pseudo",
+    /\.sg-t thead th\{border-bottom:3px double rgba\(200,162,74,\.45\)\}/.test(idxB1),
+    "sg-t thead rule");
+}
+
+/* ---------------------------------------------------------------------
    GROUP FV (cont.) — 2026-08-28 polish wave (Riley-approved):
    FV7 name-list class split, FV8 stale-calendar CTA, FV9 phase-aware
    board eyebrow, FV10 draft-list legibility.
