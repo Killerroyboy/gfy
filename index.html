@@ -213,6 +213,19 @@
      since an empty state is neutral information, not a ceremonial moment. */
   .lb-empty,.sched-empty{padding:26px 6px;color:var(--sage);font-style:normal;
     font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;text-align:center}
+  /* §25b T2 (B-FIN): sanctioned motion moment 1 of 2 — score-change flash.
+     renderLeaderboard() adds class lb-flash to a Board row when that row's
+     to-par text changed versus the previous paint, gated behind the exact
+     same honesty state as the movement arrows above (mv non-null, which
+     already folds in basisFresh + yearMatch + !parsSuppressed) — the flash
+     rides the arrows' own live/stale/suppressed state rather than adding a
+     second gate that could drift from it. A brief warm wash, once, never a
+     loop. Moment 2 of 2: .lb-mv.up/.down get a small fade+slide the instant
+     a real arrow renders (dash rows never animate — no class, no keyframe). */
+  .lb-flash{animation:lbFlash 1.2s ease-out}
+  @keyframes lbFlash{from{background:rgba(200,162,74,.14)}to{background:transparent}}
+  .lb-mv.up,.lb-mv.down{animation:mvIn .25s ease-out}
+  @keyframes mvIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
   /* §25a B-HOME: event-phase top slice on Home — a literal prefix of the
      Board's own render, sized down. .home-board .lb-row inherits every
      .lb-row rule above (same grid, same classes) via the shared class. */
@@ -376,14 +389,26 @@
   /* v2.3 hole panel (G-PANEL): tapping a hole header opens per-hole detail */
   .sg-panel{padding:16px;margin-top:10px}
   .sg-p-head{font-family:var(--display);color:var(--brass);margin-bottom:10px}
-  .sg-p-crop{position:relative;overflow:hidden;max-width:300px;height:210px;border:1px solid rgba(200,162,74,.25);margin:10px 0}
+  /* §25b T2: hole-panel imagery frame — hairline rgba(200,162,74,.28) +
+     pine-3 ground on all three image surfaces. .sg-p-crop-img itself is
+     never framed directly: it's the 350%-wide scrolling layer inside the
+     overflow:hidden crop viewport, so a border on the img would scroll off
+     with it and padding on it would just get clipped. The WRAPPER
+     (.sg-p-crop, already bordered pre-T2 at .25 alpha) gets the frame
+     instead — bumped to the same .28 alpha + pine-3 ground, but
+     deliberately NO padding here (unlike the other two): .sg-p-crop-inner's
+     width:350% resolves against the wrapper's own content box, so adding
+     padding would shrink that basis and skew the JS pin-centering math
+     (wrap.clientWidth/clientHeight in renderHolePanel) against the fixed
+     300x210 the crop was tuned for. */
+  .sg-p-crop{position:relative;overflow:hidden;max-width:300px;height:210px;border:1px solid rgba(200,162,74,.28);background:var(--pine-3);margin:10px 0}
   .sg-p-crop-inner{position:relative;width:350%}
   .sg-p-crop-inner img{width:100%;display:block}
   .sg-p-map{position:relative;max-width:160px;margin:10px 0;opacity:.85}
-  .sg-p-map img{max-width:100%;display:block;opacity:.92}
+  .sg-p-map img{max-width:100%;display:block;opacity:.92;border:1px solid rgba(200,162,74,.28);background:var(--pine-3);padding:4px}
   .sg-pin{position:absolute;width:14px;height:14px;border-radius:50%;
     border:2px solid var(--brass);background:rgba(200,162,74,.35);transform:translate(-50%,-50%)}
-  .sg-p-photo{max-width:100%;margin-top:10px;border:1px solid rgba(200,162,74,.25)}
+  .sg-p-photo{max-width:100%;margin-top:10px;border:1px solid rgba(200,162,74,.28);background:var(--pine-3);padding:4px}
   .sg-p-row{display:flex;justify-content:space-between;max-width:280px;padding:2px 0}
   .sg-p-row.best{color:var(--brass)}
 
@@ -464,7 +489,15 @@
   .name-list.down{color:var(--rust)}
   .draft-lab{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage);margin:0 0 4px}
   .draft-sub{font-size:.58rem;letter-spacing:.14em;text-transform:none;color:var(--sage);margin-left:10px;font-weight:400}
-  .mn-empty{padding:26px 6px;color:var(--brass-dim);font-style:italic}
+  /* §25b T2 fold-in (controller ruling, same bar as the brief): SAME
+     ceremony delta T1 gave .lb-empty,.sched-empty (see that comment) —
+     copy untouched, only the dress: sage not brass-dim, normal not italic,
+     small-caps letterspaced kicker register added. Padding/text-align kept
+     per-selector (not merged into the T1 rule) since .mn-empty and
+     .photo-empty each already carried their own, deliberately different,
+     original spacing. */
+  .mn-empty{padding:26px 6px;color:var(--sage);font-style:normal;
+    font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;text-align:center}
   /* calcutta */
   .auc-head,.auc-row{display:grid;grid-template-columns:1fr 1fr 5rem 5.5rem;gap:10px;
                      align-items:baseline;padding:13px 6px}
@@ -577,7 +610,12 @@
 
   .photo-frame{border:1px solid rgba(200,162,74,.22);background:var(--pine-2);height:520px;overflow:hidden}
   .photo-frame iframe{width:100%;height:100%;border:0;display:block}
-  .photo-empty{padding:60px 30px;text-align:center;color:var(--brass-dim);font-style:italic}
+  /* §25b T2 fold-in: same ceremony delta as .mn-empty above / T1's
+     .lb-empty,.sched-empty — text-align:center was already correct here,
+     kept as-is; only color/font-style swap + the small-caps kicker sizing
+     are new. */
+  .photo-empty{padding:60px 30px;text-align:center;color:var(--sage);font-style:normal;
+    font-size:.72rem;letter-spacing:.24em;text-transform:uppercase}
 
   footer{background:var(--pine-3);border-top:1px solid rgba(200,162,74,.22);
          padding:46px 0 54px;text-align:center}
@@ -592,6 +630,9 @@
     .rise{animation:none;opacity:1;transform:none}
     html{scroll-behavior:auto}
     .entry,.lb-row,.year-btn{transition:none}
+    /* §25b T2 (B-FIN): the wave's two sanctioned motion moments, neutralized
+       in the site's one general reduced-motion block — never a second one. */
+    .lb-flash,.lb-mv.up,.lb-mv.down{animation:none}
   }
 
   @media (max-width:820px){
@@ -1524,7 +1565,10 @@ const PINS={ 1:{x:36.6,y:69.0}, 2:{x:11.7,y:54.5}, 3:{x:27.0,y:27.1}, 4:{x:38.7,
   17:{x:81.0,y:91.0}, 18:{x:65.3,y:85.9} };
 let STATE = { data:{}, year:null, open:null, gridRound:null, gridHole:null,
   scTeam:null, scSeason:null, scPadHole:null, scRoundOverride:null,
-  scPadOtherOpen:false, scConfirmPending:null, scPickerOpen:null, prevBoard:null, lastBoardOrder:null };
+  scPadOtherOpen:false, scConfirmPending:null, scPickerOpen:null, prevBoard:null, lastBoardOrder:null,
+  // §25b T2 (B-FIN): parallel to prevBoard/lastBoardOrder, same one-paint-lag
+  // discipline — see renderLeaderboard()/paint() for the capture seam.
+  prevVals:null, lastBoardVals:null };
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -2049,6 +2093,11 @@ function renderLeaderboard(){
   // stashed array afterward instead of running a second rankedPlayers("gross")
   // pass, so the captured basis is byte-identical to what was rendered.
   STATE.lastBoardOrder = players.map(p=>p.key);
+  // §25b T2 (B-FIN): parallel value stash for the score-change flash — same
+  // once-per-render capture, right alongside lastBoardOrder above. paint()
+  // promotes this into STATE.prevVals AFTER the render fan-out, mirroring
+  // prevBoard's one-paint-lag discipline exactly (see paint()).
+  STATE.lastBoardVals = new Map(players.map(p=>[p.key, p.rel!==null?toPar(p.rel):(p.total??"—")]));
   // SC-PAR-LABEL (§20 amendment 2): courseMap()===null is the SAME
   // suppression signal SC-PAR-VALID's consumers already key off (X33-X36) —
   // reused directly, courseMap() itself untouched. When suppressed, the
@@ -2099,6 +2148,26 @@ function renderLeaderboard(){
   $("#lbBody").innerHTML=players.map(p=>
     lbRowHTML(p,{parsSuppressed,wdKeys,mv,open:STATE.open===p.key,interactive:true})
   ).join("");
+
+  // §25b T2 (B-FIN): score-change flash — a post-process pass over the just
+  // -rendered rows (lbRowHTML itself untouched: the whole feature lives
+  // here). Gated on `mv` being non-null, the EXACT SAME honesty state the
+  // arrows above already computed (basisFresh, which itself folds in
+  // yearMatch + !parsSuppressed) — never a second, independently-driftable
+  // gate. Never fires on a first paint (STATE.prevVals null), a year switch
+  // or stale basis (mv null), or a suppressed board (mv null). Prior to-par
+  // text comes from STATE.prevVals.vals, captured the same instant as
+  // STATE.prevBoard in paint(). Rows line up with `players` 1:1 via the
+  // .lb-row selector — cardHTML's own wrapper is .card-drop, never .lb-row,
+  // so an open row's appended card can't shift the index.
+  if(mv && STATE.prevVals && STATE.prevVals.vals){
+    const prevVals=STATE.prevVals.vals;
+    const rows=$("#lbBody").querySelectorAll(".lb-row");
+    players.forEach((p,i)=>{
+      const cur=p.rel!==null?toPar(p.rel):(p.total??"—");
+      if(prevVals.has(p.key) && prevVals.get(p.key)!==cur) rows[i]?.classList.add("lb-flash");
+    });
+  }
 
   $("#lbBody").querySelectorAll(".lb-row").forEach(b=>b.addEventListener("click",()=>{
     STATE.open = STATE.open===b.dataset.player ? null : b.dataset.player;
@@ -5218,6 +5287,11 @@ function paint(data,results){
   // round 1, Imp-1) so a later year switch can tell "stale" apart from
   // "wrong season entirely".
   STATE.prevBoard = { order: STATE.lastBoardOrder, year: STATE.year, at: Date.now() };
+  // §25b T2 (B-FIN): parallel value basis for the score-change flash —
+  // captured the SAME instant, from STATE.lastBoardVals (mirrors
+  // lastBoardOrder above exactly, including the year field, so a later
+  // year switch can't diff this paint's values against a prior year's).
+  STATE.prevVals = { vals: STATE.lastBoardVals, year: STATE.year, at: Date.now() };
   $("#lbSync").textContent=stampFor("scores",results);
   $("#schedSync").textContent=stampFor("schedule",results);
   $("#calSync").textContent=stampFor("calcutta",results);
