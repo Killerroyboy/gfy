@@ -7166,6 +7166,196 @@ const nowW = Date.now();
 }
 
 /* ---------------------------------------------------------------------
+   S25b-T1: finish audits — numerals, hairline rules, empty-state ceremony
+   (2026-08-31-gfy-s25b-finish-polish, task-1). §25a is FROZEN in semantics
+   (tokens, tier classes, masthead/mv/home code) — this wave is FORM only,
+   zero copy changes. Full three-part audit (numerals, rules, gold-as-metal)
+   is in task-1-report.md; these checks encode only the findings that
+   produced a real CSS change.
+   --------------------------------------------------------------------- */
+{
+  const idxB1 = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  check("S25b-T1a: .lb-head carries the Identity-board double hairline (border-bottom rgba(200,162,74,.45) + ::after rgba(200,162,74,.2)), matching .mast-rule's own two-tone convention — the Board's head/body seam now reads with the same masthead-grade emphasis as the top of the page",
+    /\.lb-head\{[^}]*border-bottom:1px solid rgba\(200,162,74,\.45\)/.test(idxB1)
+    && /\.lb-head::after\{[^}]*rgba\(200,162,74,\.2\)/.test(idxB1),
+    "lb-head rules");
+  check("S25b-T1b: empty states styled as ceremony (small-caps letterspaced sage, centered, not an italic brass-dim apology) — the WORDS are untouched, only the dress changed",
+    /\.lb-empty,\.sched-empty\{[^}]*letter-spacing:\.24em/.test(idxB1)
+    && /\.lb-empty,\.sched-empty\{[^}]*text-align:center/.test(idxB1)
+    && !/\.lb-empty,\.sched-empty\{[^}]*font-style:italic/.test(idxB1),
+    "empty-state css");
+  // T1c: numerals audit — every selector the audit found holding a digit
+  // that stacks down a real column (or ticks in place) without
+  // font-variant-numeric:tabular-nums. Money/scorecard/countdown numerals
+  // (.mn-*/.pot dd/.sg-t td/.sc-tile-v/.cd-num/etc.) already carried it —
+  // confirmed present in the audit, not re-asserted here (already covered
+  // by earlier S25a checks; re-asserting would test frozen rules, not this
+  // task's own findings).
+  const numT1c = {
+    "lb-pos": /\.lb-pos\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+    "lb-mv": /\.lb-mv\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+    "entry-year": /\.entry-year\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+    "pay-place": /\.pay-place\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+    "grp-time": /\.grp-time\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+    "slot-time": /\.slot-time\{[^}]*font-variant-numeric:tabular-nums/.test(idxB1),
+  };
+  check("S25b-T1c: numerals audit additions — .lb-pos (Board position column), .lb-mv (movement-count column), .entry-year (Champions ledger year column), .pay-place (payout place column), .grp-time (pairing tee-time column), .slot-time (schedule slot-time column) all gained font-variant-numeric:tabular-nums",
+    Object.values(numT1c).every(Boolean),
+    "found=" + JSON.stringify(numT1c));
+  check("S25b-T1d: rules audit — .sg-t thead th carries a double-rule head/body seam (border-bottom:3px double rgba(200,162,74,.45)) instead of the plain .14-alpha grid line every body cell shares; border-style:double (not a .lb-head-style ::after) because the sticky .sg-team column immediately below is position:sticky;z-index:2 and would win any stacking fight against an absolutely-positioned, z-index:auto pseudo",
+    /\.sg-t thead th\{border-bottom:3px double rgba\(200,162,74,\.45\)\}/.test(idxB1),
+    "sg-t thead rule");
+}
+
+/* ---------------------------------------------------------------------
+   S25b-T2: hole-panel photo/map frames + the wave's two sanctioned motion
+   moments (2026-08-31-gfy-s25b-finish-polish, task-2), plus the folded-in
+   .mn-empty/.photo-empty ceremony catch-up (same bar as T1's empty-state
+   pass). §25a/§24 scorer path frozen — zero copy changes.
+   --------------------------------------------------------------------- */
+{
+  const idxB2 = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  check("S25b-T2a: hole-panel imagery carries the hairline frame treatment — .sg-p-photo, .sg-p-map img, AND .sg-p-crop (the overflow-crop WRAPPER, since .sg-p-crop-img itself is the 350%-wide scrolling layer inside it and can't be bordered/padded directly) all carry the rgba(200,162,74,.28) hairline + pine-3 ground; dropping any ONE of the three fails this check",
+    /\.sg-p-photo\{[^}]*border:1px solid rgba\(200,162,74,\.28\)[^}]*background:var\(--pine-3\)/.test(idxB2)
+    && /\.sg-p-map img\{[^}]*border:1px solid rgba\(200,162,74,\.28\)[^}]*background:var\(--pine-3\)/.test(idxB2)
+    && /\.sg-p-crop\{[^}]*border:1px solid rgba\(200,162,74,\.28\)[^}]*background:var\(--pine-3\)/.test(idxB2),
+    "photo frames");
+  check("S25b-T2b: score-flash + arrow entrance exist AND are disabled under prefers-reduced-motion (the site's ONE general reduced-motion block, never a second)",
+    /\.lb-flash\{[^}]*animation:\s*lbFlash/.test(idxB2)
+    && /\.lb-mv\.up,\.lb-mv\.down\{[^}]*animation:\s*mvIn/.test(idxB2)
+    && /prefers-reduced-motion[\s\S]*?\.lb-flash,\.lb-mv\.up,\.lb-mv\.down\{[^}]*animation:\s*none/.test(idxB2.replace(/\n/g," ")),
+    "motion + rm guard");
+  check("S25b-T2c (fold-in, controller ruling): .mn-empty and .photo-empty get the SAME ceremony delta T1 gave .lb-empty,.sched-empty — sage not brass-dim, normal not italic, small-caps letterspaced kicker — words untouched",
+    /\.mn-empty\{[^}]*color:var\(--sage\)[^}]*letter-spacing:\.24em[^}]*text-transform:uppercase/.test(idxB2)
+    && !/\.mn-empty\{[^}]*font-style:italic/.test(idxB2)
+    && /\.photo-empty\{[^}]*color:var\(--sage\)[^}]*letter-spacing:\.24em[^}]*text-transform:uppercase/.test(idxB2)
+    && !/\.photo-empty\{[^}]*font-style:italic/.test(idxB2),
+    "mn-empty/photo-empty css");
+}
+
+{ // S25b-T2d: score-change flash — real DOM mechanism, not just source text.
+  // Order is left UNCHANGED between the hand-primed prevBoard and the live
+  // board (isolates the VALUE diff from B-MV's own order diff); only the
+  // FIRST team's prior to-par text is forced different from its current
+  // text, every other team's prior value is set to match current exactly —
+  // proves the flash is per-row, not a board-wide toggle.
+  const domT2d = makeDom("");
+  await until(() => domT2d.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearT2d = domT2d.window.eval("STATE.year");
+  const rowsT2d = [...domT2d.window.document.querySelectorAll("#lbBody .lb-row")];
+  const keysT2d = rowsT2d.map(r => r.dataset.player);
+  const curValsT2d = rowsT2d.map(r => r.querySelectorAll(".lb-tot")[1]?.textContent);
+  const primeValsT2d = keysT2d.map((k, i) => [k, i === 0 ? (curValsT2d[i] + "·prior") : curValsT2d[i]]);
+  domT2d.window.eval(
+    "STATE.prevBoard = " + JSON.stringify({ order: keysT2d, year: yearT2d, at: Date.now() }) + "; " +
+    "STATE.prevVals = { vals: new Map(" + JSON.stringify(primeValsT2d) + "), year: " + JSON.stringify(yearT2d) + ", at: Date.now() }; " +
+    "renderLeaderboard();"
+  );
+  const flashFlagsT2d = [...domT2d.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.classList.contains("lb-flash"));
+  domT2d.window.close();
+  const multiRowT2d = keysT2d.length > 1;
+  const onlyFirstFlashedT2d = multiRowT2d && flashFlagsT2d[0] === true && flashFlagsT2d.slice(1).every(f => f === false);
+  check("S25b-T2d: score-change flash fires ONLY on the row whose to-par text actually changed since the previous paint (fresh, same-year basis — the identical honesty state S25a-T4e already proves live for the arrows) — every unchanged row stays un-flashed",
+    onlyFirstFlashedT2d,
+    "teams=" + keysT2d.length + " keys=" + JSON.stringify(keysT2d) + " flashFlags=" + JSON.stringify(flashFlagsT2d));
+}
+
+{ // S25b-T2e (mutation-kill target): par-suppressed board — a fresh,
+  // same-year, hand-primed STATE.prevVals whose values genuinely differ
+  // from every live row (T2d's own positive precondition, reused verbatim)
+  // must still produce ZERO .lb-flash rows — the flash rides mv's own
+  // suppression gate (S25a-T4m's exact precondition) rather than a second,
+  // independently-driftable one.
+  const courseBlank7T2e = FIXTURES.course.split("\n")
+    .map(l => l.startsWith("7,") ? "7,," + l.split(",")[2] : l).join("\n");
+  const domT2e = makeDom("", withOverride({
+    course: () => Promise.resolve({ ok: true, status: 200, text: async () => courseBlank7T2e }),
+  }));
+  await until(() => domT2e.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearT2e = domT2e.window.eval("STATE.year");
+  const keysT2e = [...domT2e.window.document.querySelectorAll("#lbBody .lb-row")].map(r => r.dataset.player);
+  domT2e.window.eval(
+    "STATE.prevBoard = " + JSON.stringify({ order: keysT2e, year: yearT2e, at: Date.now() }) + "; " +
+    "STATE.prevVals = { vals: new Map(" + JSON.stringify(keysT2e.map(k => [k, "SOMETHING_ELSE_ENTIRELY"])) + "), year: " + JSON.stringify(yearT2e) + ", at: Date.now() }; " +
+    "renderLeaderboard();"
+  );
+  const flashAnyT2e = [...domT2e.window.document.querySelectorAll("#lbBody .lb-row")].some(r => r.classList.contains("lb-flash"));
+  domT2e.window.close();
+  check("S25b-T2e: par-suppressed board — a fresh, same-year, hand-primed STATE.prevVals whose values genuinely differ from every live row still produces ZERO .lb-flash rows — suppression suppresses the flash exactly like S25a-T4m already proves it suppresses the arrows",
+    keysT2e.length > 0 && !flashAnyT2e,
+    "keys=" + JSON.stringify(keysT2e) + " flashAny=" + flashAnyT2e);
+}
+
+{ // S25b-T2f: first paint — STATE.prevVals is still null (this dom's very
+  // first render), so the flash gate can't fire regardless of anything
+  // else, mirroring S25a-T4d's first-paint dash proof for the arrows.
+  const domT2f = makeDom("");
+  await until(() => domT2f.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const rowsT2f = [...domT2f.window.document.querySelectorAll("#lbBody .lb-row")];
+  const flashAnyT2f = rowsT2f.some(r => r.classList.contains("lb-flash"));
+  domT2f.window.close();
+  check("S25b-T2f: first paint (no prior STATE.prevVals yet) never flashes any row",
+    rowsT2f.length > 0 && !flashAnyT2f,
+    "rows=" + rowsT2f.length + " flashAny=" + flashAnyT2f);
+}
+
+{ // S25b-T2g (fix round 1, review Important — capture-seam coverage): T2d/
+  // e/f all hand-prime STATE.prevVals directly and call renderLeaderboard()
+  // themselves, so BOTH real capture lines — the STATE.lastBoardVals stash
+  // in renderLeaderboard() and its promotion into STATE.prevVals in paint()
+  // — are removable with the whole suite still green. Exactly the risk
+  // class S25a-T4l guards for prevBoard/arrows; this is that SAME guard for
+  // prevVals/flash. Mirrors T4l's idiom verbatim: drives the REAL
+  // load()/paint() path TWICE via a mutable fetch-stub phase flag, with
+  // ONLY Duck's total changed between paints (Sully/Tex totals held fixed,
+  // so their to-par text is byte-identical both paints — a same-value
+  // control the flash gate must NOT fire on).
+  let phaseT2g = 1;
+  const scoresHeaderT2g = FIXTURES.scores.split(/\r\n|\n/)[0];
+  const totalsRowT2g = (team, r1, r2) => [2026, team, "", ...Array(18).fill(""), r1, r2].join(",");
+  const scoresPhase1T2g = scoresHeaderT2g + "\n"
+    + totalsRowT2g("Duck", 70, 70) + "\n"
+    + totalsRowT2g("Sully", 75, 75) + "\n"
+    + totalsRowT2g("Tex", 80, 80);
+  const scoresPhase2T2g = scoresHeaderT2g + "\n"
+    + totalsRowT2g("Duck", 75, 70) + "\n"   // Duck's total (+5) — to-par text must change
+    + totalsRowT2g("Sully", 75, 75) + "\n"  // unchanged — control
+    + totalsRowT2g("Tex", 80, 80);          // unchanged — control
+  const domT2g = makeDom("", withOverride({
+    scores: () => Promise.resolve({ ok: true, status: 200, text: async () => phaseT2g === 1 ? scoresPhase1T2g : scoresPhase2T2g }),
+  }));
+  await until(() => domT2g.window.document.querySelectorAll("#lbBody .lb-row").length > 0);
+  const yearT2g = domT2g.window.eval("STATE.year");
+  // shape asserted right after the FIRST real paint — must already reflect
+  // paint()'s own capture line, not a test-side stand-in.
+  const prevValsShapeT2g = domT2g.window.eval(
+    "(function(){var v=STATE.prevVals; return v && {isMap: v.vals instanceof Map, size: (v.vals&&v.vals.size)||0, year: v.year, atType: typeof v.at};})()"
+  );
+  const rowForT2g = (k) => domT2g.window.document.querySelector('#lbBody .lb-row[data-player="' + k + '"]');
+  const duckParFirstT2g = rowForT2g("duck")?.querySelectorAll(".lb-tot")[1]?.textContent;
+  phaseT2g = 2;
+  // age the history so the second load() actually refetches scores (same
+  // idiom S25a-T4l uses) — the paint()-capture seam is what's tested.
+  domT2g.window.eval("Object.keys(LAST_GOT).forEach(t=>{LAST_GOT[t].reqAt-=COLD_MS+1000})");
+  await domT2g.window.load(); // second REAL paint — the same load() path T4l exercises
+  const duckRowT2g = rowForT2g("duck"), sullyRowT2g = rowForT2g("sully"), texRowT2g = rowForT2g("tex");
+  const duckParSecondT2g = duckRowT2g?.querySelectorAll(".lb-tot")[1]?.textContent;
+  const duckFlashT2g = !!duckRowT2g?.classList.contains("lb-flash");
+  const sullyFlashT2g = !!sullyRowT2g?.classList.contains("lb-flash");
+  const texFlashT2g = !!texRowT2g?.classList.contains("lb-flash");
+  domT2g.window.close();
+  const parChangedT2g = duckParFirstT2g !== undefined && duckParSecondT2g !== undefined && duckParFirstT2g !== duckParSecondT2g;
+  const shapeOkT2g = !!prevValsShapeT2g && prevValsShapeT2g.isMap === true && prevValsShapeT2g.size > 0
+    && prevValsShapeT2g.year === yearT2g && prevValsShapeT2g.atType === "number";
+  const flashOkT2g = duckFlashT2g && !sullyFlashT2g && !texFlashT2g;
+  check("S25b-T2g (fix round 1, review Important): capture-seam coverage — the REAL load()/paint() path, driven TWICE with Duck's total changed between paints (S25a-T4l's own dyn fixture-override idiom), leaves STATE.prevVals holding {vals:Map,year,at:number} after the FIRST paint (paint()'s own promotion line, never hand-primed), Duck's to-par text is proven to actually differ between paints, and the SECOND paint flashes Duck ONLY — Sully/Tex (unchanged totals, same-value control) never flash",
+    parChangedT2g && shapeOkT2g && flashOkT2g,
+    "duckParFirst=" + JSON.stringify(duckParFirstT2g) + " duckParSecond=" + JSON.stringify(duckParSecondT2g) +
+      " prevValsShape=" + JSON.stringify(prevValsShapeT2g) + " year=" + JSON.stringify(yearT2g) +
+      " duckFlash=" + duckFlashT2g + " sullyFlash=" + sullyFlashT2g + " texFlash=" + texFlashT2g);
+}
+
+/* ---------------------------------------------------------------------
    GROUP FV (cont.) — 2026-08-28 polish wave (Riley-approved):
    FV7 name-list class split, FV8 stale-calendar CTA, FV9 phase-aware
    board eyebrow, FV10 draft-list legibility.

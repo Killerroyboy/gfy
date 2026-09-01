@@ -1,0 +1,170 @@
+{
+  "lbEmpty-mobile": {
+    "text": "No cards posted yet. Scores appear here as the sheet fills in.",
+    "color": "rgb(138, 155, 140)",
+    "fontStyle": "normal",
+    "letterSpacing": "2.7648px",
+    "textTransform": "uppercase",
+    "textAlign": "center"
+  },
+  "lbEmpty-desktop": {
+    "text": "No cards posted yet. Scores appear here as the sheet fills in.",
+    "color": "rgb(138, 155, 140)",
+    "fontStyle": "normal",
+    "letterSpacing": "2.7648px",
+    "textTransform": "uppercase",
+    "textAlign": "center"
+  },
+  "mnEmpty-mobile": {
+    "text": "Nothing to settle for 2026. See Next Year for the 2027 collection.",
+    "color": "rgb(138, 155, 140)",
+    "fontStyle": "normal",
+    "letterSpacing": "2.7648px",
+    "textTransform": "uppercase"
+  },
+  "mnEmpty-desktop": {
+    "text": "Nothing to settle for 2026. See Next Year for the 2027 collection.",
+    "color": "rgb(138, 155, 140)",
+    "fontStyle": "normal",
+    "letterSpacing": "2.7648px",
+    "textTransform": "uppercase"
+  },
+  "photoEmpty-mobile": {
+    "text": "Connect a Drive folder and every photo the group uploads lands in this grid.",
+    "color": "rgb(138, 155, 140)",
+    "fontStyle": "normal",
+    "letterSpacing": "2.7648px",
+    "textTransform": "uppercase",
+    "padding": "60px 30px",
+    "textAlign": "center"
+  },
+  "photoEmpty-desktop": {
+    "text": "Connect a Drive folder and every photo the group uploads lands in this grid.",
+    "color": "rgb(138, 155, 140)",
+    "fontStyle": "normal",
+    "letterSpacing": "2.7648px",
+    "textTransform": "uppercase",
+    "padding": "60px 30px",
+    "textAlign": "center"
+  },
+  "holePanel-mobile": {
+    "photo": {
+      "border": "1px solid rgba(200, 162, 74, 0.28)",
+      "background": "rgb(10, 23, 18)",
+      "padding": "4px"
+    },
+    "mapImg": {
+      "border": "1px solid rgba(200, 162, 74, 0.28)",
+      "background": "rgb(10, 23, 18)",
+      "padding": "4px"
+    },
+    "crop": {
+      "border": "1px solid rgba(200, 162, 74, 0.28)",
+      "background": "rgb(10, 23, 18)",
+      "padding": "0px"
+    },
+    "photoHidden": false
+  },
+  "holePanel-desktop": {
+    "photo": {
+      "border": "1px solid rgba(200, 162, 74, 0.28)",
+      "background": "rgb(10, 23, 18)",
+      "padding": "4px"
+    },
+    "mapImg": {
+      "border": "1px solid rgba(200, 162, 74, 0.28)",
+      "background": "rgb(10, 23, 18)",
+      "padding": "4px"
+    },
+    "crop": {
+      "border": "1px solid rgba(200, 162, 74, 0.28)",
+      "background": "rgb(10, 23, 18)",
+      "padding": "0px"
+    },
+    "photoHidden": false
+  },
+  "doubleDigitMv-mobile": {
+    "teamCount": 12,
+    "cells": [
+      "lb-mv up:11",
+      "lb-mv up:9",
+      "lb-mv up:7",
+      "lb-mv up:5",
+      "lb-mv up:3",
+      "lb-mv up:1",
+      "lb-mv down:1",
+      "lb-mv down:3",
+      "lb-mv down:5",
+      "lb-mv down:7",
+      "lb-mv down:9",
+      "lb-mv down:11"
+    ],
+    "maxN": 11
+  },
+  "doubleDigitMv-desktop": {
+    "teamCount": 12,
+    "cells": [
+      "lb-mv up:11",
+      "lb-mv up:9",
+      "lb-mv up:7",
+      "lb-mv up:5",
+      "lb-mv up:3",
+      "lb-mv up:1",
+      "lb-mv down:1",
+      "lb-mv down:3",
+      "lb-mv down:5",
+      "lb-mv down:7",
+      "lb-mv down:9",
+      "lb-mv down:11"
+    ],
+    "maxN": 11
+  },
+  "sgTeamCorner-mobile": {
+    "borderRight": "1px solid rgb(111, 90, 38)",
+    "borderBottom": "3px double rgba(200, 162, 74, 0.45)"
+  },
+  "sgTeamCorner-desktop": {
+    "borderRight": "1px solid rgb(111, 90, 38)",
+    "borderBottom": "3px double rgba(200, 162, 74, 0.45)"
+  },
+  "flashNormal-mobile": {
+    "duckBefore": "E",
+    "duckAfter": "+1",
+    "flashState": {
+      "hasFlashClass": true,
+      "backgroundColor": "rgba(200, 162, 74, 0.14)"
+    },
+    "sullyFlashed": false
+  },
+  "flashNormal-desktop": {
+    "duckBefore": "E",
+    "duckAfter": "+1",
+    "flashState": {
+      "hasFlashClass": true,
+      "backgroundColor": "rgba(200, 162, 74, 0.14)"
+    },
+    "sullyFlashed": false
+  },
+  "flashReducedMotion-mobile": {
+    "duckBefore": "E",
+    "flashState": {
+      "hasFlashClass": true,
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "animationName": "none"
+    },
+    "flashStateLater": {
+      "backgroundColor": "rgba(0, 0, 0, 0)"
+    }
+  },
+  "flashReducedMotion-desktop": {
+    "duckBefore": "E",
+    "flashState": {
+      "hasFlashClass": true,
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "animationName": "none"
+    },
+    "flashStateLater": {
+      "backgroundColor": "rgba(0, 0, 0, 0)"
+    }
+  }
+}
