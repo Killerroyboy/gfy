@@ -1,9 +1,18 @@
 # GFY session handoff — pick up here
 
-> Written 2026-09-02 at the close of the §25/§26 arc. A fresh session should read this,
+> Written 2026-09-02 at the close of the §25/§26 arc (supersedes the 07-30-era handoff;
+> its primer + binding invariants are folded in below — full prior text in git history). A fresh session should read this,
 > the memory topic file (`~/.claude/projects/-Users-riley/memory/project_gfy_tournament_site.md`),
 > and `BACKLOG.md`, then emit the doctrine loaded-heartbeat before acting
 > (`~/.claude/projects/-Users-riley/memory/DOCTRINE.md` §1 first; GFY has no company layer).
+
+## What this project is
+
+GFY: an annual golf-trip site + Google Sheet ops system. Static site (one `index.html`,
+inline CSS/JS) on GitHub Pages reading published-CSV tabs from one Google Sheet; operator
+tooling = two Apps Script files pasted into the sheet's container project, a Google Form
+for live scoring, a Python template generator, and a Node pre-send email checker.
+Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) at MeadowCreek (New Meadows, ID). 12–15 four-player teams.
 
 ## Where things stand (verify fresh — never trust this doc over `git fetch` + the live site)
 
@@ -93,7 +102,25 @@
   repeatedly: verify worktree state via `git status` (trust disk, not memory), resume
   with scope-cuts, or go controller-inline with the review gate kept.
 
+## Binding invariants (cost us reviews to learn — do not relearn)
+
+1. Emails NEVER in repo/published sheet/site. Vault = separate never-published sheet.
+   The form's "Collect email addresses = Do not collect" setting guards the responses tab
+   (which auto-publishes and NO watchdog can scan).
+2. Sheet CF colors are LIGHT tints (white sheet, black text) — never site-palette hexes.
+3. START HERE's form-URL cell is CONTENT-anchored ("Scoring form URL" label) — never
+   coordinate-anchored; polish() rebuild preserves it.
+4. Blank `team` in Field = normal (draft is Friday night). Handicap = typed number.
+5. Full names (first+last) on Field/Invites/Rooms/vault players; team labels elsewhere.
+6. All sheet validations warn-mode; site vocabulary owns dropdown lists (In/wd/out/declined).
+7. Test values come from the REAL fixtures (compute, never assume); RED before GREEN.
+
 ## Key references
+
+- Apps Script container project `1HE704reG5WNBWSQOMhoiTzG-phbTGKlD_NP6ywipR5zWy1xV9x8bTtOW`
+  (Code.gs = sheet-polish; triggers.gs = sheet-triggers; 2 triggers installed: onScoreFormSubmit,
+  onDepositEdit). The scorer WEB APP endpoint exists as an echo STUB only — arming = redeploy the
+  real doPost on the SAME deployment URL (BACKLOG #1); NEVER arm with the stub.
 
 - Ledgers (rulings live here): `.superpowers/sdd/<wave>/progress.md` in each retained
   worktree (s25a, s25b) and `~/Code/gfy/.superpowers/sdd/2026-09-01-gfy-s26-event-kit/`.
