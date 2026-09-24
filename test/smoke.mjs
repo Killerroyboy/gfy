@@ -1885,6 +1885,85 @@ dom.window.close();
     && seedBody.includes(".sort") && seedBody.includes("since")
     && gs.includes("GFY menu"),
     "ciBody.len=" + ciBody.length + " seedBody.len=" + seedBody.length);
+  // P8 (BACKLOG #16 — confirmed live 2026-09-01): a CF formula is evaluated
+  // RELATIVE to every cell of its range, and polish applies these rules across
+  // the sheet's FULL WIDTH. An un-anchored column ref therefore shifts per
+  // column: `G2=FALSE` reads H2 in column B, I2 in column C, and so on — the
+  // row tint only *looked* right because blank cells coerce to FALSE. Live
+  // Field row 7 proved it (B7 white, the rest red). Every cell reference in a
+  // whenFormulaSatisfied formula must carry a `$` column anchor.
+  // Teeth: the detector is run against the CURRENT source AND against a
+  // mutant with the anchors stripped — if the mutant does not trip, the check
+  // is vacuous and P8 fails on that leg alone.
+  const cfFormulas = src => [...src.matchAll(/whenFormulaSatisfied\(`([^`]*)`\)/g)].map(m => m[1]);
+  const unanchoredRefs = f => [
+    // interpolated column ref immediately followed by a row number: ${col}2
+    ...[...f.matchAll(/(?<!\$)(\$\{[^}]*\})(\d+)/g)].map(m => m[1] + m[2]),
+    // literal column ref: A2 / AB2, not already anchored and not part of a
+    // quoted A1 range like "Field!B:B"
+    ...[...f.matchAll(/(?<![$A-Za-z0-9_!:])([A-Z]{1,2})(\d+)\b/g)].map(m => m[1] + m[2]),
+  ];
+  const cfBody = name => (gs.match(new RegExp("function " + name + "[\\s\\S]*?\\n\\}")) || [""])[0];
+  const cfNames = ["colorField_", "colorRooms_", "colorInvites_"];
+  const cfLive = cfNames.map(n => ({ n, body: cfBody(n) }));
+  const liveOffenders = cfLive.flatMap(({ n, body }) =>
+    cfFormulas(body).flatMap(f => unanchoredRefs(f).map(r => n + ":" + r)));
+  // Mutant: strip the `$` that anchors an interpolated ref (`$${c}2` -> `${c}2`)
+  // and the `$` on literal refs (`$A2` -> `A2`), then re-run the detector.
+  const cfMutant = cfLive.map(({ n, body }) =>
+    ({ n, body: body.replace(/\$(\$\{)/g, "$1").replace(/\$([A-Z]{1,2}\d)/g, "$1") }));
+  const mutantOffenders = cfMutant.flatMap(({ n, body }) =>
+    cfFormulas(body).flatMap(f => unanchoredRefs(f).map(r => n + ":" + r)));
+  check("P8: every conditional-format formula in polish ($-anchoring, BACKLOG #16) — colorField_/colorRooms_/colorInvites_ carry NO un-anchored cell reference, and the detector has teeth (an anchor-stripped mutant trips it)",
+    cfLive.every(({ body }) => body.length > 0)
+    && cfLive.some(({ body }) => cfFormulas(body).length > 0)
+    && liveOffenders.length === 0
+    && mutantOffenders.length > 0,
+    "live=" + JSON.stringify(liveOffenders) + " mutant=" + JSON.stringify(mutantOffenders));
+  // P9 (BACKLOG #19.1 — the wipe's fabrication): promote's `since` decision,
+  // exercised as REAL LOGIC rather than by regex. gfy-promote.gs needs a live
+  // spreadsheet, so pcSinceFor_ was isolated as a pure function precisely so
+  // this leg can run. Riley's 09-02 ruling empties Field; the pre-fix rule
+  // ("no Field row anywhere" => since = promoted year) then badges the ENTIRE
+  // field ROOKIE on a public site. Rookie-ness is only provable when Field
+  // carries a season EARLIER than the one promoted into.
+  const sinceSrc = (promo.match(/function pcSinceFor_[\s\S]*?\n\}/) || [""])[0];
+  const buildSince = src => { try { return new Function(src + "\nreturn pcSinceFor_;")(); } catch { return null; } };
+  const since = buildSince(sinceSrc);
+  // Mutant restores the pre-fix rule: rookie-ness provable whenever the player
+  // has no Field row, regardless of whether any history exists to be absent from.
+  const sinceMutant = buildSince(sinceSrc.replace(/\(fieldYears \|\| \[\]\)\.some\(function\(fy\)\{ return fy < y; \}\)/, "true"));
+  const legs = since && sinceMutant ? (() => {
+    const wiped = [], history = [2019, 2025, 2026], sameYearOnly = [2027];
+    return {
+      // THE FIX: Field wiped -> nothing could be absent -> blank + fill it.
+      wiped:       since("",     false, 2027, wiped),
+      // mid-wipe: rows are accumulating for 2027 but still no earlier season.
+      sameYear:    since("",     false, 2027, sameYearOnly),
+      // real history present and he is genuinely absent from it -> rookie.
+      realRookie:  since("",     false, 2027, history),
+      // a recorded since always wins, untouched.
+      recorded:    since(2019,   true,  2027, history),
+      // returning player whose rows never recorded a since -> blank (pre-existing rule, preserved).
+      returning:   since("",     true,  2027, history),
+      // the pre-fix rule, proving these legs have teeth.
+      mutantWiped: sinceMutant("", false, 2027, wiped),
+    };
+  })() : null;
+  check("P9: promote's since rule is honest on a wiped Field (BACKLOG #19.1) — no earlier season on Field means NO rookie claim (blank + 'fill it'), a real history still yields '(rookie)', a recorded since always wins; the pre-fix rule is carried as a mutant and must disagree",
+    !!legs
+    && legs.wiped.since === "" && / \(since unknown — fill it\)$/.test(legs.wiped.note)
+    && legs.sameYear.since === "" && / \(since unknown — fill it\)$/.test(legs.sameYear.note)
+    && legs.realRookie.since === 2027 && legs.realRookie.note === " (rookie)"
+    && legs.recorded.since === 2019 && legs.recorded.note === ""
+    && legs.returning.since === "" && / \(since unknown — fill it\)$/.test(legs.returning.note)
+    // teeth: the pre-fix rule fabricates exactly what the fix removes
+    && legs.mutantWiped.since === 2027
+    // and the fix is actually WIRED — promoteCommitted must route through it,
+    // with no surviving promoted-year default at the call site.
+    && /const dec = pcSinceFor_\(/.test(promo)
+    && !/row\[fh\.since\]\s*=\s*prior\s*\?/.test(promo),
+    JSON.stringify(legs));
 }
 
 /* ---------- Q: presend-check (v2.3 §13 V-MATCH/V-PATH) ---------- */

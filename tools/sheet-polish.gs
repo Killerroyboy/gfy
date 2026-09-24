@@ -77,11 +77,11 @@ function colorField_(sh){
   const dep = headerIndex_(sh, "deposit"), since = headerIndex_(sh, "since");
   const rules = [];
   if (dep) rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=AND($A2<>"",${colLetter_(dep)}2=FALSE)`)
+    .whenFormulaSatisfied(`=AND($A2<>"",$${colLetter_(dep)}2=FALSE)`)
     .setBackground("#f4cccc")
     .setRanges([sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))]).build());
   if (since) rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=AND($A2<>"",${colLetter_(since)}2=$A2)`)     // rookie: since == row's season
+    .whenFormulaSatisfied(`=AND($A2<>"",$${colLetter_(since)}2=$A2)`)    // rookie: since == row's season
     .setBackground("#fff2cc")
     .setRanges([sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))]).build());
   if (sh.getConditionalFormatRules().length > rules.length)
@@ -95,7 +95,7 @@ function colorRooms_(sh){
   const field = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Field");
   const pcol = field ? colLetter_(headerIndex_(field, "player") || 2) : "B";
   const rules = [SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=AND(${c}2<>"",LEFT(${c}2,6)<>"guest:",ISNA(MATCH(${c}2,INDIRECT("Field!${pcol}:${pcol}"),0)))`)
+    .whenFormulaSatisfied(`=AND($${c}2<>"",LEFT($${c}2,6)<>"guest:",ISNA(MATCH($${c}2,INDIRECT("Field!${pcol}:${pcol}"),0)))`)
     .setBackground("#fce5cd")
     .setRanges([sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))]).build()];
   if (sh.getConditionalFormatRules().length > rules.length)
