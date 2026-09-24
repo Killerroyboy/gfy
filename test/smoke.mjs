@@ -4433,6 +4433,14 @@ async function cellSettledOk(doc, hole) {
   const rowOKX34 = domOKX34.window.document.querySelector("#lbBody .lb-row");
   const totOK = rowOKX34 && rowOKX34.querySelectorAll(".lb-tot")[1];
   const toParForm = totOK && /^[+−\-]?\d+$|^E$/.test(totOK.textContent.trim()) && /^[+−\-E]/.test(totOK.textContent.trim());
+  // roundnorm-decimal S1 — pin decimal-input behavior for roundNorm (wave 1 discriminating test).
+  // On base, roundNorm("1.0") => "10" (replace strips "."), so this check FAILS on base.
+  // Authored by the G0 producer on gfy-preview@1bb980d4 and brought across verbatim; the
+  // window closed at needs-riley before its S2 (the fix) could run.
+  const roundNorm = domOKX34.window.roundNorm;
+  check('roundNorm decimal pin (S1): "1.0"=>"1", "2.0"=>"2", "1"=>"1" (wave-1 discriminating; base returns "10" for "1.0")',
+    roundNorm("1.0")==="1" && roundNorm("2.0")==="2" && roundNorm("1")==="1",
+    '"1.0"=>' + roundNorm("1.0") + ' "2.0"=>' + roundNorm("2.0") + ' "1"=>' + roundNorm("1"));
   domOKX34.window.close();
 
   const courseBlank7X34 = FIXTURES.course.split("\n")

@@ -2031,9 +2031,16 @@ const flag=m=>{ if(!HEALTH.includes(m)) HEALTH.push(m); };
 const posInt=v=>{ const n=parseInt(v,10); return (isNaN(n)||n<=0)?null:n; };
 const WORDROUND={one:"1",two:"2",three:"3"};
 function roundNorm(v){
-  const d=String(v||"").replace(/[^0-9]/g,"");
+  const s=String(v||"").trim();
+  // A decimal-looking value reads its INTEGER PART. The bare digit-strip below turns a
+  // hand-typed "1.0" into "10" — a round that does not exist — which silently mis-files a
+  // captain's card (GFY BACKLOG #12). Matched only when the WHOLE value is a number, so
+  // every other shape keeps the established behaviour: "Round 2" still strips to "2".
+  const dec=s.match(/^(\d+)(?:\.\d+)?$/);
+  if(dec) return dec[1];
+  const d=s.replace(/[^0-9]/g,"");
   if(d) return d;
-  const w=String(v||"").trim().toLowerCase().split(/\s+/).pop();
+  const w=s.toLowerCase().split(/\s+/).pop();
   return WORDROUND[w]||"1";
 }
 function activeSeason(){
