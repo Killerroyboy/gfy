@@ -63,6 +63,30 @@ function pcAppendRow_(vals){
   return 2;
 }
 
+// The `since` decision for one promoted player, isolated as PURE logic so the
+// smoke suite can exercise it behaviourally (P9) — the rest of promote needs a
+// live spreadsheet and can only be checked by source parity.
+//   prior      the player's latest RECORDED since ("" when none)
+//   returning  he has some Field row already (any season)
+//   year       the season being promoted into
+//   fieldYears every season present on Field right now
+// "(rookie)" is a CLAIM about a player's history, and it is only evidence-based
+// when Field actually carries a season EARLIER than the one being promoted
+// into. On a wiped or brand-new Field nothing COULD be absent, so absence
+// proves nothing: the honest answer is BLANK + "fill it", never a defaulted
+// promoted-year — that would badge the entire field ROOKIE on a public site
+// (S1 NULL-over-guess; S12 data honesty). Same earlier-than-scope-year test
+// event-ready.mjs already uses for its first-timer sponsor WARN.
+function pcSinceFor_(prior, returning, year, fieldYears){
+  if (prior != null && String(prior).trim() !== "") return { since: prior, note: "" };
+  const y = parseInt(year, 10);
+  const rookieProvable = !returning && !isNaN(y)
+    && (fieldYears || []).some(function(fy){ return fy < y; });
+  return rookieProvable
+    ? { since: y, note: " (rookie)" }
+    : { since: "", note: " (since unknown — fill it)" };
+}
+
 function promoteCommitted(){
   const ui = SpreadsheetApp.getUi();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -93,11 +117,13 @@ function promoteCommitted(){
     const existing = new Set();
     const latestSince = {};                                 // pcNorm(player) -> {year, since}
     const fieldAnyYear = new Set();
+    const fieldYears = [];                                  // every season Field carries (rookie-ness evidence base)
     fldVals.forEach(r => {
       const p = String(r[fh.player] || "").trim(); if (!p) return;
       existing.add(String(r[fh.year]).trim() + "|" + pcNorm_(p));
       fieldAnyYear.add(pcNorm_(p));
       const y = parseInt(r[fh.year], 10), s = String(r[fh.since] == null ? "" : r[fh.since]).trim();
+      if (!isNaN(y)) fieldYears.push(y);
       if (s && !isNaN(y)){
         const k = pcNorm_(p);
         if (!(k in latestSince) || y > latestSince[k].year) latestSince[k] = { year: y, since: r[fh.since] };
@@ -126,15 +152,15 @@ function promoteCommitted(){
       const k2 = pcNorm_(player);
       const prior = latestSince[k2];
       const returning = fieldAnyYear.has(k2);
-      // TRUE first-timer (no Field row anywhere): since = the promoted year,
-      // his rookie year by definition. A RETURNING player whose rows never
-      // recorded a since gets BLANK — defaulting the invite year would badge
-      // a veteran ROOKIE on the site, a fabricated rookie-ness (S12).
-      row[fh.since] = prior ? prior.since : (returning ? "" : parseInt(yearKey, 10));
+      // Rookie-ness is a claim, not a default — pcSinceFor_ owns the rule
+      // (and BACKLOG #19.1: after the sample-data wipe, Field has no earlier
+      // season for anyone to be absent from, so nobody may be called rookie).
+      const dec = pcSinceFor_(prior ? prior.since : "", returning, yearKey, fieldYears);
+      row[fh.since] = dec.since;
       if ("deposit" in fh) row[fh.deposit] = false;         // unchecked checkbox
       newRows.push(row);
       existing.add(key);                                    // a duplicate committed row can't double-append
-      promoted.push(player + (returning ? (prior ? "" : " (since unknown — fill it)") : " (rookie)"));
+      promoted.push(player + dec.note);
     });
 
     if (newRows.length){
