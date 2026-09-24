@@ -1103,3 +1103,73 @@ S12 label honesty, §24 stamps, D3 degradation):
   precedent), verify-HEAD-before-every-commit, and §25a's smoke additions in their own
   uniquely-anchored block to keep the append-append merge clean**; Riley push gate
   unchanged.
+
+---
+
+## §27 — go-live hardening: deployment-binding probe, drill teeth, acceptance gate (Riley directive 2026-09-24 "complete GFY in its entirety … work with the CEO"; CEO-reviewed, two rounds)
+
+The site is deployed and the scorer write path is built, locked and suite-covered.
+What is not yet safe is the **transition from test bed to live system**: arming the
+endpoint, wiping the sample data, and filling in the real 2027 event. This section
+sanctions the changes that make that transition verifiable. It ships no new user
+surface — every rule here exists to stop a SILENT failure on tournament morning.
+
+**Sequencing ruled (CEO round 2, after I challenged its first answer):** the scorer is
+armed against the REAL sheet and drilled BEFORE the data fill — not rehearsed on a
+throwaway copy. A scratch copy would force a re-point of the deployment afterwards,
+which makes the single most dangerous step (deployment-to-sheet binding) the one step
+never rehearsed. Drilling the real binding costs the same and tests the real thing;
+the only data at risk during a failed drill is sample data already condemned by the
+wipe. The backup snapshot is kept as a **rollback artifact, not a drill environment**.
+
+- **SC-IDENT — the endpoint must be able to say what it is.** `doGet` gains an identity
+  envelope: `handler:"gfy-scorer"`, `writes:true`, and a `contract` integer. This is a
+  sanctioned change to a FROZEN surface (`tools/sheet-triggers.gs`), and it is
+  **additive only** (S5): `ok`/`year`/`teams` keep their existing meaning and position,
+  so every current consumer is untouched. The §18 spike stub cannot answer this way,
+  which is the entire point.
+- **SC-PROBE — never conclude from a 200.** `npm run check-endpoint` GETs the deployed
+  Web App and classifies it: `REAL` (identity envelope present and `writes:true`),
+  `STUB` (reachable, answers, but carries no identity — the echo deployment), or
+  `UNREACHABLE`/`UNCERTAIN` (network, non-JSON, or an ambiguous body — reported as
+  neither pass nor fail, per S2's UNCERTAIN half). Apps Script will happily serve an
+  OLD bound version from the same URL after an incomplete redeploy; that failure is
+  invisible to the eye and returns clean 200s. This probe becomes **step 1 of
+  SC-DRILL**, so a stub deployment fails in ten seconds instead of at the 15-tap sweep.
+- **SC-DRILL-CONC — drill the lock that was written for the shotgun start.** The
+  existing clobber test is SEQUENTIAL (second browser, after the first) and therefore
+  never exercised `applyScore_`'s DocumentLock under real contention. The drill gains a
+  concurrent leg: two submissions fired in the same instant for DIFFERENT holes of the
+  same team row. Both must land — a lost write here is the silent scoring failure.
+- **SC-DRILL-NS — drill writes carry no authority (S15).** Drill submissions use a
+  reserved `drill:` client_id namespace, and cleanup purges BOTH the Scores rows and the
+  matching idempotency keys. A surviving drill key is not cosmetic: the ring returns the
+  STORED response for a repeated key, so a real submission that collides with a
+  leftover drill key would be answered with a drill verdict and never written.
+- **EV-ACCEPT — the data fill has an acceptance gate, not a vibe.** After the wipe and
+  fill, `npm run event-ready` must be GREEN, or every surviving FAIL explained per row.
+  Most of the 25 residual residue FAILs should vanish when real data overwrites sample
+  rows — but *should* is a prediction. **A residue FAIL that survives real data is a
+  validation bug wearing a residue costume**, and must be diagnosed, not waved through.
+- **EV-XTAB — cross-tab integrity is an acceptance check, not a sample-data artifact.**
+  Every Calcutta team must map to a real Field team. It reads as sample noise today
+  (Duck/Sully/Tex against a sample Field), but the invariant is about the real event: a
+  Calcutta auction on a team that does not exist in the field is a day-of money
+  contradiction. The check already exists; this rule binds it as acceptance.
+- **OPS-RESTORE — a three-line restore runbook.** The scorer is robust; the SHEET is a
+  shared mutable document any editor can fat-finger on tournament morning. README gains:
+  restore the pre-event snapshot, re-point/redeploy the endpoint, re-run SC-PROBE +
+  drill step 1. Not a feature — the difference between a five-minute recovery and a
+  wrecked event.
+- **K-SCAN-BIND — the camera scan is binding (BACKLOG #17).** The QR encoder is a
+  from-memory reconstruction; it is decode-round-trip tested but has never been read by
+  a camera. Quiet-zone, margin and error-correction failures appear only on paper at
+  print size, and a lodge is the wrong place to discover one. **No poster or captain
+  card goes to a real print run until one phone-camera scan of a physically printed
+  proof passes.** Pre-committed now, because printing feels like "done" and this is
+  exactly the step fatigue eats at 11pm the night before.
+
+**Explicitly NOT in this section:** the `?preflight=1` phone readiness view. The CEO
+argues it is the one genuinely missing day-of capability (the checks already exist as a
+CLI; Riley should not open a laptop at a lodge). That is a scope call and it is Riley's
+— it is carried to him as a recommendation, not built here.

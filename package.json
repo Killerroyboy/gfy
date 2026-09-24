@@ -10,7 +10,8 @@
     "check-gids": "node tools/gid-check.mjs",
     "check-qr": "node tools/print/qr.test.mjs",
     "make-kit": "node tools/print/make-kit.mjs",
-    "check-kit": "node tools/print/make-kit.test.mjs"
+    "check-kit": "node tools/print/make-kit.test.mjs",
+    "check-endpoint": "node tools/check-endpoint.mjs"
   },
   "devDependencies": {
     "jsdom": "^29.1.1"

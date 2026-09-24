@@ -1966,6 +1966,60 @@ dom.window.close();
     JSON.stringify(legs));
 }
 
+/* ---------- SC27: §27 go-live hardening — SC-IDENT + SC-PROBE ---------- */
+{
+  const trig = (() => { try { return readFileSync(path.join(ROOT, "tools", "sheet-triggers.gs"), "utf8"); } catch { return ""; } })();
+  const doGetBody = (trig.match(/function doGet\(\)[\s\S]*?\n\}/) || [""])[0];
+  // SC-IDENT is only useful if BOTH exits carry it: a bound-but-broken real
+  // handler that answered anonymously would be misread as the echo stub and
+  // send the operator to redeploy instead of to the actual error (S2).
+  check("SC27-1: SC-IDENT — doGet declares handler/writes/contract on BOTH its success AND its catch path, and the additive keys never displace ok/year/teams",
+    doGetBody.length > 0
+    && (doGetBody.match(/handler:\s*SCORER_HANDLER/g) || []).length === 2
+    && (doGetBody.match(/writes:\s*true/g) || []).length === 2
+    && (doGetBody.match(/contract:\s*SCORER_CONTRACT/g) || []).length === 2
+    && /ok:true,\s*year:year,\s*teams:/.test(doGetBody)
+    && /const SCORER_HANDLER\s*=\s*"gfy-scorer"/.test(trig),
+    "doGetBody=" + doGetBody.replace(/\s+/g, " ").slice(0, 200));
+
+  const probe = await import("../tools/check-endpoint.mjs").catch(() => null);
+  const real = JSON.stringify({ ok: true, year: 2027, teams: ["Duck", "Tex"], handler: "gfy-scorer", writes: true, contract: 1 });
+  const stub = JSON.stringify({ ok: true, echo: { hole: 13 } });               // the §18 spike: answers, writes nothing
+  const broken = JSON.stringify({ ok: false, verdict: "internal error", handler: "gfy-scorer", writes: true, contract: 1 });
+  const foreign = JSON.stringify({ ok: true, handler: "some-other-app", writes: true });
+  const v = o => probe ? probe.classify(o).verdict : "NO-MODULE";
+  check("SC27-2: SC-PROBE classifies the DEPLOYMENT not the HTTP call — the identity envelope alone earns REAL (a bound-but-erroring handler included); a 200 with JSON and no envelope is STUB; HTML/non-JSON, a foreign handler, a non-200 and a network error are each UNCERTAIN or UNREACHABLE, never silently passed",
+    !!probe
+    // REAL requires the envelope — and an ok:false real handler is still REAL,
+    // because "which code is deployed" and "did this call succeed" are different questions.
+    && v({ status: 200, contentType: "application/json", body: real }) === "REAL"
+    && v({ status: 200, contentType: "application/json", body: broken }) === "REAL"
+    // the echo stub answers 200 + JSON and must NOT pass
+    && v({ status: 200, contentType: "application/json", body: stub }) === "STUB"
+    && v({ status: 200, contentType: "application/json", body: JSON.stringify({ handler: "gfy-scorer", writes: false }) }) === "STUB"
+    // unknown states report as unknown (S2's UNCERTAIN half), never as pass or fail
+    && v({ status: 200, contentType: "text/html", body: "<html>Sign in</html>" }) === "UNCERTAIN"
+    && v({ status: 200, contentType: "application/json", body: foreign }) === "UNCERTAIN"
+    && v({ status: 302 }) === "UNREACHABLE"
+    && v({ networkError: "ECONNREFUSED" }) === "UNREACHABLE"
+    // and the stub verdict explains the consequence, not just the fact
+    && /writes nothing|never written/.test(probe.classify({ status: 200, body: stub }).why),
+    probe ? JSON.stringify(["real","broken","stub","html","foreign"].map(k => v({ status: 200, body: { real, broken, stub, html: "<html>", foreign }[k] }))) : "module missing");
+
+  // The probe's whole value is being wired into the drill's FIRST step — a
+  // tool nobody runs guards nothing.
+  const readme = (() => { try { return readFileSync(path.join(ROOT, "README.md"), "utf8"); } catch { return ""; } })();
+  const drill = (readme.match(/### The draft-night drill[\s\S]*?\n### /) || [""])[0];
+  check("SC27-3: the drill runs SC-PROBE as step 1, pins its pass condition to a row appearing (never a 200), carries the concurrent-submit leg, and its cleanup purges the drill idempotency keys as well as the rows",
+    drill.length > 0
+    && /check-endpoint/.test(drill)
+    && /\bREAL\b/.test(drill)
+    && /concurrent|same instant|simultane/i.test(drill)
+    && /drill:/.test(drill)
+    && /idempotenc/i.test(drill),
+    "drill.len=" + drill.length);
+}
+
 /* ---------- Q: presend-check (v2.3 §13 V-MATCH/V-PATH) ---------- */
 {
   const mod = await import("../tools/presend-check.mjs").catch(() => null);

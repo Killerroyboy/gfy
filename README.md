@@ -405,15 +405,32 @@ generated for you on START HERE — never hand-typed:
 Do not text a single captain link, or hand out the form, until this drill has
 passed live against the real deployed endpoint (~25 minutes):
 
-1. **Pre-flight** — Scores/Field/Info headers present, `first_tee` year
-   correct, sheet timezone correct, `score_endpoint` pasted into Info, sheet
-   sharing restricted to named editors only, and `SHEET_EDIT_URL` confirmed
-   gone from `config.js`.
+1. **Pre-flight — prove WHICH code is deployed before anything else (§27
+   SC-PROBE).** Run `npm run check-endpoint -- <the score_endpoint URL>`. It
+   must print **`REAL`**. Anything else stops the drill here:
+   - `STUB` — the deployment is still the §18 echo (or a pre-SC-IDENT
+     version). It answers HTTP 200 and writes nothing. Redeploy the real
+     handler onto the **same** deployment URL (Manage deployments → Edit →
+     New version) and re-run the probe. **Do not arm.**
+   - `UNCERTAIN` with HTML — the Web App is not shared with "Anyone"; you are
+     seeing a sign-in page.
+   Apps Script will happily keep serving an old bound version from an
+   unchanged URL after an incomplete redeploy, and that failure is invisible:
+   clean 200s all the way to an empty leaderboard at the turn. Ten seconds
+   here beats discovering it at the 15-tap sweep.
+   Then the rest of pre-flight: Scores/Field/Info headers present, `first_tee`
+   year correct, sheet timezone correct, `score_endpoint` pasted into Info,
+   sheet sharing restricted to named editors only, and `SHEET_EDIT_URL`
+   confirmed gone from `config.js`.
 2. **The 15-tap sweep** — one submission per team, every one using **round 2
    / hole 13 / score 6** (hole ≠ score on purpose — a transposition mistake
    can't accidentally pass the check). Verify 15× `ok` verdicts AND 15×
    `h13 = 6` on the Scores tab, and record the observed sheet-to-published-CSV
-   lag in the ledger.
+   lag in the ledger. **The pass condition is the row appearing in Scores —
+   never the `ok` verdict on its own.** A verdict is what the endpoint said; a
+   row is what actually happened, and only one of those is the tournament.
+   Send every drill submission under a `drill:`-prefixed `client_id` (§27
+   SC-DRILL-NS) so step 8 can find and purge them.
 3. **Pocket test** — tap a score, lock the screen for 2 minutes; it must
    land.
 4. **Airplane test** — enter 3 holes with the phone offline; all three must
@@ -421,14 +438,45 @@ passed live against the real deployed endpoint (~25 minutes):
 5. **Clobber test** — send a differing value for the same hole from a second
    browser; confirm it renders the conflict state (not a resend), then
    hand-fix it in the sheet and confirm it doesn't bounce back.
+5b. **Concurrent test (§27 SC-DRILL-CONC)** — fire two submissions in the
+   **same instant** for **different holes of the same team's row** (two
+   phones, counted down out loud, or two `curl` calls backgrounded together).
+   **Both must land.** The clobber test above is sequential and therefore
+   never exercises the DocumentLock `applyScore_` was written for — but a
+   shotgun start puts fifteen captains on the same row within a minute, and a
+   lost write there is silent: no error, no verdict, just a score that was
+   never recorded. This is the leg that tests it.
 6. **Round-toggle spring test** — the manual round toggle is momentary; after
    one submission it must spring back to the derived default round on its
    own.
 7. **Per-round canary** — Riley submits one real score at each round's first
    tee.
 
-**Cleanup (S15):** clear every sweep-created cell **and delete the
-sweep-created rows outright** — an emptied row still ghosts on the board.
+8. **Cleanup (S15 + §27 SC-DRILL-NS)** — clear every sweep-created cell **and
+   delete the sweep-created rows outright** (an emptied row still ghosts on
+   the board), **and purge the drill's idempotency keys**: in the Apps Script
+   project, run a one-off that deletes every `ScriptProperties` key beginning
+   `idem:drill:`. This is not housekeeping. The idempotency ring returns the
+   **stored response** for a repeated key, so a real captain submission that
+   collided with a surviving drill key would be answered with the drill's old
+   verdict and **never written** — a silent loss wearing a success message.
+   Drill writes carry no authority; neither do drill keys.
+
+### If the sheet breaks mid-event (§27 OPS-RESTORE)
+
+The scorer is robust. The sheet is a shared mutable document that any editor
+can fat-finger at 7am. Three lines, in order:
+
+1. **Restore** the pre-event snapshot copy (the backup taken before the wipe)
+   — File → Make a copy is the artifact; restoring means copying its tabs back
+   over the damaged ones, or promoting the copy and re-publishing it.
+2. **Re-point** the scorer: if you promoted the copy, the Web App must be
+   redeployed from the copy's script project, and `Info!score_endpoint`
+   updated to the new URL.
+3. **Re-prove** before trusting it: `npm run check-endpoint -- <url>` must say
+   `REAL`, then one live submission must produce a visible row in Scores.
+   Never resume scoring on a restored sheet without step 3 — a restore that
+   silently re-binds to the wrong copy looks identical to a working one.
 
 ### How it works
 

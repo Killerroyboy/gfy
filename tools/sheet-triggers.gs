@@ -219,12 +219,28 @@ function doPost(e){
   }
   return ContentService.createTextOutput(out).setMimeType(ContentService.MimeType.JSON);
 }
+// §27 SC-IDENT: the endpoint must be able to say WHAT IT IS. Apps Script will
+// serve an old bound version from the same deployment URL after an incomplete
+// redeploy, and the §18 spike stub answers 200/JSON while writing nothing — so
+// "the endpoint responded" proves nothing about whether scores will land.
+// ADDITIVE ONLY (S5): ok/year/teams keep their meaning and position, so every
+// existing consumer is untouched; only the identity keys are new. The stub
+// cannot produce these, which is exactly how check-endpoint tells them apart.
+const SCORER_HANDLER = "gfy-scorer";
+const SCORER_CONTRACT = 1;
 function doGet(){
   try{
     const ss = SpreadsheetApp.getActive();
     const year = firstTeeYear_(ss);
-    return jsonOut_({ok:true, year:year, teams:Array.from(rosterTeams_(ss, year).values())});
-  } catch(err){ return jsonOut_({ok:false, verdict:"internal error"}); }
+    return jsonOut_({ok:true, year:year, teams:Array.from(rosterTeams_(ss, year).values()),
+                     handler:SCORER_HANDLER, writes:true, contract:SCORER_CONTRACT});
+  } catch(err){
+    // Identify even while failing: a bound-but-broken REAL handler must never
+    // be mistaken for the echo stub (S2 — a false diagnosis in either
+    // direction sends the operator to the wrong fix under time pressure).
+    return jsonOut_({ok:false, verdict:"internal error",
+                     handler:SCORER_HANDLER, writes:true, contract:SCORER_CONTRACT});
+  }
 }
 function jsonOut_(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 // Keep at most 600 idem keys (15 teams x 2 rounds x 18 holes + retries headroom).
