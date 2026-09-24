@@ -3816,17 +3816,26 @@ function renderPreflight(){
   const seasonY=scorerSeason();
   const round=pfRound(INFO.first_tee||CONFIG.FIRST_TEE, Date.now());
   const pg=pfProgress(STATE.data.field, STATE.data.scores, seasonY, round);
-  const rl=document.getElementById("pfRoundLabel"); if(rl) rl.textContent="Round "+round;
+  // PF-PHASE: off-season there IS no round, so naming one is a fiction — pfRound
+  // clamps to "2" on any date after day two, which reads as "Round 2, 0 of 3 in" in
+  // February. Reuses the site's own seasonPhase() rather than a second definition of
+  // "is the event on" (§7). Caught by rendering against the LIVE sheet, whose
+  // first_tee is six weeks past; every fixture-fed render had looked fine.
+  const live = (typeof seasonPhase === "function") ? seasonPhase() === "event" : true;
+  const rl=document.getElementById("pfRoundLabel");
+  if(rl) rl.textContent = live ? "Round "+round : "Round";
   const pt=document.getElementById("pfProgressText");
   const pd=document.getElementById("pfProgressDetail");
-  if(pt) pt.textContent = pg.suppressed ? "—" : pg.teamsIn+" of "+pg.roster+" in";
-  if(pd) pd.textContent = pg.suppressed
-    // PF-NOROSTER: blank teams pre-draft are normal (E-TEAM), not breakage.
-    ? "Teams are drafted Friday night — no roster to check yet."
-    : pg.holes+" hole"+(pg.holes===1?"":"s")+" posted";
+  if(pt) pt.textContent = !live ? "—" : (pg.suppressed ? "—" : pg.teamsIn+" of "+pg.roster+" in");
+  if(pd) pd.textContent = !live
+    ? "No round in progress — the event is not running today."
+    : (pg.suppressed
+      // PF-NOROSTER: blank teams pre-draft are normal (E-TEAM), not breakage.
+      ? "Teams are drafted Friday night — no roster to check yet."
+      : pg.holes+" hole"+(pg.holes===1?"":"s")+" posted");
 
   const wrap=document.getElementById("pfWaiting"), teams=document.getElementById("pfWaitingTeams");
-  const showWaiting=!pg.suppressed && pg.waiting.length>0;
+  const showWaiting=live && !pg.suppressed && pg.waiting.length>0;   // nobody is "awaited" off-season
   if(wrap) wrap.hidden=!showWaiting;
   if(teams && showWaiting) teams.textContent=pg.waiting.join(" · ");
 

@@ -8512,6 +8512,12 @@ results.forEach(([name, ok]) => {
     && /wrap\.hidden\s*=\s*!showWaiting/.test(idxPF)
     && /pn\.hidden\s*=\s*courseMap\(\)!==null/.test(idxPF),
     "");
+  check("S28-9: PF-PHASE — off-season the view names NO round and awaits nobody (pfRound clamps to \"2\" on any date past day two, which off-season reads as a fiction: \"Round 2, 0 of 3 in\" in February). Reuses the site's own seasonPhase() rather than a second definition of \"is the event on\"",
+    /seasonPhase\(\) === "event"/.test(idxPF)
+    && /rl\.textContent = live \? "Round "\+round : "Round"/.test(idxPF)
+    && /No round in progress/.test(idxPF)
+    && /const showWaiting=live &&/.test(idxPF),
+    "");
   check("S28-8: #preflight uses the site's own .wrap idiom (max-width + 24px side gutter) like every other view — it was written WITHOUT it and the automated overflow probe still read 0 while the render screenshot showed text jammed against both screen edges; only the eyeball caught it",
     /data-view="preflight"[^>]*>\s*<div class="wrap">/.test(idxPF),
     "");
