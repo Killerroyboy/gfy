@@ -1966,6 +1966,33 @@ dom.window.close();
     JSON.stringify(legs));
 }
 
+/* ---------- SC-DRILL sweep: the pass condition is the ROW, never the 200 ---------- */
+{
+  const d = await import("../tools/drill-sweep.mjs").catch(() => null);
+  const J = (res, err) => d ? d.judge("Duck", 13, 6, res, err) : { pass: "NO-MODULE" };
+  check("DRILL-1: a sweep submission passes ONLY on the echoed row — ok:true with no row is the stub's signature and must FAIL, a wrong or empty h13 fails, and only h13=6 read back from Scores passes",
+    !!d
+    && J({ ok: true, verdict: "applied", holes: { h13: 6 } }).pass === true
+    && J({ ok: true, verdict: "applied", holes: { h13: "6" } }).pass === true   // sheet values arrive as strings
+    // the dangerous shape: looks like success, proves nothing
+    && J({ ok: true, verdict: "applied" }).pass === false
+    && /NO row echoed back/.test(J({ ok: true, verdict: "applied" }).why)
+    && J({ ok: true, verdict: "applied", holes: { h13: 5 } }).pass === false
+    && J({ ok: true, verdict: "applied", holes: {} }).pass === false
+    && J({ ok: false, verdict: "round total already entered — clear r1/r2 first" }).pass === false
+    && J(null, "network").pass === false,
+    "");
+  check("DRILL-2: drill submissions carry the reserved drill: client_id namespace (SC-DRILL-NS) so step 8 can purge the idempotency keys — a survivor answers a REAL captain submission with the stored drill verdict and never writes it",
+    !!d && /^drill:duck:\d+$/.test(d.drillClientId("Duck", 1790000000000))
+    && /^drill:big-dogs:\d+$/.test(d.drillClientId("  Big   Dogs ", 1790000000000)),
+    d ? d.drillClientId("  Big   Dogs ", 1790000000000) : "");
+  check("DRILL-3: the sweep is only OK when EVERY row is confirmed — one failure fails the step, and an empty sweep is never a pass",
+    !!d && d.summarise([{ pass: true }, { pass: true }]).ok === true
+    && d.summarise([{ pass: true }, { pass: false }]).ok === false
+    && d.summarise([]).ok === false,
+    "");
+}
+
 /* ---------- SC27: §27 go-live hardening — SC-IDENT + SC-PROBE ---------- */
 {
   const trig = (() => { try { return readFileSync(path.join(ROOT, "tools", "sheet-triggers.gs"), "utf8"); } catch { return ""; } })();
@@ -2016,7 +2043,10 @@ dom.window.close();
     && /\bREAL\b/.test(drill)
     && /concurrent|same instant|simultane/i.test(drill)
     && /drill:/.test(drill)
-    && /idempotenc/i.test(drill),
+    && /idempotenc/i.test(drill)
+    // and the sweep is actually OFFERED in the step, or the tool is one nobody runs
+    && /npm run drill-sweep/.test(drill)
+    && /refuses to run against a stub/.test(drill),
     "drill.len=" + drill.length);
 
   // The arming runbook must warn about the duplicate-doPost hazard BEFORE the

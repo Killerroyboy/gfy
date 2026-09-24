@@ -444,6 +444,16 @@ passed live against the real deployed endpoint (~25 minutes):
    row is what actually happened, and only one of those is the tournament.
    Send every drill submission under a `drill:`-prefixed `client_id` (§27
    SC-DRILL-NS) so step 8 can find and purge them.
+
+   **Scripted:** `npm run drill-sweep -- <score_endpoint url>` does exactly this
+   and checks it mechanically. It reads the roster off the live Field tab, sends
+   one submission per team under the reserved `drill:` namespace, and passes a
+   team **only when the endpoint echoes the row back with `h13 = 6`** — the row
+   as Scores holds it after the write, not the `ok`, not the HTTP status. It
+   **refuses to run against a stub** (a sweep against the echo deployment reports
+   cheerful successes and writes nothing, which is worse than not drilling), and
+   it is dry-run by default: add `--go` to actually submit. It writes to the live
+   sheet, so it is Riley's to run.
 3. **Pocket test** — tap a score, lock the screen for 2 minutes; it must
    land.
 4. **Airplane test** — enter 3 holes with the phone offline; all three must
