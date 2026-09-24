@@ -1173,3 +1173,61 @@ wipe. The backup snapshot is kept as a **rollback artifact, not a drill environm
 argues it is the one genuinely missing day-of capability (the checks already exist as a
 CLI; Riley should not open a laptop at a lodge). That is a scope call and it is Riley's
 — it is carried to him as a recommendation, not built here.
+
+---
+
+## §28 — `#preflight`: the day-of readiness view (Riley approved 2026-09-24, brainstormed same day; CEO-identified as the one missing day-of capability)
+
+A phone-sized screen Riley pulls up at 6am that answers *is this thing working
+right now*. **Scope ruled by Riley: DAY-OF OPERATIONS ONLY.** `event-ready.mjs`
+stays the pre-event tool — residue, pairings coverage and sponsor gaps are things
+you fix in the weeks before, not at first tee. Because nothing here re-derives a
+CLI check, there is **no shared-module problem**: every signal comes from data the
+site already fetches.
+
+- **PF-ROUTE** — `#preflight`, a `[data-view]` section like `#tv`/`#board`, so
+  S-VIEWS registers it automatically. `?preflight=1` is accepted as an alias
+  (the name the backlog and the CEO used) and redirects to the hash route.
+  **Ungated** by Riley's call: it shows nothing the public board doesn't, and
+  fumbling a second param at 6am is its own failure mode.
+- **PF-SCORING — three states, never two.** The view GETs the endpoint's `doGet`
+  and reads the §27 SC-IDENT envelope: `ARMED` (`handler=gfy-scorer`,
+  `writes:true`), `NOT ARMED` (reachable but no envelope — the §18 echo stub),
+  `UNKNOWN` (offline, CORS, non-JSON, or a foreign handler), and
+  `UNCONFIGURED` when `Info!score_endpoint` is absent. **It must never render
+  "writes ok" from a probe** — a probe cannot prove a write (S3: the probe is a
+  proxy; the row is the outcome). The probe fires on load and on an explicit
+  refresh tap, NOT on the 60 s loop — there is no reason to hammer Apps Script
+  all morning.
+- **PF-PROGRESS — the honest proof that writes are landing.** `N of M teams in`
+  for the active round, plus `H holes posted`. This is the real evidence: those
+  numbers climbing IS a working write path, and they are derivable from the
+  Scores tab as it actually exists. **A "last write 4m ago" stamp was designed
+  and then CUT: the Scores tab carries no timestamp column (`year, team, round,
+  h1..h18`), so any such stamp would be invented.** The view may only report
+  when the SITE last fetched (PF-STAMP), which is a different and true claim.
+- **PF-NOROSTER — suppress the fraction rather than render a broken one.**
+  Pre-draft, `team` is blank on Field by design (E-TEAM), so the roster is
+  legitimately empty and `0 of 0 in` would read as breakage. With no roster the
+  view says the draft hasn't happened and shows **no fraction and no waiting
+  list** — the §20/§21 suppression discipline applied to readiness.
+- **PF-WAITING** — names the teams with no card yet for the active round, so the
+  answer to "who do I go find" is on the screen. Teams are already public on the
+  board; this adds no disclosure.
+- **PF-STAMP** — board freshness reuses the existing `LAST_GOT` stamp, which is
+  honest by construction under the §-fetch-tiers (stamps reflect the last real
+  fetch, not the last paint).
+- **PF-PARS** — when `courseMap()` is null the view carries the SAME suppression
+  line the board does. A readiness screen that says "all good" while the board
+  has paused standings is a contradiction, and the operator believes the
+  readiness screen.
+- **PF-ROUND** — the active round is derived from the event date (day index off
+  `first_tee`), NOT from `scRoundDefault()`, which is captain/team-specific
+  (it inspects one team's filled holes). A global view needs a global basis.
+
+**Testing:** every state of every signal, including each suppressed one, in the
+existing anchored smoke block — plus a **real-browser computed-style proof**.
+This repo has been bitten three times by jsdom visibility blindness
+(`offsetParent` always null; `[hidden]` losing to an author `display` rule;
+`display:none` elements still counted as focusable), so a JS-toggled hide here
+gets its companion CSS rule asserted in source AND verified in a real browser.

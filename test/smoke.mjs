@@ -8428,6 +8428,97 @@ results.forEach(([name, ok]) => {
   if (ok) groupTally[g].pass++;
 });
 
+
+/* ===== §28 #preflight — day-of readiness view ===== */
+{
+  const W = dom.window;
+  // PF-SCORING: four states. The probe is a PROXY for the write path, so ARMED
+  // is the strongest claim it may make — never "writes ok" (S3).
+  const arm = { handler:"gfy-scorer", writes:true, contract:1 };
+  const sc = (ep, probe) => W.pfScoring ? W.pfScoring(ep, probe).state : "NO-FN";
+  check("S28-1: PF-SCORING — only the SC-IDENT envelope earns ARMED; a reachable envelope-less answer is NOT ARMED (the §18 echo stub); an absent endpoint is UNCONFIGURED; a network/CORS failure, an unprobed view and a FOREIGN handler are each UNKNOWN — never silently armed",
+    !!W.pfScoring
+    && sc("https://script.google.com/x/exec", arm) === "ARMED"
+    && sc("https://script.google.com/x/exec", { ok:true, echo:{} }) === "NOT_ARMED"
+    && sc("https://script.google.com/x/exec", { handler:"gfy-scorer", writes:false }) === "NOT_ARMED"
+    && sc("", arm) === "UNCONFIGURED"
+    && sc(null, arm) === "UNCONFIGURED"
+    && sc("https://script.google.com/x/exec", null) === "UNKNOWN"
+    && sc("https://script.google.com/x/exec", { error:"network" }) === "UNKNOWN"
+    && sc("https://script.google.com/x/exec", { handler:"other-app", writes:true }) === "UNKNOWN"
+    // a bound-but-erroring REAL handler is still ARMED: which code is deployed
+    // and whether this call succeeded are different questions (§27 SC-IDENT).
+    && sc("https://script.google.com/x/exec", { ok:false, verdict:"internal error", handler:"gfy-scorer", writes:true }) === "ARMED",
+    "states=" + JSON.stringify([sc("u",arm), sc("u",{ok:true}), sc("",arm), sc("u",null)]));
+
+  // PF-ROUND: global, date-derived — NOT scRoundDefault(), which inspects one
+  // team's filled holes and is therefore captain-specific.
+  const D = (y,m,d,h=9) => Date.UTC(y,m-1,d,h);
+  const rd = (ft,now) => W.pfRound ? W.pfRound(ft, now) : "NO-FN";
+  check("S28-2: PF-ROUND derives the round from the event date, not from any one team's card — day 1 is round 1, day 2 is round 2, before the event and after it clamp to the ends, and an unparseable first_tee falls back to round 1",
+    !!W.pfRound
+    && rd("2027-08-13", D(2027,8,13)) === "1"
+    && rd("2027-08-13", D(2027,8,14)) === "2"
+    && rd("2027-08-13", D(2027,8,10)) === "1"
+    && rd("2027-08-13", D(2027,8,20)) === "2"
+    && rd("", D(2027,8,14)) === "1"
+    && rd("not a date", D(2027,8,14)) === "1",
+    "rounds=" + JSON.stringify([rd("2027-08-13",D(2027,8,13)), rd("2027-08-13",D(2027,8,14)), rd("",D(2027,8,14))]));
+
+  // PF-PROGRESS + PF-NOROSTER
+  const field = [
+    { year:"2027", player:"A One", team:"Duck" }, { year:"2027", player:"A Two", team:"Duck" },
+    { year:"2027", player:"B One", team:"Tex" },  { year:"2027", player:"C One", team:"Moose" },
+    { year:"2026", player:"Old Guy", team:"Ghost" },           // prior season must not count
+  ];
+  const scores = [
+    { year:"2027", team:"Duck", round:"1", h1:"4", h2:"5" },
+    { year:"2027", team:"duck", round:"1", h3:"3" },            // same team, nkey-folded
+    { year:"2027", team:"Tex",  round:"2", h1:"4" },            // other round
+    { year:"2027", team:"Moose", round:"1", h1:"", h2:"" },     // row exists, NO holes -> not "in"
+    { year:"2026", team:"Ghost", round:"1", h1:"4" },           // prior season
+  ];
+  const pg = W.pfProgress ? W.pfProgress(field, scores, "2027", "1") : null;
+  check("S28-3: PF-PROGRESS counts the roster and who has actually posted — team names fold on nkey, a Scores row with NO hole values is NOT counted as in, other rounds and other seasons are excluded, holes posted is the real write evidence, and WAITING names exactly the teams with no card",
+    !!pg
+    && pg.roster === 3
+    && pg.teamsIn === 1
+    && pg.holes === 3
+    && JSON.stringify(pg.waiting.slice().sort()) === JSON.stringify(["Moose","Tex"]),
+    JSON.stringify(pg));
+
+  // PF-NOROSTER: pre-draft the team column is legitimately blank (E-TEAM).
+  const preDraft = [ { year:"2027", player:"A One", team:"" }, { year:"2027", player:"B One", team:"  " } ];
+  const pg0 = W.pfProgress ? W.pfProgress(preDraft, [], "2027", "1") : null;
+  // Render-level: the view must exist as a real route and its hides must carry
+  // companion CSS. jsdom is cascade-blind, so the source assert below is the
+  // jsdom-side guard and render-close.mjs proves it in a real browser.
+  const idxPF = readFileSync(path.join(ROOT, "index.html"), "utf8");
+  check("S28-5: PF-ROUTE — #preflight is a real [data-view] section (so S-VIEWS registers it with no hand-maintained list), ?preflight=1 is honoured ONLY when no hash was given so an explicit deep link always wins, and the view is rendered from the same fan-out as every other view",
+    /data-view="preflight"/.test(idxPF)
+    && /!location\.hash\.slice\(1\)\s*&&\s*new URLSearchParams\(location\.search\)\.has\("preflight"\)/.test(idxPF)
+    && /renderTv\(\);\s*renderPreflight\(\);/.test(idxPF),
+    "");
+  check("S28-6: every JS-toggled hide in #preflight has its companion CSS rule in source — the repo's THIRD jsdom-blindness class (offsetParent, then .btn[hidden] losing to an author display rule, then display:none focusability): a green jsdom assert on a [hidden] attribute proves nothing about a real browser",
+    /\.pf-waiting\[hidden\],\.pf-supp\[hidden\]\{display:none\}/.test(idxPF)
+    && /wrap\.hidden\s*=\s*!showWaiting/.test(idxPF)
+    && /pn\.hidden\s*=\s*courseMap\(\)!==null/.test(idxPF),
+    "");
+  check("S28-8: #preflight uses the site's own .wrap idiom (max-width + 24px side gutter) like every other view — it was written WITHOUT it and the automated overflow probe still read 0 while the render screenshot showed text jammed against both screen edges; only the eyeball caught it",
+    /data-view="preflight"[^>]*>\s*<div class="wrap">/.test(idxPF),
+    "");
+  check("S28-7: the probe never runs on the 60s refresh loop (PF-PROBE fires on route-open and on the explicit re-check tap only), and the re-check tap FORCES a fresh probe rather than reusing the cached answer",
+    /function pfProbe\(force\)/.test(idxPF)
+    && /pfProbe\(false\)/.test(idxPF) && /pfProbe\(true\)/.test(idxPF)
+    && !/scheduleRefresh[\s\S]{0,400}pfProbe/.test(idxPF)
+    && !/renderAll\(\)[\s\S]{0,200}pfProbe\(/.test(idxPF),
+    "");
+  check("S28-4: PF-NOROSTER — a blank team column pre-draft yields roster 0 with an explicit suppressed flag and an EMPTY waiting list, so the view can say the draft has not happened instead of rendering '0 of 0 in' as if something were broken",
+    !!pg0 && pg0.roster === 0 && pg0.teamsIn === 0
+    && pg0.suppressed === true && pg0.waiting.length === 0,
+    JSON.stringify(pg0));
+}
+
 console.log("");
 Object.keys(groupTally).sort().forEach(g => console.log(`TALLY ${g} ${groupTally[g].pass}/${groupTally[g].total}`));
 const failed = results.filter(r => !r[1]).length;

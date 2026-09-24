@@ -1080,6 +1080,31 @@
   body[data-view="tv"] #debugPanel,
   body[data-view="tv"] footer{display:none!important}
   body[data-view="tv"]{cursor:none}
+  /* §28 #preflight — phone-first: one column, big type, thumb-sized action. */
+  .pf-title{margin:.2rem 0 1.1rem;font-size:1.5rem}
+  .pf-rows{border-top:1px solid var(--rule)}
+  .pf-row{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;
+    padding:.75rem 0;border-bottom:1px solid var(--rule)}
+  .pf-label{font-size:.78rem;letter-spacing:.2em;text-transform:uppercase;color:var(--sage)}
+  .pf-value{font-family:Jost,system-ui,sans-serif;font-weight:600;font-size:1.05rem;
+    font-variant-numeric:tabular-nums lining-nums;text-align:right}
+  .pf-detail{margin:.35rem 0 0;font-size:.85rem;color:var(--sage)}
+  .pf-detail:empty{display:none}
+  .pf-dot{display:inline-block;width:.6em;height:.6em;border-radius:50%;margin-right:.45em;
+    background:var(--sage);vertical-align:baseline}
+  .pf-dot[data-state="ARMED"]{background:var(--score-bogey)}
+  .pf-dot[data-state="NOT_ARMED"],.pf-dot[data-state="UNCONFIGURED"]{background:var(--score-blowup)}
+  .pf-dot[data-state="UNKNOWN"]{background:var(--score-even)}
+  .pf-waiting{margin-top:1.4rem}
+  .pf-teams{margin:.3rem 0 0;line-height:1.8}
+  .pf-supp{margin-top:1.2rem}
+  .pf-actions{margin-top:1.5rem}
+  #pfRecheck{min-height:44px}
+  /* The companion rule for every JS-toggled [hidden] here. jsdom cannot see a
+     cascade, and an author .btn/display rule beats a bare [hidden] attribute in
+     a real browser — this repo shipped exactly that bug once (the inert
+     #icsBtn). Asserted in source by S28-6 and proven in a real browser. */
+  .pf-waiting[hidden],.pf-supp[hidden]{display:none}
   #tvMode{padding:0;background:var(--pine-3)}
   .tv-wrap{min-height:100vh;display:flex;flex-direction:column;background:var(--pine-3)}
   .tv-mast{display:flex;align-items:center;gap:16px;padding:20px 36px;
@@ -1573,6 +1598,39 @@
      explainer off the SAME parsSuppressed value the Board's own
      #lbToParHead/#lbSuppNote read (courseMap() is the one shared source, no
      second suppression check). -->
+<!-- §28 PF-ROUTE: the day-of readiness view. A [data-view] section, so S-VIEWS
+     registers #preflight automatically (no third place to update). Ungated by
+     Riley's call — it shows nothing the public board doesn't, and fumbling a
+     second URL param at 6am is its own failure mode. -->
+<section class="band view" data-view="preflight" id="preflightView" hidden>
+  <div class="wrap">
+    <p class="eyebrow">Readiness</p>
+    <h2 class="pf-title">Is this thing working?</h2>
+    <div class="pf-rows">
+      <div class="pf-row">
+        <span class="pf-label">Scoring</span>
+        <span class="pf-value"><span class="pf-dot" id="pfDot"></span><span id="pfScoringText">Checking…</span></span>
+      </div>
+      <p class="pf-detail" id="pfScoringDetail"></p>
+      <div class="pf-row">
+        <span class="pf-label" id="pfRoundLabel">Round</span>
+        <span class="pf-value" id="pfProgressText">—</span>
+      </div>
+      <p class="pf-detail" id="pfProgressDetail"></p>
+      <div class="pf-row">
+        <span class="pf-label">Board</span>
+        <span class="pf-value" id="pfStamp">—</span>
+      </div>
+    </div>
+    <div class="pf-waiting" id="pfWaiting" hidden>
+      <p class="eyebrow">Waiting on</p>
+      <p class="pf-teams" id="pfWaitingTeams"></p>
+    </div>
+    <p class="basis pf-supp" id="pfParNote" hidden>Standings are paused — the Course tab needs all 18 pars.</p>
+    <p class="pf-actions"><button class="btn" id="pfRecheck" type="button">Re-check scoring</button></p>
+  </div>
+</section>
+
 <section class="band view" data-view="tv" id="tvMode" hidden>
   <div class="tv-wrap">
     <div class="tv-mast">
@@ -1776,7 +1834,15 @@ function showView(name){
   document.querySelectorAll(".nav a").forEach(a=>a.classList.toggle("active",a.hash==="#"+v));
 }
 window.addEventListener("hashchange",()=>showView(location.hash.slice(1)));
-showView(location.hash.slice(1));
+/* §28 PF-ROUTE alias: ?preflight=1 is the name the backlog and the CEO used,
+   so it must work — but #preflight is the canonical route (it matches #tv /
+   #board / #score). Honour the param only when no hash was given, so an
+   explicit deep link always wins over a stale query string. */
+if(!location.hash.slice(1) && new URLSearchParams(location.search).has("preflight")){
+  showView("preflight");
+} else {
+  showView(location.hash.slice(1));
+}
 </script>
 
 <script src="config.js"></script>
@@ -3702,7 +3768,71 @@ function renderChampions(){
 function renderAll(){
   renderYears(); renderLeaderboard(); renderBoardScoreBtn(); renderField(); renderDraft(); renderPairings(); renderMastChip(); renderHomeBoard();
   renderCalcutta(); renderNextYear(); renderRooms(); renderMoney(); renderShame(); renderSchedule(); renderChampions(); renderIcsBtn();
-  renderTv();
+  renderTv(); renderPreflight();
+}
+
+/* ===== §28 #preflight renderer + endpoint probe =====
+   PF-PROBE fires on load (when the view is open) and on the explicit re-check
+   tap — never on the 60s loop. There is no reason to hammer Apps Script all
+   morning, and the probe's answer (which code is bound) changes only when
+   someone redeploys. */
+let PF_PROBE=null, PF_PROBING=false;
+function pfProbe(force){
+  const ep=scEndpoint();
+  if(!ep || PF_PROBING || (PF_PROBE && !force)) return Promise.resolve();
+  PF_PROBING=true;
+  return fetch(ep,{redirect:"follow"})
+    .then(r=>r.text())
+    .then(t=>{ try{ PF_PROBE=JSON.parse(t); }catch{ PF_PROBE={error:"not JSON — the deployment may not be shared with Anyone"}; } })
+    .catch(e=>{ PF_PROBE={error:String((e&&e.message)||e||"network")}; })
+    .then(()=>{ PF_PROBING=false; renderPreflight(); });
+}
+function renderPreflight(){
+  const view=document.getElementById("preflightView"); if(!view) return;
+  const ep=scEndpoint();
+  /* PF-PROBE one-shot: INFO is empty at script-load, so scEndpoint() is null
+     until the first fetch resolves and the load-time pfRouteSync() call finds
+     nothing to probe. Fire here instead, the first paint after the endpoint
+     becomes known. The !PF_PROBE guard makes this once-per-session, NOT once
+     per 60s refresh — only the re-check tap forces a second probe. */
+  if(ep && !PF_PROBE && !PF_PROBING && document.body.dataset.view==="preflight") pfProbe(false);
+  const sc=pfScoring(ep, PF_PROBE);
+  const label={ARMED:"Live",NOT_ARMED:"NOT armed",UNCONFIGURED:"Not wired",UNKNOWN:"Unknown"}[sc.state];
+  const dot=document.getElementById("pfDot"); if(dot) dot.dataset.state=sc.state;
+  const txt=document.getElementById("pfScoringText");
+  // PF-SCORING honesty: "Live" is a claim about the BOUND HANDLER. It never
+  // says writes are working — pfProgress below carries that evidence.
+  if(txt) txt.textContent = PF_PROBING && !PF_PROBE ? "Checking…" : label;
+  const det=document.getElementById("pfScoringDetail");
+  if(det) det.textContent = PF_PROBING && !PF_PROBE ? "" : sc.detail;
+
+  const seasonY=scorerSeason();
+  const round=pfRound(INFO.first_tee||CONFIG.FIRST_TEE, Date.now());
+  const pg=pfProgress(STATE.data.field, STATE.data.scores, seasonY, round);
+  const rl=document.getElementById("pfRoundLabel"); if(rl) rl.textContent="Round "+round;
+  const pt=document.getElementById("pfProgressText");
+  const pd=document.getElementById("pfProgressDetail");
+  if(pt) pt.textContent = pg.suppressed ? "—" : pg.teamsIn+" of "+pg.roster+" in";
+  if(pd) pd.textContent = pg.suppressed
+    // PF-NOROSTER: blank teams pre-draft are normal (E-TEAM), not breakage.
+    ? "Teams are drafted Friday night — no roster to check yet."
+    : pg.holes+" hole"+(pg.holes===1?"":"s")+" posted";
+
+  const wrap=document.getElementById("pfWaiting"), teams=document.getElementById("pfWaitingTeams");
+  const showWaiting=!pg.suppressed && pg.waiting.length>0;
+  if(wrap) wrap.hidden=!showWaiting;
+  if(teams && showWaiting) teams.textContent=pg.waiting.join(" · ");
+
+  // PF-STAMP: reuse LAST_GOT, honest by construction under the fetch tiers.
+  const st=document.getElementById("pfStamp");
+  if(st){
+    const g=LAST_GOT&&LAST_GOT.scores;
+    st.textContent = g&&g.at ? "fetched "+Math.max(0,Math.round((Date.now()-g.at)/1000))+"s ago" : "not fetched yet";
+  }
+  // PF-PARS: carry the board's own suppression state. A readiness screen that
+  // says "all good" while standings are paused contradicts the board, and the
+  // operator believes the readiness screen.
+  const pn=document.getElementById("pfParNote"); if(pn) pn.hidden = courseMap()!==null;
 }
 
 function renderHealth(){
@@ -3984,6 +4114,16 @@ function tvRouteSync(){
   else if(TV_TIMER){ clearInterval(TV_TIMER); TV_TIMER=null; }
 }
 window.addEventListener("hashchange",tvRouteSync);
+/* §28: probe when the readiness view is actually opened (and once on load if
+   it is the landing view) — same separate-listener pattern as tvRouteSync. */
+function pfRouteSync(){ if(document.body.dataset.view==="preflight") pfProbe(false); }
+window.addEventListener("hashchange",pfRouteSync);
+document.addEventListener("click",e=>{
+  const b=e.target&&e.target.closest&&e.target.closest("#pfRecheck");
+  if(!b) return;
+  PF_PROBE=null; renderPreflight(); pfProbe(true);   // force: the whole point of the tap
+});
+pfRouteSync();
 tvRouteSync();
 
 function applyNavOrder(){
@@ -4363,6 +4503,68 @@ function paintHome(){
    picker. */
 function scRoster(team,seasonY){
   return forYear(STATE.data.field,seasonY).filter(r=>r.player&&nkey(r.team)===nkey(team)).map(r=>r.player);
+}
+
+/* ===== §28 #preflight — day-of readiness model (pure; rendered by renderPreflight) =====
+   Day-of operations ONLY by Riley's ruling — event-ready.mjs stays the
+   pre-event tool, so nothing here re-derives a CLI check and the two can
+   never drift. Every function below is pure so the suite can exercise it. */
+
+/* PF-SCORING. The probe GETs the endpoint's doGet and reads the §27 SC-IDENT
+   envelope. FOUR states, never two, because "not ARMED" and "we could not
+   tell" are different facts and only one of them means go fix the deployment.
+   ARMED is the STRONGEST claim a probe may make: it proves which code is
+   bound, NOT that a write succeeded (S3 — the probe is the proxy, the row in
+   Scores is the outcome). A bound-but-erroring real handler is still ARMED;
+   "which code is deployed" and "did this call succeed" are separate questions. */
+function pfScoring(endpoint, probe){
+  if(!endpoint) return {state:"UNCONFIGURED", detail:"Info!score_endpoint is empty — the scorer was never wired"};
+  if(!probe) return {state:"UNKNOWN", detail:"not probed yet"};
+  if(probe.error) return {state:"UNKNOWN", detail:"could not reach the endpoint ("+probe.error+")"};
+  if(probe.handler!==undefined && probe.handler!=="gfy-scorer")
+    return {state:"UNKNOWN", detail:"a different handler answered — wrong script project or deployment"};
+  if(probe.handler==="gfy-scorer" && probe.writes===true)
+    return {state:"ARMED", detail:"real handler bound"+(probe.contract!=null?" (contract "+probe.contract+")":"")};
+  return {state:"NOT_ARMED", detail:"the echo stub answered — it returns 200 and writes nothing"};
+}
+
+/* PF-ROUND. Global and date-derived. scRoundDefault() is deliberately NOT
+   reused: it inspects one team's filled holes, so it is captain-specific and
+   would make a whole-event view read differently per phone. */
+function pfRound(firstTee, nowMs){
+  const m=String(firstTee||"").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return "1";
+  const base=Date.UTC(+m[1],+m[2]-1,+m[3]);
+  const dayIdx=Math.floor((nowMs-base)/86400000);
+  return dayIdx>=1 ? "2" : "1";
+}
+
+/* PF-PROGRESS. The honest evidence that the write path is live: teams that
+   have actually posted, and holes posted. A Scores row that EXISTS but holds
+   no hole values is not "in" — the row can be created by other paths, and
+   counting it would overstate progress to the one person relying on it.
+   PF-NOROSTER: pre-draft the `team` column is legitimately blank (E-TEAM), so
+   roster 0 is reported with an explicit `suppressed` flag rather than left to
+   render as "0 of 0 in", which reads as breakage rather than as Friday. */
+function pfProgress(fieldRows, scoreRows, seasonY, round){
+  const roster=new Map();
+  (fieldRows||[]).forEach(r=>{
+    if(String(r.year).trim()!==String(seasonY).trim()) return;
+    const t=String(r.team||"").trim();
+    if(t && !roster.has(nkey(t))) roster.set(nkey(t), t);
+  });
+  const posted=new Set(); let holes=0;
+  (scoreRows||[]).forEach(r=>{
+    if(String(r.year).trim()!==String(seasonY).trim()) return;
+    if(String(r.round).trim()!==String(round).trim()) return;
+    const t=String(r.team||"").trim(); if(!t) return;
+    let n=0;
+    for(let h=1;h<=18;h++){ const v=String(r["h"+h]==null?"":r["h"+h]).trim(); if(v!=="") n++; }
+    if(n>0){ posted.add(nkey(t)); holes+=n; }
+  });
+  const waiting=[...roster.entries()].filter(([k])=>!posted.has(k)).map(([,label])=>label);
+  return { roster:roster.size, teamsIn:[...posted].filter(k=>roster.has(k)).length,
+           holes:holes, waiting:roster.size?waiting:[], suppressed:roster.size===0 };
 }
 function scConfirmedTeam(seasonY){
   try{
