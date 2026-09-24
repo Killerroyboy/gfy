@@ -7,3 +7,4 @@ node_modules/
 .worktrees/
 # S26 K-PRINT (spec §26): generated poster/cards HTML — build output, never committed
 tools/print/out/
+render-close-preflight/
