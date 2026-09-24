@@ -2018,6 +2018,20 @@ dom.window.close();
     && /drill:/.test(drill)
     && /idempotenc/i.test(drill),
     "drill.len=" + drill.length);
+
+  // The arming runbook must warn about the duplicate-doPost hazard BEFORE the
+  // deploy step: Apps Script gives one project a single global scope, so the
+  // §18 spike's doPost/doGet silently overwrites (or is overwritten by) the
+  // real one, and a project that looks deployed serves an echo that writes
+  // nothing. This is the most likely cause of a stub-serving "armed" endpoint.
+  const armIdx = readme.search(/Deploy the Web App/);
+  const spikeIdx = readme.search(/spike file FIRST/);
+  check("SC27-4: the arming runbook names the duplicate-doPost hazard (shared project scope, §18 spike writes nothing) and does so BEFORE the deploy step, ending in the check-endpoint proof",
+    spikeIdx > -1 && armIdx > -1 && spikeIdx < armIdx
+    && /one shared global scope|shared global scope/.test(readme)
+    && /Untitled/.test(readme)
+    && /check-endpoint/.test(readme.slice(spikeIdx, armIdx)),
+    "spikeIdx=" + spikeIdx + " armIdx=" + armIdx);
 }
 
 /* ---------- Q: presend-check (v2.3 §13 V-MATCH/V-PATH) ---------- */

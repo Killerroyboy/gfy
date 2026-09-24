@@ -352,6 +352,19 @@ runs through a captain's link or the form now.)
    anything (throws, no triggers touched) if it's shaped wrong — a `team`
    column missing (or a legacy `player` column in its place), or any of
    `h1`..`h18` missing. Fix the headers and re-run.
+3b. **Remove the §18 spike file FIRST — a duplicate `doPost` silently wins.**
+   Apps Script gives every file in a project **one shared global scope**, so
+   two files defining `doPost`/`doGet` do not error: one simply overwrites the
+   other, and which one survives depends on file order, not on intent. The
+   live project was recorded (2026-09-01) as still holding the §18 CORS spike
+   as `Untitled.gs`, which defines exactly those two functions and **writes
+   nothing** — so a project that looks correctly deployed can serve the echo
+   stub forever. Before deploying: open the script project, and for any file
+   other than `Code.gs` (polish), `triggers.gs` (sheet-triggers) and the
+   promote file, **delete it** (or rename its `doPost`/`doGet` to something
+   inert). Then cut a new version. Verify with `npm run check-endpoint` —
+   `REAL` is the only acceptable answer, and it is the *only* way to tell
+   these two apart from the outside.
 4. **Deploy the Web App**: still in Extensions → Apps Script, **Deploy → New
    deployment** → gear icon → **Web app** → Execute as **Me**, Who has
    access **Anyone** → **Deploy** → authorize → copy the **Web app URL**
