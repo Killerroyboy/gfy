@@ -16,11 +16,13 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
 
 ## Where things stand (verify fresh — never trust this doc over `git fetch` + the live site)
 
-- **Live main = `dd803eb`.** §25a/§25b/announce/calcutta-font are DEPLOYED and verified.
-- **AWAITING RILEY'S PUSH WORD (2026-09-24): 20 commits** on `v2.1-invites` —
-  §26 event kit + the §27 go-live hardening wave + two pre-activation defect fixes.
-  Ancestry FF-verified against `origin/main`; suite **338/338**; check-qr 11/11,
-  check-kit 20/20, gid-check 14/14. **Rollback ref for the next push: `dd803eb`.**
+- **DEPLOYED 2026-09-24: main `dd803eb` -> `7da9f12`** (21 commits: §26 event kit,
+  §27 go-live hardening, the CF-anchoring and rookie-fabrication fixes). Pages built
+  for that exact sha; live index.html + config.js md5 verified == tip.
+  **Next rollback ref: `7da9f12`.**
+- **AWAITING A FRESH PUSH WORD: 2 commits** — §28 `#preflight`, the day-of readiness
+  view. Suite **346/346**, real-browser render-close **10/10**. The 09-24 push word
+  covered the earlier 21 only; the grant is per-push and never batched.
 - **THE SCORER IS NOT ARMED.** `npm run check-endpoint -- <url>` against the live
   deployment returns **`STUB`** (verified 2026-09-24): the §18 echo is what is
   deployed, and it writes nothing. This is the single blocker for live use. See
@@ -28,11 +30,15 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
   `doPost`/`doGet`, which shares one global scope with the real one.
 - **Drive sync is 14/14 LIVE**: every config.js gid matches the sheet tab map; the
   Announce tab exists (gid 1337342920, header `year,when,message`, intentionally empty).
-- Suites: `node test/smoke.mjs` (jsdom, ~331 checks, moving baseline — assert
+- Suites: `node test/smoke.mjs` (jsdom, 346 checks — a MOVING baseline, so assert
   zero-FAIL, never an absolute count); `npm run check-qr` (11); `npm run check-kit` (20);
-  `npm run event-ready` (reads the LIVE sheet — exits 1 today on ~48 pre-existing
-  sheet-content FAILs: sample residue, unarmed scorer, calcutta cross-tab; that is
-  Riley's data-fill runway, not a code defect).
+  `npm run check-endpoint -- <url>` (§27 SC-PROBE — what is actually deployed);
+  `npm run event-ready` (reads the LIVE sheet — exits 1 today on **25 actionable**
+  sample-residue rows plus the unarmed scorer and the calcutta cross-tab mismatch;
+  that is Riley's data-fill runway, not a code defect. The Course tab's 18 rows are
+  no longer among them — they are verified-real and exempted per run).
+- Real-browser proof: `tools/pf-render-close.mjs` (needs playwright installed in the
+  repo; see its header). It is the only leg that can prove a CSS cascade.
 
 ## What shipped in this arc (short)
 
@@ -69,12 +75,13 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
    data: §27 ruled it is drilled BEFORE the fill, so the scariest component is
    proven while he assembles the event) → **R3** the 2027 data package as ONE
    decision sheet.
-   Also open as a Riley scope call: **BACKLOG #24 `?preflight=1`** phone readiness
-   view — the CEO's one "genuinely missing" day-of capability, deliberately not built.
+   **BACKLOG #24 `#preflight`** (the phone readiness view) was approved and BUILT
+   on 2026-09-24 — it needs its own push word.
    And **BACKLOG #26**: the GFY account address is already public on `main` and in
    history — accept-residual or rotate, same shape as #3.
 
-1. **Push word** — ships §26 + §27 (20 commits). Procedure below.
+1. **Push word** — §26 + §27 crossed on 2026-09-24; a FRESH word is needed for the
+   2 §28 commits still on the lane. Procedure below.
 2. **BACKLOG #17 — BINDING physical proof steps before any real print run:**
    phone-scan BOTH QR codes on a printed sample; 2027 Info dates/course/lodging fill;
    arm scoring first (cards promise live scoring — BACKLOG #1's runbook: re-paste .gs,
@@ -88,7 +95,8 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
 ## How this project works (conventions a fresh session must keep)
 
 - **Spec** = §-sections appended to `docs/superpowers/specs/2026-07-28-gfy-v2-teams-design.md`
-  (next free: §27). Plans in `docs/superpowers/plans/`. Canvas-normative clause: the
+  (next free: §29 — §27 go-live hardening and §28 #preflight are written).
+  Plans in `docs/superpowers/plans/`. Canvas-normative clause: the
   approved design canvas governs visual details not restated in text.
 - **Build pipeline:** brainstorm w/ Riley → spec → adversarial pressure test → plan →
   subagent-driven dev in a worktree (`.worktrees/<wave>` off the lane tip; verify HEAD
