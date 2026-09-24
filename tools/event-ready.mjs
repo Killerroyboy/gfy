@@ -37,16 +37,36 @@ export function checkFirstTee(firstTee, now){
   return {level:"PASS", detail:`first_tee ${firstTee}`};
 }
 
-export function checkResidue(tabRows, fingerprints){
-  const out=[];
+/* A tab whose REAL content is legitimately identical to the template's sample
+   content — the template was generated FROM that real data, so a verbatim
+   match proves authenticity, not staleness. The exemption is EARNED per run by
+   `earnedExemptions` below, never hardcoded: if the tab stops matching the real
+   data, the exemption evaporates and residue fires normally. This exists
+   because 18 false alarms on a 26-row list is how you teach an operator to
+   skim past the row that matters. */
+export function courseIsReal(courseRows, courseTruth){
+  if(!Array.isArray(courseRows) || !Array.isArray(courseTruth)) return false;
+  if(courseRows.length !== courseTruth.length) return false;
+  return courseTruth.every(([hole,par,yards]) => {
+    const r = courseRows.find(c => String(c[0]).trim() === String(hole));
+    return !!r && String(r[1]).trim() === String(par) && String(r[2]).trim() === String(yards);
+  });
+}
+
+export function checkResidue(tabRows, fingerprints, exempt={}){
+  const out=[], exempted=[];
   for(const [tab,rows] of Object.entries(tabRows)){
     const fps=new Set((fingerprints[tab]||[]).map(r=>r.join("")));
+    let n=0;
     (rows||[]).forEach((cells,i)=>{
-      if(fps.has(cells.map(c=>String(c).trim()).join("")))
-        out.push({level:"FAIL", detail:`sample-residue: ${tab} row ${i+2} is a VERBATIM template sample row`});
+      if(!fps.has(cells.map(c=>String(c).trim()).join(""))) return;
+      if(exempt[tab]){ n++; return; }
+      out.push({level:"FAIL", detail:`sample-residue: ${tab} row ${i+2} is a VERBATIM template sample row`});
     });
+    if(n) exempted.push({level:"INFO", detail:`sample-residue: ${tab} — ${n} row(s) match the template VERBATIM but are exempt: ${exempt[tab]}`});
   }
-  return out.length?out:[{level:"PASS", detail:"no verbatim template residue (edited-in-place residue is out of reach — eyeball stays in the runbook)"}];
+  if(out.length) return exempted.concat(out);
+  return exempted.concat([{level:"PASS", detail:"no verbatim template residue (edited-in-place residue is out of reach — eyeball stays in the runbook)"}]);
 }
 
 // ---- shared date/time helpers (deterministic — no wall-clock reads) ----
@@ -436,7 +456,24 @@ export async function main(){
     if(!r.ok){ push({level:"FAIL", detail:`sample-residue: ${tab} tab fetch failed (${r.error}) — cannot verify`}); continue; }
     tabRaw[tab]=r.grid.slice(1);
   }
-  push(checkResidue(tabRaw, fingerprints));
+  // The Course tab's real content IS the template's sample content — the
+  // template was generated from the real MeadowCreek card. Earn that exemption
+  // every run by diffing the live tab against the C-REAL checksummed copy in
+  // sheet-polish.gs (P5 keeps that copy and make_template.py's in lockstep).
+  // Unreadable truth, or one changed hole, and the exemption is simply not
+  // granted — residue fires as before. Verified 2026-09-24: 18/18 match.
+  const exempt={};
+  if(tabRaw.course){
+    let truth=null;
+    try {
+      const m=readFileSync(join(HERE, "sheet-polish.gs"), "utf8").match(/const COURSE_DATA\s*=\s*(\[[^;]*\]);/s);
+      if(m) truth=JSON.parse(m[1].replace(/'/g, '"'));
+    } catch { truth=null; }
+    if(!truth) push({level:"WARN", detail:"course: could not read COURSE_DATA from tools/sheet-polish.gs — residue exemption NOT granted (failing loud, not silent)"});
+    else if(courseIsReal(tabRaw.course, truth)) exempt.course="verified identical to the real MeadowCreek card (C-REAL checksums), which the template was generated from";
+    else push({level:"WARN", detail:"course: live Course tab DIVERGES from the real MeadowCreek card in sheet-polish.gs — residue exemption withheld; check which one is wrong"});
+  }
+  push(checkResidue(tabRaw, fingerprints, exempt));
 
   // (b) schedule coverage
   const sched=need("schedule", "schedule coverage");

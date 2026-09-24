@@ -22,7 +22,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import jsdom from "jsdom";
 import {
-  checkFirstTee, checkResidue, checkSchedule, checkPairings, checkPars,
+  checkFirstTee, checkResidue, courseIsReal, checkSchedule, checkPairings, checkPars,
   checkScorer, checkField, checkAnnounce, checkCrossTab, checkFallbackParity,
   checkInvitesPromotion,
 } from "../tools/event-ready.mjs";
@@ -6093,6 +6093,46 @@ const nowW = Date.now();
   check("EV13: a junk year (20277) never becomes the sponsor-check scope — the real 2027 first-timer still WARNs",
     r.some(x => x.level === "WARN" && /"Real Rookie" \(2027\)/.test(x.detail) && /invited_by/.test(x.detail)),
     JSON.stringify(r));
+}
+
+// EV14: the Course tab's REAL content is byte-identical to the template's
+// sample content (the template was generated FROM the real MeadowCreek card),
+// so 18 of the preflight's residue FAILs were permanent false alarms — and a
+// list that cries wolf 18 times is one an operator learns to skim. The
+// exemption must be EARNED per run against the C-REAL checksummed copy, never
+// hardcoded: change one hole and it evaporates. Verified against the live
+// sheet 2026-09-24 (18/18 match, HTTP 200 CSV).
+{
+  const truth = [[1,4,380],[2,3,165],[3,5,510]];
+  const fp = { course: truth.map(r => r.map(String)), shame: [["2026","Moose","three-putt"]] };
+  const liveReal = { course: truth.map(r => r.map(String)), shame: [["2026","Moose","three-putt"]] };
+  const liveBent = { course: [["1","4","380"],["2","3","166"],["3","5","510"]], shame: [["2026","Moose","three-putt"]] };
+  const exReal = courseIsReal(liveReal.course, truth)
+    ? { course: "verified identical to the real MeadowCreek card" } : {};
+  const exBent = courseIsReal(liveBent.course, truth)
+    ? { course: "verified identical to the real MeadowCreek card" } : {};
+  const rReal = checkResidue(liveReal, fp, exReal);
+  const rBent = checkResidue(liveBent, fp, exBent);
+  const courseFails = res => res.filter(x => x.level === "FAIL" && /^sample-residue: course/.test(x.detail));
+  const shameFails  = res => res.filter(x => x.level === "FAIL" && /^sample-residue: shame/.test(x.detail));
+  check("EV14: a Course tab that matches the real card earns its residue exemption (INFO naming the count + reason, zero FAILs) while OTHER tabs still FAIL; one bent yardage withholds the exemption and every course row FAILs again — and the exemption is never granted by tab name alone",
+    // earned: course exempt, reported honestly, shame untouched
+    courseIsReal(liveReal.course, truth) === true
+    && courseFails(rReal).length === 0
+    && rReal.some(x => x.level === "INFO" && /course/.test(x.detail) && /3 row\(s\)/.test(x.detail) && /exempt/.test(x.detail))
+    && shameFails(rReal).length === 1
+    // withheld: one changed yardage and the alarm comes straight back for
+    // every row that IS still verbatim (rows 2 and 4 — the bent row 3 stopped
+    // being verbatim residue the moment it was edited, the documented limit).
+    && courseIsReal(liveBent.course, truth) === false
+    && courseFails(rBent).length === 2
+    && /course row 2 /.test(courseFails(rBent)[0].detail)
+    && /course row 4 /.test(courseFails(rBent)[1].detail)
+    && !rBent.some(x => x.level === "INFO" && /course/.test(x.detail))
+    // teeth on courseIsReal itself: wrong length and a missing hole both refuse
+    && courseIsReal(truth.slice(0, 2), truth) === false
+    && courseIsReal([["9",4,380],["2",3,165],["3",5,510]], truth) === false,
+    "real=" + JSON.stringify(rReal) + " bent=" + JSON.stringify(rBent));
 }
 
 /* ---------------------------------------------------------------------
