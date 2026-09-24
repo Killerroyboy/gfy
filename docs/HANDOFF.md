@@ -16,11 +16,16 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
 
 ## Where things stand (verify fresh — never trust this doc over `git fetch` + the live site)
 
-- **Live main = `becf0a1`** — §25a broadcast-finish + §25b finish-polish + the Announce-tab
-  sync wiring are DEPLOYED and verified (Pages built, live md5 checked at each push).
-- **Merged on the lane, AWAITING RILEY'S PUSH WORD: §26 event kit** — lane branch
-  `v2.1-invites` @ `940ae47` (merge `69b3fc1` + backlog rows), **11 commits ahead of
-  origin/main**, merged suite **331/331**. Rollback ref for the next push: `becf0a1`.
+- **Live main = `dd803eb`.** §25a/§25b/announce/calcutta-font are DEPLOYED and verified.
+- **AWAITING RILEY'S PUSH WORD (2026-09-24): 20 commits** on `v2.1-invites` —
+  §26 event kit + the §27 go-live hardening wave + two pre-activation defect fixes.
+  Ancestry FF-verified against `origin/main`; suite **338/338**; check-qr 11/11,
+  check-kit 20/20, gid-check 14/14. **Rollback ref for the next push: `dd803eb`.**
+- **THE SCORER IS NOT ARMED.** `npm run check-endpoint -- <url>` against the live
+  deployment returns **`STUB`** (verified 2026-09-24): the §18 echo is what is
+  deployed, and it writes nothing. This is the single blocker for live use. See
+  README step 3b — the live script project also holds the spike's duplicate
+  `doPost`/`doGet`, which shares one global scope with the real one.
 - **Drive sync is 14/14 LIVE**: every config.js gid matches the sheet tab map; the
   Announce tab exists (gid 1337342920, header `year,when,message`, intentionally empty).
 - Suites: `node test/smoke.mjs` (jsdom, ~331 checks, moving baseline — assert
@@ -31,7 +36,8 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
 
 ## What shipped in this arc (short)
 
-1. **Drive cleanup (08-24):** goodfriendsyearly@gmail.com reduced to 3 artifacts —
+1. **Drive cleanup (08-24):** the GFY Google account (address deliberately not
+   restated here — binding invariant 1) reduced to 3 artifacts —
    **GFY Tournament** (the live published sheet; publish-id verified == config.js
    PUB_ID), **GFY Live Scoring** (backup form; "Do not collect emails" verified;
    all 4 questions required), **GFY Admin** (private email vault, never published —
@@ -55,9 +61,20 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
    (poster + captain cards; vault guard; per-card TZ+season stamps; `[TBD]` /
    `[ 2027 DATES ]` honesty; PDF pagination verified).
 
-## Riley's open gates (in order)
+## Riley's open gates (in order — CEO-ranked 2026-09-24, cheap gates before the long pole)
 
-1. **Push word** — ships §26 (11 commits). Procedure below.
+0. **The three that matter today** (full detail in `BACKLOG.md`'s top block):
+   **R1** push word (one word, gates the whole paste chain — the scripts Riley
+   pastes must come from pushed source) → **R2** arm the scorer (does NOT wait on
+   data: §27 ruled it is drilled BEFORE the fill, so the scariest component is
+   proven while he assembles the event) → **R3** the 2027 data package as ONE
+   decision sheet.
+   Also open as a Riley scope call: **BACKLOG #24 `?preflight=1`** phone readiness
+   view — the CEO's one "genuinely missing" day-of capability, deliberately not built.
+   And **BACKLOG #26**: the GFY account address is already public on `main` and in
+   history — accept-residual or rotate, same shape as #3.
+
+1. **Push word** — ships §26 + §27 (20 commits). Procedure below.
 2. **BACKLOG #17 — BINDING physical proof steps before any real print run:**
    phone-scan BOTH QR codes on a printed sample; 2027 Info dates/course/lodging fill;
    arm scoring first (cards promise live scoring — BACKLOG #1's runbook: re-paste .gs,
