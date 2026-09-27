@@ -12,7 +12,9 @@
     "make-kit": "node tools/print/make-kit.mjs",
     "check-kit": "node tools/print/make-kit.test.mjs",
     "check-endpoint": "node tools/check-endpoint.mjs",
-    "drill-sweep": "node tools/drill-sweep.mjs"
+    "drill-sweep": "node tools/drill-sweep.mjs",
+    "test:all": "node test/smoke.mjs && npm run --silent check-qr && npm run --silent check-kit && npm run --silent check-template",
+    "check:live": "npm run --silent check-gids && npm run --silent event-ready"
   },
   "devDependencies": {
     "jsdom": "^29.1.1"

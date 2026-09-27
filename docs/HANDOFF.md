@@ -30,7 +30,18 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
   `doPost`/`doGet`, which shares one global scope with the real one.
 - **Drive sync is 14/14 LIVE**: every config.js gid matches the sheet tab map; the
   Announce tab exists (gid 1337342920, header `year,when,message`, intentionally empty).
-- Suites: `node test/smoke.mjs` (jsdom, 346 checks — a MOVING baseline, so assert
+- **THE GATE before any commit: `npm run test:all`** — smoke + check-qr + check-kit +
+  check-template in one command. It is genuinely OFFLINE (proven by running it with the
+  network blackholed), so it is safe to run every time and cannot rate-limit the sheet.
+  Use it instead of remembering which suites matter: on 2026-09-27 I shipped a regression
+  into mc-driver by running one suite and carrying a PREVIOUS commit's result forward for
+  the rest — the commit that changes kind (read → write) is exactly where an earlier
+  green stops transferring.
+- **`npm run check:live`** — check-gids + event-ready. These READ THE LIVE SHEET and the
+  published-CSV endpoint rate-limits bursts, so run them deliberately, not in a loop and
+  not as a pre-commit habit. (A rate-limited run is why the overseer's GFY check went
+  green-while-blind for three days.)
+- Suites: `node test/smoke.mjs` (jsdom, 351 checks — a MOVING baseline, so assert
   zero-FAIL, never an absolute count); `npm run check-qr` (11); `npm run check-kit` (20);
   `npm run check-endpoint -- <url>` (§27 SC-PROBE — what is actually deployed);
   `npm run event-ready` (reads the LIVE sheet — exits 1 today on **25 actionable**
