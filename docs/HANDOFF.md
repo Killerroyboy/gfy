@@ -6,6 +6,56 @@
 > and `BACKLOG.md`, then emit the doctrine loaded-heartbeat before acting
 > (`~/.claude/projects/-Users-riley/memory/DOCTRINE.md` §1 first; GFY has no company layer).
 
+## §0 — paste this into a fresh session as its first message
+
+```
+GFY pickup. Load doctrine FIRST: ~/.claude/projects/-Users-riley/memory/DOCTRINE.md (§1
+first) — md5 must match the SessionStart hook's fresh-from-disk value; there is NO gfy
+company layer. Emit the loaded-heartbeat before acting.
+
+Then read, in this order:
+  1. ~/Code/gfy/docs/HANDOFF.md            (this file — state, gates, conventions)
+  2. ~/Code/gfy/BACKLOG.md                 (the ⚑ row is the blocker)
+  3. ~/.claude/projects/-Users-riley/memory/project_gfy_tournament_site.md
+  4. ~/mc-driver/docs/HANDOFF-gfy-lane.md  (only if touching the autonomous lane)
+
+Ground before asserting anything (all four are cheap):
+  cd ~/Code/gfy && git fetch origin && git status && git log --oneline -3
+  npm run test:all                  # offline gate: smoke + qr + kit + template
+  npm run check-endpoint -- <Info!score_endpoint URL from the live sheet>
+  npm run check:live                # ONLY when you need live-sheet truth (rate-limits)
+
+STATE as of 2026-09-28 (verify, do not trust):
+  live main 9820e19, deployed + browser-verified. Lane v2.1-invites 3 commits ahead.
+  Site complete: §24 player-info, §25a/b broadcast, §26 event kit, §27 go-live hardening,
+  §28 #preflight, roundNorm fix. Rollback ref 9820e19.
+
+THE ONE BLOCKER, unchanged since 09-24 and it is Riley's hands:
+  THE SCORER IS UNARMED. check-endpoint says STUB — the §18 echo is deployed and writes
+  nothing. Everything else about GFY is finished. Arming sequence:
+    1. README step 3b FIRST — delete the spike's duplicate doPost/doGet from the Apps
+       Script project. One project = ONE global scope, so it silently overwrites the real
+       handler. Skipping this makes arming LOOK successful while still serving the stub.
+    2. Redeploy the real handler on the SAME deployment URL (Manage deployments → Edit →
+       New version). A new deployment mints a new URL and orphans every captain link.
+    3. Paste Info!score_endpoint, then check-endpoint must print REAL.
+    4. npm run drill-sweep -- <url>   (dry-run first, then --go; it REFUSES a stub)
+    5. Drill steps 3-7 by hand. Pass condition is a ROW APPEARING in Scores, never a 200.
+
+DO NOT:
+  - push without Riley's in-chat word for THAT push (GFY-only grant; never standing)
+  - arm an autonomous window (G0 has run; the next one is Riley's call, and the current
+    manifest is refused by preflight anyway — a window id IS its manifest md5)
+  - run npm run check:live in a loop (the published-CSV endpoint rate-limits bursts; a
+    rate-limited run is what made the overseer's GFY check go green-while-blind for 3 days)
+  - invent work around the scorer. Arming it IS the task.
+
+RILEY'S OPEN RULINGS: ⚑ arm the scorer · the G0 verdict (do NOT rule `agree` — the window
+is infrastructure, the acceptance never ran) · the 2027 data package (BACKLOG #6) · push
+word · whether to commit the oldmac conductor (339 lines uncommitted since 2026-07-07,
+preserved, NOT ratified).
+```
+
 ## What this project is
 
 GFY: an annual golf-trip site + Google Sheet ops system. Static site (one `index.html`,
