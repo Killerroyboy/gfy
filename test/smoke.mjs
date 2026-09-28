@@ -3189,6 +3189,37 @@ async function openScorer(dom, { noSheet = false } = {}) {
       /scoring endpoint not reachable/i.test(dbgTextX15) && cardVisibleX15 && noSentCellX15,
     "err=" + JSON.stringify(sendErrX15) + " cardVisible=" + cardVisibleX15 + " noSentCell=" + noSentCellX15 +
       " dbg=" + dbgTextX15.slice(0, 200));
+
+  // X15b: the §18 ECHO STUB against the CAPTAIN's send path — the one payload
+  // that matters most and was never exercised here. X15 covers HTML, which is
+  // obviously not a scorer. The stub is far more dangerous: valid JSON, 200,
+  // `ok` genuinely true. It is EXACTLY what is live today, and exactly what a
+  // captain would meet if arming happened with README step 3b skipped (the
+  // documented most-likely mistake: the spike's duplicate doPost silently wins
+  // the shared global scope). scSend must reject it on the missing `verdict`
+  // string, so the entry stays queued behind the loud banner rather than
+  // rendering as sent. A guard loosened to "out.ok is true" would accept it and
+  // scores would vanish silently — which is why this is pinned with a mutant.
+  const epUrlX15b = "https://script.example/exec";
+  const infoX15b = FIXTURES.info + "score_endpoint," + epUrlX15b + "\n";
+  const stubReply = JSON.stringify({ ok: true, echo: { team: "Duck", round: 2, hole: 13, score: 6 } });
+  const fetchX15b = (url) => {
+    if (String(url).indexOf(epUrlX15b) === 0)
+      return Promise.resolve({ ok: true, status: 200, text: async () => stubReply });
+    return withOverride({ info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoX15b }) })(url);
+  };
+  const domX15b = makeDom("#score?team=" + encodeURIComponent("Duck"), fetchX15b);
+  await openScorer(domX15b, { noSheet: true });
+  let stubErr, stubResolved = false;
+  try {
+    await domX15b.window.scSend({ team: "Duck", round: 2, hole: 13, score: 6 }, "client-x15b", 1);
+    stubResolved = true;
+  } catch (e) { stubErr = e; }
+  domX15b.window.close();
+  check("X15b: the §18 echo stub (200, valid JSON, ok:true, NO verdict) is REJECTED by the captain's scSend as {kind:'config'} and never resolves — an accepted stub would render a tap as sent while the sheet never receives it, which is the precise outcome README step 3b exists to prevent",
+    stubResolved === false && !!stubErr && stubErr.kind === "config"
+    && typeof stubErr.detail === "string" && /shape/i.test(stubErr.detail),
+    "resolved=" + stubResolved + " err=" + JSON.stringify(stubErr));
 }
 
 /* ---------------------------------------------------------------------
