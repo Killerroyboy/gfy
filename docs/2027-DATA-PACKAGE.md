@@ -26,11 +26,15 @@ Residue detection flags a row when it is **verbatim identical to the template sa
 Info keys look like they are legitimately identical to the template *because the template was
 written from reality*:
 
-| Key | Template value | Why it may be real |
+| Key | Template value | Verdict |
 |---|---|---|
-| `course` | `Meadow Creek` | The event is at MeadowCreek, New Meadows ID. The Course tab's 18 holes are already verified-real against the C-REAL checksums. |
-| `format` | `2-day scramble` | The event is a 2-day scramble. That is the format, not a placeholder. |
-| `est_year` | `2019` | 2019 is the site's own founding-year literal, and Champions carries a 2019 "Inaugural" row. |
+| `course` | `Meadow Creek` | **Probably NOT a collision — checked 2026-09-28.** Spec §13 sources the course data from **meadowcreekgolfresort.com**, and every reference in this repo spells it **MeadowCreek** (one word). The template is "Meadow Creek" (two words). Type the real name and this FAIL clears by itself. |
+| `format` | `2-day scramble` | **Possible collision.** The event IS a 2-day scramble, and that is a natural way to write it. |
+| `est_year` | `2019` | **Near-certain collision.** 2019 is the site's own founding-year literal and Champions carries a 2019 "Inaugural" row. A year is a year — if it stays 2019 it stays verbatim. |
+| `calcutta_rake` `calcutta_basis` `deposit_amount`, and payout `50/30/20` | `10` · `gross` · `200` | **Same shape.** Policy values that may legitimately not change year to year. |
+
+So the decision is **smaller than it first looked**: `course` likely resolves itself, and the
+real question is `est_year`, `format`, and the policy numbers.
 
 If those are real, they can never clear, `event-ready` exits 1 forever, and the honest response
 — "explain every surviving FAIL" — turns into the habit of ignoring residue FAILs. That is the
@@ -56,12 +60,31 @@ Arming does **not** wait on data. Doing it first means the scariest component is
 you still have the sheet in your hands, and the dangerous step — re-pointing the deployment at
 the sheet — gets rehearsed on the real thing rather than on a scratch copy.
 
-1. **README step 3b FIRST** — delete the §18 spike's duplicate `doPost`/`doGet` from the Apps
-   Script project. One project = ONE global scope, so the spike silently overwrites the real
-   handler. Skipping this makes arming *look* successful while still serving the stub.
-2. **Redeploy the real handler on the SAME deployment URL** (Manage deployments → Edit → New
-   version). A new deployment mints a new URL and orphans every captain link already handed out.
-3. Paste `Info!score_endpoint` (row 12), then `npm run check-endpoint -- <url>` must print **REAL**.
+> **I opened the live Apps Script project read-only on 2026-09-28 and confirmed the diagnosis
+> from the inside.** Three files: `Code.gs` (sheet-polish), `triggers.gs`, `Untitled.gs`.
+> `Untitled.gs` IS the spike — its own header says *"SPIKE (temporary, §18 gate)… Writes
+> NOTHING"* — and it declares **both `doPost` and `doGet`** at global scope, which is exactly
+> why it wins over the real handler. Its `doGet` returns `{ok:true, spike:"v1", ping:"doGet"}`,
+> the precise payload the probe classifies as STUB. I could not go further: the harness blocks
+> keystrokes in that editor as a production-deploy surface, which is the right place for the wall.
+
+1. **README step 3b FIRST** — delete `Untitled.gs` (the §18 spike). One project = ONE global
+   scope, so its `doPost`/`doGet` silently overwrite the real ones. Skipping this makes arming
+   *look* successful while still serving the stub. **Delete `Untitled.gs` only** — `Code.gs` is
+   sheet-polish and `triggers.gs` is the scorer; deleting either breaks the sheet.
+2. **RE-PASTE `tools/sheet-triggers.gs`** before redeploying. BACKLOG #1 and #19(5) both record
+   that the live project holds a **stale** `triggers.gs`. I could not read far enough down the
+   live file to confirm it (the header is identical in both versions, so it proves nothing), but
+   the consequence if it IS stale is nasty and silent: the §27 SC-IDENT envelope landed later, so
+   the deployment would answer without it, `check-endpoint` would print **STUB**, and you would
+   conclude arming failed when the write path is fine. Re-pasting costs a minute and removes the
+   question entirely. **This does NOT wait on my 10 unpushed commits** — SC-IDENT landed in
+   `8a17499`, already on `origin/main`, and the file is byte-identical on the lane
+   (md5 `293d799816efdc306ff67d8f21bb7b1c`). Paste the pushed version.
+3. **Redeploy on the SAME deployment URL** (Manage deployments → **Edit (pencil) → Version: New
+   version** → Deploy). **Do not choose "New deployment"** — that mints a new URL and orphans
+   every captain link already handed out.
+4. Paste `Info!score_endpoint` (row 12), then `npm run check-endpoint -- <url>` must print **REAL**.
 4. `npm run drill-sweep -- <url>` — dry-run first, then `--go`.
 5. Drill steps 3–7 by hand. **Pass condition is a ROW APPEARING in Scores, never a 200.**
 
