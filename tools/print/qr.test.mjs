@@ -47,7 +47,7 @@ import qrcodeVendor from "./qr-vendor.mjs";
 // Fix round 1 (RULED): SITE_ROOT was independently declared here AND in
 // make-kit.mjs — single-sourced now from make-kit.mjs (the module that
 // actually owns "what URL does the kit point at"), imported here instead.
-import { SITE_ROOT } from "./make-kit.mjs";
+import { SITE_ROOT, posterQrSvg, cardQrSvg } from "./make-kit.mjs";
 
 const results = [];
 function check(name, ok, detail = "") {
@@ -412,6 +412,51 @@ function decodeQr(text) {
 
   check("K-QR-g: forced-type4-M round-trip — qrcode(4,'M').addData(siteRootUrl) (typeNumber pinned directly through the vendor factory, bypassing qr.mjs's auto-select) decodes back to the EXACT original string",
     decoded === SITE_ROOT, "decoded=" + JSON.stringify(decoded) + " err=" + err + " moduleCount=" + moduleCount);
+}
+
+/* ---------- (h) QUIET ZONE — the one failure that only paper shows ---------- */
+{
+  // BACKLOG #21 pre-commits a phone-camera scan of a PHYSICALLY PRINTED proof as
+  // binding, and names quiet-zone/margin failure as the suspect. Every decode test
+  // above (f1/f2/g included) decodes the MODULE MATRIX — it never renders, so it is
+  // structurally incapable of seeing a quiet-zone defect. This is the probe-vs-render
+  // gap: a round-trip proves the payload, only geometry proves the scan.
+  //
+  // ISO/IEC 18004 requires a quiet zone of >= 4 modules on all four sides. qrSvg
+  // defaults to margin 4 correctly; both PRINTED call sites used to override it to 3
+  // (poster short by 1.38mm, captain card short by 0.98mm as printed). The codes
+  // themselves were never the risk — module sizes are 1.30mm and 0.93mm, far above
+  // the ~0.4mm camera floor — so widening the margin costs ~6% module size and buys
+  // spec compliance. The CSS pins the PHYSICAL size (1.9in / 1.5in), so nothing on
+  // the page moves.
+  //
+  // Derived from the rendered SVG, not from the call's arguments: an assertion that
+  // read the options back would pass against any renderer that ignored them.
+  const geom = (svg) => {
+    const vb = Number((svg.match(/viewBox="0 0 (\d+) \d+"/) || [])[1]);
+    const all = [...svg.matchAll(/<rect x="(\d+)" y="(\d+)" width="(\d+)"/g)]
+      .map(m => ({ x: +m[1], y: +m[2], w: +m[3] }));
+    // Drop the full-bleed background rect (K-QR-e2's idiom) — it spans the whole
+    // viewBox including the quiet zone, so leaving it in makes every margin read 0.
+    const rects = all.filter(r => r.w !== vb);
+    if (!vb || !rects.length) return null;
+    const moduleSize = Math.min(...rects.map(r => r.w));
+    const minX = Math.min(...rects.map(r => r.x));
+    const minY = Math.min(...rects.map(r => r.y));
+    const maxX = Math.max(...rects.map(r => r.x + r.w));
+    const maxY = Math.max(...rects.map(r => r.y + r.w));
+    return {
+      moduleSize,
+      left: minX / moduleSize, top: minY / moduleSize,
+      right: (vb - maxX) / moduleSize, bottom: (vb - maxY) / moduleSize,
+    };
+  };
+  const ok = (g) => !!g && Math.min(g.left, g.top, g.right, g.bottom) >= 4;
+  const poster = geom(posterQrSvg());
+  const card = geom(cardQrSvg("Wade Johnson"));
+  check("K-QR-h: ISO/IEC 18004 quiet zone — BOTH printed codes carry >= 4 light modules on ALL FOUR sides, measured off the rendered SVG geometry (dark-rect extents vs viewBox), not off the options passed in; a margin:3 regression at either print call site must fail this",
+    ok(poster) && ok(card),
+    "poster=" + JSON.stringify(poster) + " card=" + JSON.stringify(card));
 }
 
 console.log("");

@@ -287,11 +287,19 @@ export function scoreUrlFor(teamName) {
 // Exported so tests can assert the exact SVG each page embeds (byte-for-byte
 // via the qr module, per the K-QR test file's own precedent) without
 // duplicating — and risking drift on — the moduleSize/margin options below.
+// margin 4, not 3: ISO/IEC 18004 requires a quiet zone of >= 4 modules on all
+// four sides, and these are the two codes that get PRINTED and scanned by a
+// phone in a lodge. At 3 the poster was short by 1.38mm and the captain card by
+// 0.98mm. The CSS pins the physical size (1.9in / 1.5in), so widening the quiet
+// zone costs ~6% module size — 1.30mm and 0.93mm, still far above the ~0.4mm
+// camera floor — and moves nothing on the page. Pinned by K-QR-h, which measures
+// the RENDERED geometry; every decode test here reads the module matrix and is
+// structurally blind to a quiet-zone defect (BACKLOG #21's binding scan risk).
 export function posterQrSvg() {
-  return qrSvg(SITE_ROOT, { moduleSize: 6, margin: 3 });
+  return qrSvg(SITE_ROOT, { moduleSize: 6, margin: 4 });
 }
 export function cardQrSvg(teamName) {
-  return qrSvg(scoreUrlFor(teamName), { moduleSize: 5, margin: 3 });
+  return qrSvg(scoreUrlFor(teamName), { moduleSize: 5, margin: 4 });
 }
 
 /* ---------- shared page chrome ---------- */
