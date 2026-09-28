@@ -8629,6 +8629,57 @@ results.forEach(([name, ok]) => {
     JSON.stringify(pg0));
 }
 
+/* ===== S26-SEASON (BACKLOG #22) — one owner for the tee year ===== */
+{
+  // The board and the scorer both derive the season from Info!first_tee, by two
+  // DIFFERENT rules: activeSeason() parsed it with `new Date(...).getFullYear()`,
+  // scorerSeason() with /^(\d{4})/. A bare-year first_tee ("2027") is an ISO
+  // instant — UTC midnight — so anywhere west of Greenwich getFullYear() gives
+  // the PREVIOUS year. Measured: America/Denver (the event's own timezone —
+  // MeadowCreek, New Meadows ID) and America/Los_Angeles both diverge; UTC and
+  // Asia/Tokyo do not, which is exactly why this survived every suite run.
+  //
+  // The consequence is the worst shape this project has: scores POST fine
+  // (scorer keys 2027) and never appear on the board (board renders 2026).
+  // Silent, and it would surface mid-tournament.
+  //
+  // event-ready's checkFirstTee does FAIL a bare year, so the pre-event tool
+  // catches it — but only if it is run, and the site itself never says a word.
+  // Pin the TZ here rather than trusting the host's, or this check is vacuous
+  // on a UTC machine (T12's lesson, one level over: a test that only fails in
+  // some timezones is a date bomb with a passport).
+  const TZ0 = process.env.TZ;
+  try {
+    process.env.TZ = "America/Denver";
+    const infoBare = FIXTURES.info.replace("2026-08-15T09:00:00-06:00", "2027");
+    // Scores emptied to its header, so activeSeason() cannot resolve the season
+    // from a Scores row and must fall through to the tee year — the path under test.
+    const scoresHdr = FIXTURES.scores.split("\n")[0] + "\n";
+    const domSZ = makeDom("", withOverride({
+      info: () => Promise.resolve({ ok: true, status: 200, text: async () => infoBare }),
+      scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresHdr }),
+    }));
+    await until(() => String(domSZ.window.INFO?.first_tee || "") === "2027");
+    const board = domSZ.window.activeSeason();
+    const scorer = domSZ.window.scorerSeason();
+    check("S26-SEASON: with a bare-year Info!first_tee the board and the scorer agree on the season (TZ pinned to America/Denver, the event's own zone, where new Date('2027').getFullYear() is 2026) — otherwise scores post under one year and render under another, and the board silently shows nothing",
+      board === "2027" && scorer === "2027" && board === scorer,
+      `TZ=America/Denver activeSeason=${board} scorerSeason=${scorer}`);
+    domSZ.window.close();
+
+    // And the full-ISO form must be completely unaffected by the fix — that is
+    // the shape the README actually asks for, and the one every other test uses.
+    const domSZ2 = makeDom("", withOverride({
+      scores: () => Promise.resolve({ ok: true, status: 200, text: async () => scoresHdr }),
+    }));
+    await until(() => !!domSZ2.window.INFO?.first_tee);
+    check("S26-SEASON-b: the ordinary full-ISO first_tee (2026-08-15T09:00:00-06:00) still resolves to its own year on both paths — the fix changes the bare-year case only",
+      domSZ2.window.activeSeason() === "2026" && domSZ2.window.scorerSeason() === "2026",
+      `activeSeason=${domSZ2.window.activeSeason()} scorerSeason=${domSZ2.window.scorerSeason()}`);
+    domSZ2.window.close();
+  } finally { if (TZ0 === undefined) delete process.env.TZ; else process.env.TZ = TZ0; }
+}
+
 console.log("");
 Object.keys(groupTally).sort().forEach(g => console.log(`TALLY ${g} ${groupTally[g].pass}/${groupTally[g].total}`));
 const failed = results.filter(r => !r[1]).length;

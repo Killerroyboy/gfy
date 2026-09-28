@@ -2047,8 +2047,16 @@ function activeSeason(){
   // A-SANE: a Scores row more than a year past first_tee is almost always a
   // typo'd year (fat-fingered on a phone), not a genuine future season — if
   // it wins the max() it silently strands the real board on a garbage year.
-  const t=new Date(INFO.first_tee||CONFIG.FIRST_TEE);
-  const teeYear=isNaN(t.getTime())?null:t.getFullYear();
+  // SC-YEAR parity (§7, one owner): read the tee YEAR exactly the way the
+  // scorer reads it (scorerSeason's /^(\d{4})/). `new Date("2027")` is an ISO
+  // instant at UTC midnight, so anywhere west of Greenwich getFullYear()
+  // returns 2026 — the board would render a different season than the one
+  // scores are keyed under, and posted scores would simply never appear.
+  // Date parsing remains the fallback for the non-ISO forms it already took.
+  const ftRaw=String(INFO.first_tee||CONFIG.FIRST_TEE||"");
+  const ftY=ftRaw.match(/^(\d{4})/);
+  const t=new Date(ftRaw);
+  const teeYear=ftY?parseInt(ftY[1],10):(isNaN(t.getTime())?null:t.getFullYear());
   const ceiling=teeYear===null?Infinity:teeYear+1;
   const ysAll=(STATE.data.scores||[]).map(r=>parseInt(r.year,10)).filter(n=>n>0);
   const ys=ysAll.filter(n=>n<=ceiling);
