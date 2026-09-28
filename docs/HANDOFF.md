@@ -1,7 +1,7 @@
 # GFY session handoff — pick up here
 
-> Written 2026-09-02 at the close of the §25/§26 arc (supersedes the 07-30-era handoff;
-> its primer + binding invariants are folded in below — full prior text in git history). A fresh session should read this,
+> Rewritten 2026-09-28 (state sections only; the conventions and binding invariants below
+> are older and still current). A fresh session should read this,
 > the memory topic file (`~/.claude/projects/-Users-riley/memory/project_gfy_tournament_site.md`),
 > and `BACKLOG.md`, then emit the doctrine loaded-heartbeat before acting
 > (`~/.claude/projects/-Users-riley/memory/DOCTRINE.md` §1 first; GFY has no company layer).
@@ -16,18 +16,31 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
 
 ## Where things stand (verify fresh — never trust this doc over `git fetch` + the live site)
 
-- **DEPLOYED 2026-09-24: main `dd803eb` -> `7da9f12`** (21 commits: §26 event kit,
-  §27 go-live hardening, the CF-anchoring and rookie-fabrication fixes). Pages built
-  for that exact sha; live index.html + config.js md5 verified == tip.
-  **Next rollback ref: `7da9f12`.**
-- **AWAITING A FRESH PUSH WORD: 2 commits** — §28 `#preflight`, the day-of readiness
-  view. Suite **346/346**, real-browser render-close **10/10**. The 09-24 push word
-  covered the earlier 21 only; the grant is per-push and never batched.
-- **THE SCORER IS NOT ARMED.** `npm run check-endpoint -- <url>` against the live
-  deployment returns **`STUB`** (verified 2026-09-24): the §18 echo is what is
-  deployed, and it writes nothing. This is the single blocker for live use. See
-  README step 3b — the live script project also holds the spike's duplicate
-  `doPost`/`doGet`, which shares one global scope with the real one.
+- **Live main = `9820e19`**, deployed and verified in a real browser (0 console errors).
+  The lane `v2.1-invites` is **1 commit ahead** (`f811354`, the offline test gate).
+  Next rollback ref = `9820e19`.
+- **THE ONE BLOCKER: THE SCORER IS NOT ARMED.** `npm run check-endpoint -- <url>` against
+  the live deployment returns **`STUB`** — the §18 echo is what is deployed and it writes
+  nothing. Unchanged since 09-24. Everything else about GFY is finished; this is the only
+  thing between it and live tournament use. **Start here** (README step 3b first — the
+  live Apps Script project also holds the spike's duplicate `doPost`/`doGet`, and Apps
+  Script gives one project ONE global scope, so it silently overwrites the real handler;
+  skipping that step makes arming *look* successful while still serving the stub).
+- **The live sheet is still the test bed:** 12 residue identities / 30 rows, real 2027
+  dates absent, `payment_handle` still the fake "Venmo @gfy-duck" and publicly displayed.
+  `npm run check:live` is the authority. (The Course tab's 18 rows are verified-real and
+  exempted — they are the template matching reality, not stale samples.)
+- **GFY is the FIRST AUTONOMOUS LANE** (Riley, 09-24, superseding the 09-23 riffle-first
+  ruling). **G0 ran end to end on 09-24 and closed** at `needs-riley`; the fence held (live
+  repo never moved, all work on `gfy-preview/auto-builds`). Full account + the next-window
+  steps: `~/mc-driver/docs/HANDOFF-gfy-lane.md`. **Do not arm another window without
+  Riley** — and the current manifest is now refused by preflight anyway (a window id IS
+  its manifest md5, so re-use is a replay).
+- **Watched daily by the overseer** (`~/mc-overseer`, 07:00): `gfy-readiness` reports
+  ADVERSE CHANGE against a baseline — a scorer regression, a NEW failure identity, a gid
+  that stopped resolving, the live site drifting from the deployed tip — and stays quiet
+  on the known sheet-fill runway. It reports **SHEET UNREADABLE** rather than "clean" when
+  it cannot fetch (it went green-while-blind for three days before that was fixed).
 - **Drive sync is 14/14 LIVE**: every config.js gid matches the sheet tab map; the
   Announce tab exists (gid 1337342920, header `year,when,message`, intentionally empty).
 - **THE GATE before any commit: `npm run test:all`** — smoke + check-qr + check-kit +
@@ -78,30 +91,23 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
    (poster + captain cards; vault guard; per-card TZ+season stamps; `[TBD]` /
    `[ 2027 DATES ]` honesty; PDF pagination verified).
 
-## Riley's open gates (in order — CEO-ranked 2026-09-24, cheap gates before the long pole)
+## Riley's open gates (his EA now ranks these; ⚑ is the marked one)
 
-0. **The three that matter today** (full detail in `BACKLOG.md`'s top block):
-   **R1** push word (one word, gates the whole paste chain — the scripts Riley
-   pastes must come from pushed source) → **R2** arm the scorer (does NOT wait on
-   data: §27 ruled it is drilled BEFORE the fill, so the scariest component is
-   proven while he assembles the event) → **R3** the 2027 data package as ONE
-   decision sheet.
-   **BACKLOG #24 `#preflight`** (the phone readiness view) was approved and BUILT
-   on 2026-09-24 — it needs its own push word.
-   And **BACKLOG #26**: the GFY account address is already public on `main` and in
-   history — accept-residual or rotate, same shape as #3.
-
-1. **Push word** — §26 + §27 crossed on 2026-09-24; a FRESH word is needed for the
-   2 §28 commits still on the lane. Procedure below.
-2. **BACKLOG #17 — BINDING physical proof steps before any real print run:**
-   phone-scan BOTH QR codes on a printed sample; 2027 Info dates/course/lodging fill;
-   arm scoring first (cards promise live scoring — BACKLOG #1's runbook: re-paste .gs,
-   redeploy endpoint on the same URL, Info keys, polish(), 25-min drill); print vendor +
-   paper; TV hardware + on-lodge `#tv` eyeball.
-3. **BACKLOG #11** — §25a live eyeball items (masthead wide-seam, doubled context text
-   on Board, archive-year chip taste call, phone pass).
-4. **BACKLOG #6** — replace the sheet's sample data (event-ready polices residue).
-5. Copy list: one new line awaiting his blessing-in-place: "No events scheduled today."
+1. **⚑ ARM THE SCORER** — the only blocker. Sequence, three of four steps mechanically
+   checked: README step 3b (delete the spike's duplicate `doPost`) → redeploy on the
+   **same** deployment URL → paste `Info!score_endpoint` → `npm run check-endpoint -- <url>`
+   must print **`REAL`** → `npm run drill-sweep -- <url>` (dry-run, then `--go`) →
+   drill steps 3-7 by hand (pocket, airplane, clobber, concurrent, round-toggle, canary).
+   **The drill's pass condition is a ROW APPEARING in Scores, never a 200.**
+2. **Rule on the G0 verdict** — and **not** `agree`. The window is *infrastructure*: the
+   acceptance never ran (`ERR_MODULE_NOT_FOUND`, zero checks executed), and the CEO
+   accepted a misread crash while recording the correct doubt in its own `defects`.
+   `agree`/`override` does not fit cleanly; the ruling should say that.
+3. **The 2027 data package** (BACKLOG #6) — dates, `first_tee`, the fake `payment_handle`,
+   the wipe confirmations. The long pole, and the only thing only he holds.
+4. **Push word** for the 1 pending commit (and any later ones).
+5. Standing decisions: #17 invites-flow hardening, #24 (`#preflight` is BUILT and live —
+   this row is now only about follow-ups), #26 account address accept-residual.
 
 ## How this project works (conventions a fresh session must keep)
 
@@ -171,8 +177,10 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
 ## First moves for a fresh session
 
 1. Doctrine heartbeat; read this doc + the memory topic file + `BACKLOG.md`.
-2. `cd ~/Code/gfy && git fetch origin && git status` — establish lane vs origin/main
-   truth (the twin session may have pushed or advanced the lane since this was written).
-3. If Riley gives the push word: run the push procedure above for the pending §26 commits.
-4. Otherwise the work queue is Riley-gated — help with whichever gate he opens
-   (#17 proof steps, #11 eyeball fixes, arming runbook, data fill), or new asks.
+2. `cd ~/Code/gfy && git fetch origin && git status` — establish lane vs origin/main truth.
+3. `npm run test:all` — the offline gate (smoke + qr + kit + template). Proven offline, so
+   it is safe every time and cannot rate-limit the sheet.
+4. `npm run check:live` ONLY when you need live-sheet truth — it reads the published CSVs
+   and the endpoint rate-limits bursts.
+5. Then: help with whichever gate Riley opens. **Do not invent work around the scorer —
+   arming it is the task, and it is his hands.**
