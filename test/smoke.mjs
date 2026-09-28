@@ -2062,6 +2062,72 @@ dom.window.close();
     && /Untitled/.test(readme)
     && /check-endpoint/.test(readme.slice(spikeIdx, armIdx)),
     "spikeIdx=" + spikeIdx + " armIdx=" + armIdx);
+
+  // SC27-5 — the gap SC27-2 deliberately leaves open. classify() answers "which
+  // code is bound" and is RIGHT to call a bound-but-erroring handler REAL. But
+  // the OPERATOR question is different: "may I drill against this?" A handler
+  // that throws on every request is the real code and is still not drillable,
+  // and the runbooks all treat a REAL print as the green light. So the proceed
+  // decision is its own pure function — never inferred from the verdict alone.
+  const adv = o => probe && probe.advise ? probe.advise(o) : null;
+  const healthy = adv({ verdict: "REAL", ok: true });
+  const failing = adv({ verdict: "REAL", ok: false });
+  check("SC27-5: the PROCEED decision is separate from the verdict — a REAL-but-failing handler (doGet's catch branch: same identity envelope, ok:false) does NOT earn a proceed and does NOT exit 0, while a healthy REAL does; STUB and UNCERTAIN keep their own exit codes",
+    !!healthy && !!failing
+    // the real-and-working case is the only proceed, and the only exit 0
+    && healthy.proceed === true && healthy.exit === 0
+    // the real-but-throwing case: refused, non-zero, and NOT conflated with the
+    // stub's exit 1 — the remedy differs (redeploying does not fix a throw)
+    && failing.proceed === false && failing.exit === 2
+    // and it must say the handler IS the real one, or the operator redeploys
+    // the thing that was never the problem
+    && /real|bound/i.test(failing.headline + " " + failing.why)
+    && /fail|throw|error/i.test(failing.headline + " " + failing.why)
+    && adv({ verdict: "STUB" }).proceed === false && adv({ verdict: "STUB" }).exit === 1
+    && adv({ verdict: "UNCERTAIN" }).exit === 2
+    && adv({ verdict: "UNREACHABLE" }).exit === 2,
+    JSON.stringify({ healthy, failing }));
+
+  // A refusal the drill does not honour is decoration: drill-sweep gates on the
+  // verdict alone (`probe.verdict !== "REAL"`), so the failing handler walks
+  // straight past the stub refusal into the live-sheet read and, with --go, the
+  // submissions. Pin that it consults the proceed decision instead.
+  const sweepSrc = (() => { try { return readFileSync(path.join(ROOT, "tools/drill-sweep.mjs"), "utf8"); } catch { return ""; } })();
+  check("SC27-6: drill-sweep refuses on the PROCEED decision, not on the verdict alone — so a REAL-but-failing endpoint cannot walk past the stub guard into a live sweep",
+    sweepSrc.length > 0
+    && /\badvise\b/.test(sweepSrc)
+    // the bare verdict-only gate must be gone, or the guard is still bypassable
+    && !/probe\.verdict\s*!==\s*"REAL"/.test(sweepSrc),
+    "sweep.len=" + sweepSrc.length + " hasAdvise=" + /\badvise\b/.test(sweepSrc));
+
+  // SC27-7 — MEASURED 2026-09-28 against the live deployment: 1 run in 4 came
+  // back "UNREACHABLE HTTP 404" while the endpoint was perfectly healthy. Apps
+  // Script answers /exec with a 302 to a googleusercontent echo URL carrying a
+  // short-lived user_content_key, and following a stale one 404s. A single
+  // unretried fetch therefore mislabels a live endpoint as unreachable — and
+  // sends the operator hunting through deployment/sharing settings that were
+  // never wrong. Retry ONLY the indeterminate verdict; STUB/REAL/UNCERTAIN are
+  // determinate answers and retrying them would just launder a real result.
+  const mkFetch = seq => { let i = 0; return async () => { const s = seq[Math.min(i++, seq.length - 1)]; return { status: s.status, headers: { get: () => s.ct || "application/json" }, text: async () => s.body || "" }; }; };
+  const stubBody = JSON.stringify({ ok: true, echo: { hole: 13 } });
+  const realBody = JSON.stringify({ ok: true, year: 2027, teams: ["Duck"], handler: "gfy-scorer", writes: true, contract: 1 });
+  const noSleep = async () => {};
+  const flaky = probe ? await probe.probeUrl("https://script.google.com/x", { fetchImpl: mkFetch([{ status: 404 }, { status: 200, body: stubBody }]), sleep: noSleep }) : null;
+  const dead  = probe ? await probe.probeUrl("https://script.google.com/x", { fetchImpl: mkFetch([{ status: 404 }]), sleep: noSleep }) : null;
+  const clean = probe ? await probe.probeUrl("https://script.google.com/x", { fetchImpl: mkFetch([{ status: 200, body: realBody }]), sleep: noSleep }) : null;
+  const stubFirst = probe ? await probe.probeUrl("https://script.google.com/x", { fetchImpl: mkFetch([{ status: 200, body: stubBody }, { status: 200, body: realBody }]), sleep: noSleep }) : null;
+  check("SC27-7: a transient redirect 404 does not get reported as UNREACHABLE — the probe retries ONLY the indeterminate verdict (measured: 1-in-4 false UNREACHABLE against the live endpoint), settles on the first determinate answer, still reports UNREACHABLE when it genuinely persists, and never re-rolls a determinate STUB into something friendlier",
+    !!flaky && !!dead && !!clean && !!stubFirst
+    // 404 then a real answer -> the real answer wins, and the retry is visible
+    && flaky.verdict === "STUB" && flaky.attempts === 2
+    // persistently unreachable stays UNREACHABLE, bounded, and says how hard it tried
+    && dead.verdict === "UNREACHABLE" && dead.attempts >= 2 && dead.attempts <= 5
+    // a determinate answer on the first try costs exactly one call
+    && clean.verdict === "REAL" && clean.attempts === 1
+    // and a STUB is NEVER retried into a REAL — that would launder the one
+    // verdict the whole tool exists to catch
+    && stubFirst.verdict === "STUB" && stubFirst.attempts === 1,
+    JSON.stringify({ flaky, dead, clean, stubFirst }));
 }
 
 /* ---------- Q: presend-check (v2.3 §13 V-MATCH/V-PATH) ---------- */

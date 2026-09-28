@@ -46,6 +46,82 @@ export function classify({ status, contentType = "", body = "", networkError = "
   return { verdict: "STUB", why: "JSON with NO identity envelope — this is the §18 echo stub or a pre-SC-IDENT version; it returns 200 and writes nothing" };
 }
 
+/* Pure operator decision — deliberately NOT folded into classify().
+   classify() answers "which code is bound to this URL", and it is right to call
+   a bound-but-erroring handler REAL: the real code IS deployed (SC27-2 pins
+   this, and doGet's catch branch emits the identity envelope on purpose so a
+   broken real handler can never be mistaken for the echo stub).
+   This answers the different question the operator is actually asking at 11pm:
+   "may I drill against this?" A handler that throws on every request is the
+   real handler and is still not drillable — and every runbook treats a REAL
+   print as the green light, so the green light has to be able to say no. */
+export function advise({ verdict, ok } = {}) {
+  if (verdict === "REAL" && ok !== true) {
+    return {
+      proceed: false, exit: 2,
+      headline: "REAL but FAILING",
+      why: "the real handler is bound — and it answered with ok:false, so it is throwing on every request",
+      // The remedy differs from the stub's, which is the whole reason this is
+      // not exit 1: redeploying fixes a stub and does nothing for a throw.
+      remedy: [
+        "This is NOT the stub — do not redeploy to fix it; the right code is already bound.",
+        "doGet only reports ok:false from its catch branch, so something it touches is failing:",
+        "  - the script is not container-bound to the sheet (SpreadsheetApp.getActive() is null)",
+        "    — it must live in the SHEET's own Apps Script project, not a standalone one;",
+        "  - the deployment's 'Execute as' is not you, so it cannot read the sheet;",
+        "  - authorization was never granted (open the editor and run doGet once by hand).",
+        "Fix the binding, then re-run this probe. Do NOT start the drill.",
+      ],
+    };
+  }
+  if (verdict === "REAL") {
+    return { proceed: true, exit: 0, headline: "REAL", why: "the real handler is bound and answering cleanly", remedy: [] };
+  }
+  if (verdict === "STUB") {
+    return {
+      proceed: false, exit: 1, headline: "STUB", why: "an echo deployment — scores would be accepted and never written",
+      remedy: [
+        "DO NOT ARM. Redeploy the real handler onto this SAME deployment URL",
+        "(Manage deployments -> Edit -> New version), then re-run this probe.",
+      ],
+    };
+  }
+  return {
+    proceed: false, exit: 2, headline: verdict || "UNCERTAIN",
+    why: "neither armed nor proven unarmed",
+    remedy: ["State unknown — neither armed nor proven unarmed. Resolve before drilling."],
+  };
+}
+
+/* Only ONE verdict is indeterminate. STUB, REAL and UNCERTAIN are answers —
+   retrying them would launder a real result, and STUB is the single verdict
+   this whole tool exists to catch, so it must never be re-rolled. */
+export function shouldRetry(verdict) { return verdict === "UNREACHABLE"; }
+
+/* Network layer, kept out of classify() so the decision stays pure.
+   MEASURED 2026-09-28: 1 run in 4 against the live deployment returned
+   "UNREACHABLE HTTP 404" while the endpoint was healthy. Apps Script answers
+   /exec with a 302 to a googleusercontent echo URL carrying a short-lived
+   user_content_key; following a stale one 404s. Unretried, that reads as a
+   dead endpoint and sends the operator into deployment settings that were
+   never wrong. Bounded retries + a visible attempt count keep it honest (S2):
+   a persistent failure still reports UNREACHABLE. */
+export async function probeUrl(url, { attempts = 3, fetchImpl, sleep } = {}) {
+  const doFetch = fetchImpl || ((u) => fetch(u, { redirect: "follow" }));
+  const nap = sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
+  let r;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const res = await doFetch(url);
+      r = classify({ status: res.status, contentType: res.headers.get("content-type") || "", body: await res.text() });
+    } catch (e) { r = classify({ networkError: e.message }); }
+    r.attempts = i;
+    if (!shouldRetry(r.verdict)) return r;
+    if (i < attempts) await nap(400 * i);
+  }
+  return r;
+}
+
 export function readEndpoint(configText) {
   // The endpoint lives in the live sheet's Info tab, not in the repo. Accept it
   // as an argument or GFY_SCORE_ENDPOINT; config.js is only a fallback for the
@@ -68,28 +144,24 @@ async function main() {
     console.log(`UNCERTAIN  not a script.google.com URL: ${url}`);
     process.exit(2);
   }
-  let r;
-  try {
-    const res = await fetch(url, { redirect: "follow" });
-    r = classify({ status: res.status, contentType: res.headers.get("content-type") || "", body: await res.text() });
-  } catch (e) {
-    r = classify({ networkError: e.message });
-  }
-  console.log(`${r.verdict}  ${r.why}`);
+  const r = await probeUrl(url);
+  console.log(`${r.verdict}  ${r.why}${r.attempts > 1 ? `  (after ${r.attempts} attempts)` : ""}`);
+  const a = advise(r);
   if (r.verdict === "REAL") {
     console.log(`           roster read back: year=${r.year}, ${r.teams} team(s), ok=${r.ok}`);
     if (r.teams === 0) console.log("           NOTE: zero teams — the handler is real but the Field roster is empty for that year.");
+  }
+  if (a.proceed) {
     console.log("\nThe real handler is bound. Continue with SC-DRILL step 2 —");
     console.log("and remember the drill passes on a ROW APPEARING in Scores, never on a 200.");
-    process.exit(0);
+    process.exit(a.exit);
   }
-  if (r.verdict === "STUB") {
-    console.log("\nDO NOT ARM. Redeploy the real handler onto this SAME deployment URL");
-    console.log("(Manage deployments -> Edit -> New version), then re-run this probe.");
-    process.exit(1);
-  }
-  console.log("\nState unknown — neither armed nor proven unarmed. Resolve before drilling.");
-  process.exit(2);
+  // Everything below is a refusal. Name the state first, then the remedy for
+  // THAT state — a stub and a throwing handler look alike on the wire and are
+  // fixed by opposite actions.
+  console.log(`\n${a.headline} — ${a.why}`);
+  for (const line of a.remedy) console.log(line);
+  process.exit(a.exit);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main();

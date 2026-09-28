@@ -32,7 +32,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { classify } from "./check-endpoint.mjs";
+import { advise, probeUrl } from "./check-endpoint.mjs";
 import { readConfig, parseCsv } from "./presend-check.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -86,16 +86,18 @@ async function main() {
   }
 
   // 1. refuse a stub, loudly
-  let probe;
-  try {
-    const res = await fetch(url, { redirect: "follow" });
-    probe = classify({ status: res.status, contentType: res.headers.get("content-type") || "", body: await res.text() });
-  } catch (e) { probe = classify({ networkError: e.message }); }
-  console.log(`endpoint: ${probe.verdict}  ${probe.why}`);
-  if (probe.verdict !== "REAL") {
-    console.log("\nREFUSING to sweep. A sweep against a stub reports cheerful successes and writes");
-    console.log("nothing — worse than not drilling. Arm the real handler first (README step 3b).");
-    process.exit(1);
+  const probe = await probeUrl(url);
+  console.log(`endpoint: ${probe.verdict}  ${probe.why}${probe.attempts > 1 ? `  (after ${probe.attempts} attempts)` : ""}`);
+  // Gate on the PROCEED decision, not the verdict: a REAL-but-throwing handler
+  // is correctly classified REAL and is still not drillable, and a verdict-only
+  // gate walks it straight into the live-sheet read and the submissions.
+  const gate = advise(probe);
+  if (!gate.proceed) {
+    console.log(`\nREFUSING to sweep — ${gate.headline}: ${gate.why}.`);
+    console.log("A sweep against an endpoint that is not writing reports cheerful successes and");
+    console.log("writes nothing — worse than not drilling.");
+    for (const line of gate.remedy) console.log(line);
+    process.exit(gate.exit);
   }
 
   // 2. roster, from the live sheet
