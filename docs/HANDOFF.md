@@ -26,7 +26,10 @@ Ground before asserting anything (all four are cheap):
   npm run check:live                # ONLY when you need live-sheet truth (rate-limits)
 
 STATE as of 2026-09-28 (verify, do not trust):
-  live main 9820e19, deployed + browser-verified. Lane v2.1-invites 3 commits ahead.
+  live main 9820e19, deployed + browser-verified (Pages built for that exact sha).
+  Lane v2.1-invites is ahead by whatever `git rev-list --count origin/main..HEAD` says —
+  no number is written here on purpose: a doc that states its own pending-commit count
+  is wrong by one the moment it is committed, and it has drifted twice already.
   Site complete: §24 player-info, §25a/b broadcast, §26 event kit, §27 go-live hardening,
   §28 #preflight, roundNorm fix. Rollback ref 9820e19.
 
@@ -50,10 +53,11 @@ DO NOT:
     rate-limited run is what made the overseer's GFY check go green-while-blind for 3 days)
   - invent work around the scorer. Arming it IS the task.
 
-RILEY'S OPEN RULINGS: ⚑ arm the scorer · the G0 verdict (do NOT rule `agree` — the window
-is infrastructure, the acceptance never ran) · the 2027 data package (BACKLOG #6) · push
-word · whether to commit the oldmac conductor (339 lines uncommitted since 2026-07-07,
-preserved, NOT ratified).
+RILEY'S OPEN RULINGS: ⚑ arm the scorer · the G0 verdict — rule `agree`, OUTCOME ONLY
+(corrected 2026-09-28; the earlier "do NOT rule agree" here was wrong — see below) ·
+the 2027 data package (worklist now exists: docs/2027-DATA-PACKAGE.md) · BACKLOG #28,
+the EV-ACCEPT gate may be unpassable · push word · whether to commit the oldmac
+conductor (339 lines uncommitted since 2026-07-07, preserved, NOT ratified).
 ```
 
 ## What this project is
@@ -66,9 +70,23 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
 
 ## Where things stand (verify fresh — never trust this doc over `git fetch` + the live site)
 
-- **Live main = `9820e19`**, deployed and verified in a real browser (0 console errors).
-  The lane `v2.1-invites` is **1 commit ahead** (`f811354`, the offline test gate).
+- **Live main = `9820e19`**, deployed and verified in a real browser (0 console errors);
+  re-confirmed 2026-09-28 via `gh api .../pages/builds/latest` — status `built`, that exact
+  sha, `err: null`. The lane `v2.1-invites` is ahead by whatever `git rev-list --count
+  origin/main..HEAD` reports — deliberately not written as a number here.
   Next rollback ref = `9820e19`.
+- **2026-09-28 — "everything else is finished" was not true.** Auditing the arming path
+  instead of repeating that claim turned up three real defects, all now fixed, RED-proven
+  and pinned (suite 351 → 356): (1) `check-endpoint` told the operator "Continue with
+  SC-DRILL step 2" and exited **0** against a bound-but-throwing handler — the green light
+  could not say no; (2) the probe was **1-in-4 false `UNREACHABLE`** against the live
+  endpoint, because Apps Script's `/exec` 302s to a short-lived `user_content_key` URL that
+  404s when stale, unretried; (3) **BACKLOG #22 was not cosmetic** — a bare-year `first_tee`
+  made the board render one season while the scorer keyed another, in America/Denver, the
+  event's own timezone. Scores would post fine and never appear on the board, mid-tournament.
+  `classify()` was deliberately left untouched in (1): smoke `SC27-2` pins that a bound-but-
+  erroring handler IS `REAL`, and that is correct — "which code is bound" and "may I drill"
+  are different questions, so the PROCEED decision became its own pure function.
 - **THE ONE BLOCKER: THE SCORER IS NOT ARMED.** `npm run check-endpoint -- <url>` against
   the live deployment returns **`STUB`** — the §18 echo is what is deployed and it writes
   nothing. Unchanged since 09-24. Everything else about GFY is finished; this is the only
@@ -149,10 +167,26 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
    must print **`REAL`** → `npm run drill-sweep -- <url>` (dry-run, then `--go`) →
    drill steps 3-7 by hand (pocket, airplane, clobber, concurrent, round-toggle, canary).
    **The drill's pass condition is a ROW APPEARING in Scores, never a 200.**
-2. **Rule on the G0 verdict** — and **not** `agree`. The window is *infrastructure*: the
-   acceptance never ran (`ERR_MODULE_NOT_FOUND`, zero checks executed), and the CEO
-   accepted a misread crash while recording the correct doubt in its own `defects`.
-   `agree`/`override` does not fit cleanly; the ruling should say that.
+2. **Rule on the G0 verdict — `agree`, outcome only.** *(CORRECTED 2026-09-28. This row
+   used to say "and **not** `agree`". That was wrong, and it was wrong because it read
+   `agree` as ratifying the CEO's reasoning. It does not.* `mc-driver/bin/ea.mjs` writes
+   `verdict_effective` into the ruling row, so the ruling binds to the **effective**
+   verdict — which was `needs-riley`, and `needs-riley` was correct. The CLI even prints
+   the written-vs-effective divergence at ruling time so the `why` can carry it.*)
+   Verified in the record: the only G0 verdict row is `verdict_ceo: needs-riley`,
+   `verdict_effective: needs-riley`, `acceptance: false`, `acceptance_discriminating: null`
+   — and the CEO's own review file (goal state `review_files.S1`, task_id **and** nonce
+   matched) wrote `"verdict": "accept"` on that crash while its own defect recorded the
+   doubt. The driver refused it. Suggested ruling:
+
+   `S1=agree "OUTCOME ONLY: needs-riley was the correct effective outcome — acceptance
+   recorded false (discriminating null) from an environmental failure (jsdom missing in
+   the sandbox clone), so this window validated NO code and must not be cited as evidence
+   the lane works. The CEO's own review file wrote ACCEPT on that crash while its defect
+   doubted it; the driver refused it."`
+
+   The substantive caution the old wording was protecting survives in the `why`: agreeing
+   to the outcome is not agreeing that G0 proved anything.
 3. **The 2027 data package** (BACKLOG #6) — dates, `first_tee`, the fake `payment_handle`,
    the wipe confirmations. The long pole, and the only thing only he holds.
 4. **Push word** for the 1 pending commit (and any later ones).
