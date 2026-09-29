@@ -183,7 +183,16 @@ Event: NEXT YEAR (2027 dates TBD — sheet still carries 2026 sample/test data) 
    recorded false (discriminating null) from an environmental failure (jsdom missing in
    the sandbox clone), so this window validated NO code and must not be cited as evidence
    the lane works. The CEO's own review file wrote ACCEPT on that crash while its defect
-   doubted it; the driver refused it."`
+   doubted it; the driver refused it. The rule that recorded it as false has since been
+   corrected (mc-driver lib/io.mjs: a missing package declared at base now reports
+   unexercised, ok:null) — which confirms the diagnosis rather than changing this ruling."`
+
+   *(That last clause is there so the record does not read as self-contradictory later:
+   the row genuinely says `acceptance: false`, and the rule that produced it was fixed
+   AFTER G0 ran. Verified 2026-09-29 at mc-driver `cc1b899`, `lib/io.mjs:221` — when every
+   missing package is declared at base the run now returns `ok: null` with "the test never
+   ran (unexercised)". The historical row is unchanged and the ruling still binds to
+   `verdict_effective`, which was and remains `needs-riley`.)*
 
    The substantive caution the old wording was protecting survives in the `why`: agreeing
    to the outcome is not agreeing that G0 proved anything.
