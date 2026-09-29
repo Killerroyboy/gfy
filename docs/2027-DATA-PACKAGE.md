@@ -85,6 +85,57 @@ the sheet — gets rehearsed on the real thing rather than on a scratch copy.
    version** → Deploy). **Do not choose "New deployment"** — that mints a new URL and orphans
    every captain link already handed out.
 4. Paste `Info!score_endpoint` (row 12), then `npm run check-endpoint -- <url>` must print **REAL**.
+
+### The scriptable alternative (recommended, once)
+
+The click-path above has two unrecoverable ways to go wrong — picking "New deployment"
+(orphans every captain link) and redeploying a stale `triggers.gs` (answers without the §27
+identity envelope, so the probe says STUB and you conclude arming failed when the write path
+is fine). Both disappear if the redeploy is a command instead of a click. `@google/clasp`
+3.4.1 does exactly this and needs no repo dependency (`npx`).
+
+**One-time setup — the OAuth is yours; nobody can do it for you:**
+
+```
+npx --yes @google/clasp@latest login
+mkdir -p tools/clasp && cd tools/clasp
+npx --yes @google/clasp@latest clone 1HE704reG5WNBWSQOMhoiTzG-phbTGKlD_NP6ywipR5zWy1xV9x8bTtOW
+```
+
+`clone`/`pull` brings down `appsscript.json` — **keep it.** That file owns the web app's
+`executeAs` and `access`; a hand-written one breaks the endpoint in a way that reads like a
+code bug. Then make the local directory be exactly what the project should contain:
+
+```
+cp ../sheet-polish.gs   Code.gs
+cp ../sheet-triggers.gs triggers.gs
+rm -f Untitled.gs          # the §18 spike — deleting it locally is what removes it remotely
+```
+
+**Then, each time:**
+
+```
+npx --yes @google/clasp@latest push -f
+npx --yes @google/clasp@latest deploy -i <DEPLOYMENT_ID> -d "armed"
+cd ../.. && npm run check-endpoint -- <the /exec url>     # must print REAL
+```
+
+`<DEPLOYMENT_ID>` is the segment between `/macros/s/` and `/exec` in the endpoint URL.
+Passing it with `-i` is the whole point: it cuts a **new version of the existing
+deployment**, which is what keeps every captain link alive. Omitting `-i` creates a new
+deployment and a new URL.
+
+**Read this before the first `push`:** `push -f` makes the live project *match your local
+directory*. A file missing locally is deleted remotely. That is how the spike goes away, and
+it is also how you would destroy `Code.gs` (sheet-polish) if it were not sitting there. Check
+`ls` shows exactly `Code.gs`, `triggers.gs`, `appsscript.json` before you run it.
+
+**Why `cp` from the repo rather than editing in place:** one owner (§7). The canonical sources
+are `tools/sheet-polish.gs` and `tools/sheet-triggers.gs`, both already on `main`;
+`sheet-triggers.gs` is `md5 293d799816efdc306ff67d8f21bb7b1c` and carries the SC-IDENT
+envelope (`SCORER_HANDLER = "gfy-scorer"`). If a redeploy ever prints STUB again, check that
+constant is present in what you pushed — that single grep separates "stale handler" from
+"spike still winning", and they are fixed by opposite actions.
 4. `npm run drill-sweep -- <url>` — dry-run first, then `--go`.
 5. Drill steps 3–7 by hand. **Pass condition is a ROW APPEARING in Scores, never a 200.**
 

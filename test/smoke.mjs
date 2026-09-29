@@ -8711,6 +8711,39 @@ results.forEach(([name, ok]) => {
   } finally { if (TZ0 === undefined) delete process.env.TZ; else process.env.TZ = TZ0; }
 }
 
+/* ===== ARMKIT — the preflight before an irreversible redeploy ===== */
+{
+  const ak = await import("../tools/check-armkit.mjs").catch(() => null);
+  const base = { exists: true, hasManifest: true, present: ["Code.gs", "triggers.gs", "appsscript.json"],
+                 canonical: { "Code.gs": true, "triggers.gs": true }, identityOk: true };
+  const V = o => ak ? ak.verdict({ ...base, ...o }) : null;
+  const says = (v, rx) => !!v && [...(v.problems || []), ...(v.notes || [])].some(p => rx.test(p));
+
+  const clean = V({});
+  // A push makes the REMOTE match LOCAL, so an absent file is a remote deletion.
+  const noCode = V({ present: ["triggers.gs", "appsscript.json"] });
+  // The stale-handler trap: right filename, no §27 identity envelope.
+  const stale = V({ identityOk: false });
+  // A hand-written manifest silently changes the web app's executeAs/access.
+  const noManifest = V({ hasManifest: false, present: ["Code.gs", "triggers.gs"] });
+  // Drift: edited inside the workspace instead of re-copied from the canon (§7).
+  const drifted = V({ canonical: { "Code.gs": true, "triggers.gs": false } });
+  // The spike still sitting locally means a push will NOT remove it remotely.
+  const spike = V({ present: [...base.present, "Untitled.gs"] });
+
+  check("ARMKIT-1: the preflight refuses every way arming goes wrong — a missing Code.gs (a push DELETES it live), a triggers.gs with no §27 SC-IDENT envelope (the stale-handler trap, which makes a correct arming print STUB), an absent pulled appsscript.json (it owns executeAs/access), and a file drifted from its canonical source; a correct workspace passes",
+    !!ak && clean.ok === true
+    && noCode.ok === false && says(noCode, /Code\.gs is ABSENT|DELETE/)
+    && stale.ok === false && says(stale, /SC-IDENT|STALE/i)
+    && noManifest.ok === false && says(noManifest, /appsscript\.json/)
+    && drifted.ok === false && says(drifted, /canonical|one owner/i),
+    JSON.stringify({ clean: clean && clean.ok, noCode: noCode && noCode.problems, stale: stale && stale.problems }));
+
+  check("ARMKIT-2: the leftover §18 spike is named as something to delete LOCALLY — it is the file whose duplicate doPost wins the shared global scope, and a push removes it remotely only if it is gone here first",
+    !!spike && says(spike, /Untitled\.gs/) && says(spike, /spike/i) && says(spike, /DELETE IT LOCALLY|rm/),
+    JSON.stringify(spike && spike.notes));
+}
+
 console.log("");
 Object.keys(groupTally).sort().forEach(g => console.log(`TALLY ${g} ${groupTally[g].pass}/${groupTally[g].total}`));
 const failed = results.filter(r => !r[1]).length;
