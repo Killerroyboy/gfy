@@ -8742,6 +8742,19 @@ results.forEach(([name, ok]) => {
   check("ARMKIT-2: the leftover §18 spike is named as something to delete LOCALLY — it is the file whose duplicate doPost wins the shared global scope, and a push removes it remotely only if it is gone here first",
     !!spike && says(spike, /Untitled\.gs/) && says(spike, /spike/i) && says(spike, /DELETE IT LOCALLY|rm/),
     JSON.stringify(spike && spike.notes));
+
+  // A checker that cries wolf on a legitimate file gets ignored, and BACKLOG #9
+  // pastes a THIRD script into this same project. It must be recognised (not a
+  // refusal, not an "unexpected file" warning) while never becoming REQUIRED —
+  // it has nothing to do with arming.
+  const promote = V({ present: [...base.present, "gfy-promote.gs"] });
+  const withoutPromote = V({});
+  check("ARMKIT-3: gfy-promote.gs (BACKLOG #9's accept→Field flow) is RECOGNISED rather than flagged as an unexpected file, is never treated as an unexpected-file warning, and is never REQUIRED — arming stays green without it",
+    !!promote && promote.ok === true
+    && says(promote, /gfy-promote\.gs/) && says(promote, /recognis|BACKLOG #9/i)
+    && !says(promote, /not a file this project expects/)
+    && withoutPromote.ok === true,
+    JSON.stringify({ withPromote: promote && promote.ok, notes: promote && promote.notes, without: withoutPromote && withoutPromote.ok }));
 }
 
 console.log("");

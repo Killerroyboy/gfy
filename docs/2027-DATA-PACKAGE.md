@@ -94,9 +94,20 @@ identity envelope, so the probe says STUB and you conclude arming failed when th
 is fine). Both disappear if the redeploy is a command instead of a click. `@google/clasp`
 3.4.1 does exactly this and needs no repo dependency (`npx`).
 
-**One-time setup — the OAuth is yours; nobody can do it for you:**
+**Why there is a login at all:** the script project is private to the GFY Google account, so
+every programmatic path to it needs an OAuth token for that account — an API key cannot reach
+private user data, and a service account cannot be granted access to a personal (non-Workspace)
+project. The browser path appears to skip this only because Chrome already holds the session.
+It is a one-time consent, and it is yours: nobody else can complete a consent screen for you.
+
+**One-time setup:**
 
 ```
+# 1. Switch ON the Apps Script API for this account — clasp CANNOT work without it,
+#    and skipping it is the single most common setup failure. One toggle, once:
+#    https://script.google.com/home/usersettings
+
+# 2. Then:
 npx --yes @google/clasp@latest login
 mkdir -p tools/clasp && cd tools/clasp
 npx --yes @google/clasp@latest clone 1HE704reG5WNBWSQOMhoiTzG-phbTGKlD_NP6ywipR5zWy1xV9x8bTtOW

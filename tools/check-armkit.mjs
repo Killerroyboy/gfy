@@ -44,10 +44,18 @@ export function verdict({ exists, hasManifest, present, canonical, identityOk })
   if (present.includes("triggers.gs") && !identityOk) {
     problems.push("triggers.gs carries NO §27 SC-IDENT envelope (SCORER_HANDLER = \"gfy-scorer\") — this is the STALE-HANDLER trap. Pushing it would answer without identity and the probe would print STUB.");
   }
-  const extras = present.filter(f => !["Code.gs", "triggers.gs", "appsscript.json"].includes(f));
+  // gfy-promote.gs is a RECOGNISED future member of this project, not a
+  // surprise: BACKLOG #9 pastes it to wire the accept->Field invites flow. It is
+  // listed here so that landing #9 does not trip a false alarm on a legitimate
+  // file — but it is never REQUIRED, because it is not part of arming.
+  const KNOWN = ["Code.gs", "triggers.gs", "appsscript.json", "gfy-promote.gs"];
+  const extras = present.filter(f => !KNOWN.includes(f));
+  if (present.includes("gfy-promote.gs")) {
+    notes.push("gfy-promote.gs is present — recognised (BACKLOG #9, the accept->Field invites flow). It will be uploaded by the push. That is correct once #9 is wired, and harmless before: nothing calls it until the Invites headers exist.");
+  }
   for (const e of extras) {
     if (/^Untitled\.gs$/i.test(e)) notes.push("Untitled.gs is still here — that is the §18 spike. DELETE IT LOCALLY (rm) so the push removes it remotely; leaving it means the spike keeps winning the shared global scope.");
-    else notes.push(`${e} is here and is not one of the three expected files — a push would upload it. Look before you do.`);
+    else notes.push(`${e} is here and is not a file this project expects — a push would upload it. Look before you do.`);
   }
   return { ok: problems.length === 0, problems, notes, extras };
 }
