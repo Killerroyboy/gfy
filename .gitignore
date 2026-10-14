@@ -8,3 +8,6 @@ node_modules/
 # S26 K-PRINT (spec §26): generated poster/cards HTML — build output, never committed
 tools/print/out/
 render-close-preflight/
+
+# clasp arming workspace — copies of tools/*.gs (one owner) + pulled manifest; see docs/2027-DATA-PACKAGE.md
+tools/clasp/
