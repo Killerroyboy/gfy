@@ -314,12 +314,18 @@ export function checkInvitesPromotion(invitesRows, fieldRows){
       if(String(r.invited_by||"").trim()!=="") cur.sponsored=true;
       persons.set(k,cur);
     });
+    // Riley 2026-10-14: many long-time regulars have no known sponsor and the
+    // sheet carries no earlier seasons to prove they're veterans, so a blank
+    // invited_by is NORMAL. One INFO line naming them, never a WARN per person
+    // (a wall of per-person WARNs for veterans is cry-wolf).
+    const unsponsored=[];
     persons.forEach((p,k)=>{
       const min=fieldMinYear.get(k);
       if(min!==undefined&&min<latest) return;                 // returning: an EARLIER season's Field row
-      if(!p.sponsored)
-        out.push({level:"WARN", detail:`invites: "${p.name}" (${p.year}) is a first-time invitee with no invited_by — record the sponsor`});
+      if(!p.sponsored) unsponsored.push(`"${p.name}"`);
     });
+    if(unsponsored.length)
+      out.push({level:"INFO", detail:`invites: ${unsponsored.length} invitee(s) for ${latest} have no invited_by and no earlier Field season (${unsponsored.join(", ")}) — fine for regulars; fill a sponsor only when you know it`});
   }
 
   const committed=rows.filter(r=>YES(r.committed));

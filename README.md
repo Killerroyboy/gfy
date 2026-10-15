@@ -801,8 +801,10 @@ fix one before promoting.
 `invited_by` holds the sponsor's name — recorded once, when a new invitee
 first goes on the tab, and kept season by season (old rows are the
 archive). Under `?admin=1` the funnel and Declined lists show it as
-"via Duck" beside each name; the public site never shows it. Returning
-veterans don't need one — the WARN only fires for first-timers. Like
+"via Duck" beside each name; the public site never shows it. It is
+optional: long-time regulars often have no known sponsor, so leave it blank
+unless you know it. `event-ready` lists the blanks on one INFO line and
+never fails or warns on them. Like
 everything on this spreadsheet, the column is on a published sheet
 (publicly fetchable): who-brought-whom is group-known info, but any
 *judgment* about a person (do-not-invite, "not working out") belongs in

@@ -6275,12 +6275,14 @@ const nowW = Date.now();
     { year: "2027", player: "Twin Rows", invited: "TRUE", invited_by: "" },       // ok — sponsor lives on the OTHER duplicate row (per-person, review F8)
     { year: "2027", player: "Twin Rows", invited: "TRUE", invited_by: "Tex" },
   ], fieldEV12);
-  check("EV12: first-time invitee w/o invited_by WARNs (latest Invites year only, committed not required); sponsored first-timer, EARLIER-year returning player, and older-year rows never WARN; a SAME-year (just-promoted) Field row keeps the WARN alive; duplicate rows are judged per-person (any row's sponsor satisfies)",
-    r.some(x => x.level === "WARN" && /"Fresh Face" \(2027\)/.test(x.detail) && /invited_by/.test(x.detail))
+  check("EV12: unsponsored first-timers collapse to ONE INFO line (Riley 10-14: regulars often have no known sponsor), never a per-person WARN (latest Invites year only, committed not required); sponsored first-timer, EARLIER-year returning player, and older-year rows never WARN; a SAME-year (just-promoted) Field row keeps the WARN alive; duplicate rows are judged per-person (any row's sponsor satisfies)",
+    r.filter(x => /invited_by/.test(x.detail)).length === 1
+      && !r.some(x => x.level === "WARN" && /invited_by/.test(x.detail))
+      && r.some(x => x.level === "INFO" && /"Fresh Face"/.test(x.detail) && /invited_by/.test(x.detail))
       && !r.some(x => /Sponsored Kid/.test(x.detail))
       && !r.some(x => /Duck Jones/.test(x.detail))
       && !r.some(x => /Old Ghost/.test(x.detail))
-      && r.some(x => x.level === "WARN" && /"Promoted Kid" \(2027\)/.test(x.detail) && /invited_by/.test(x.detail))
+      && r.some(x => x.level === "INFO" && /"Promoted Kid"/.test(x.detail) && /invited_by/.test(x.detail))
       && !r.some(x => /Twin Rows/.test(x.detail) && /invited_by/.test(x.detail)),
     JSON.stringify(r));
 }
@@ -6293,8 +6295,8 @@ const nowW = Date.now();
     { year: "20277", player: "Typo Row", invited: "TRUE", invited_by: "" },
     { year: "2027", player: "Real Rookie", invited: "TRUE", invited_by: "" },
   ], []);
-  check("EV13: a junk year (20277) never becomes the sponsor-check scope — the real 2027 first-timer still WARNs",
-    r.some(x => x.level === "WARN" && /"Real Rookie" \(2027\)/.test(x.detail) && /invited_by/.test(x.detail)),
+  check("EV13: a junk year (20277) never becomes the sponsor-check scope — the real 2027 first-timer is still listed (scope 2027)",
+    r.some(x => x.level === "INFO" && /for 2027 /.test(x.detail) && /"Real Rookie"/.test(x.detail) && /invited_by/.test(x.detail)),
     JSON.stringify(r));
 }
 
