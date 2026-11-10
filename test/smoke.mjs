@@ -6422,6 +6422,22 @@ const nowW = Date.now();
       " contra=" + JSON.stringify(contra));
 }
 
+// EV11b (BACKLOG #9 follow-up): Riley's own gesture is typing Yes into `status`.
+// event-ready must treat status yes/y (case/space-insensitive) as committed,
+// exactly like Promote's pcCommitted_, so the unpromoted WARN fires for them.
+{
+  const f = [{ year: "2026", player: "Tex" }];
+  const w = rows => checkInvitesPromotion(rows, f).filter(r => r.level === "WARN" && /committed but has no Field row/.test(r.detail));
+  const yes = w([{ year: "2027", player: "Wade", status: "Yes", invited_by: "x" }]);
+  const y = w([{ year: "2027", player: "Wade", status: " y ", invited_by: "x" }]);
+  const maybe = w([{ year: "2027", player: "Wade", status: "maybe", invited_by: "x" }]);
+  const out = w([{ year: "2027", player: "Wade", status: "out", committed: "", invited_by: "x" }]);
+  const done = checkInvitesPromotion([{ year: "2027", player: "Tex", status: "YES", invited_by: "x" }, ], [{ year: "2027", player: "Tex" }, { year: "2026", player: "Tex" }]);
+  check("EV11b: checkInvitesPromotion treats status yes/y (case/space-insensitive) as committed like Promote's pcCommitted_ (WARN when unpromoted); maybe/out never; promoted yes row PASSes",
+    yes.length === 1 && y.length === 1 && maybe.length === 0 && out.length === 0 && !done.some(r => r.level === "WARN"),
+    JSON.stringify({ yes, y, maybe, out, done }));
+}
+
 // EV12: sponsor accountability (Riley 2026-08-24: track who invited who) —
 // a FIRST-TIME invitee (no Field row in ANY season, F-NKEY matched) with a
 // blank invited_by WARNs, scoped to the LATEST Invites year only (historic

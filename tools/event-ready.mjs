@@ -328,7 +328,10 @@ export function checkInvitesPromotion(invitesRows, fieldRows){
       out.push({level:"INFO", detail:`invites: ${unsponsored.length} invitee(s) for ${latest} have no invited_by and no earlier Field season (${unsponsored.join(", ")}) — fine for regulars; fill a sponsor only when you know it`});
   }
 
-  const committed=rows.filter(r=>YES(r.committed));
+  // Mirrors Promote's pcCommitted_ (gfy-promote.gs, BACKLOG #17a): the checkbox
+  // OR the gesture Riley actually makes — typing Yes/y into `status`.
+  const STATUS_YES=v=>/^(y|yes)$/i.test(String(v==null?"":v).trim());
+  const committed=rows.filter(r=>YES(r.committed)||STATUS_YES(r.status));
   committed.forEach(r=>{
     const status=String(r.status||"").trim();
     if(/^(out|declined)$/i.test(status)){
