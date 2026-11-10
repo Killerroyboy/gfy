@@ -214,6 +214,53 @@ active invite rows AND unpaired DNI names missing their `out` row.
 Skipped the checker? Then at minimum re-read the do_not_invite column
 before sending. That list exists because someone once had a reason.
 
+### Send invites + reply watcher (`tools/gfy-mailer.gs`, BACKLOG #33 A+C)
+
+Lives in the **GFY Admin** sheet's own Apps Script project (never the public
+sheet's). It sends invites on a button press and watches the replies. Built and
+tested offline; **not installed anywhere yet.**
+
+**Install (once, by hand):**
+1. Admin sheet → Extensions → Apps Script → paste `tools/gfy-mailer.gs` as a new file → save.
+2. Project Settings → Script properties → add `PUBLIC_ID` = the public GFY
+   sheet's spreadsheet id (the long id in its edit URL). It is deliberately not in the code.
+3. Make sure the Admin sheet has the tabs from the current `gfy-admin-template.xlsx`:
+   `Contacts`, `SendLog` (with a `thread_id` column — the button adds the header
+   if it is missing), `InviteTemplate`, `Replies`, `READ ME`.
+4. Fill `InviteTemplate` (row `subject`, row `body`; `{first}` becomes the player's first name).
+5. Run `installMailTriggers` once (authorise Gmail + Sheets). It adds ONE 15-minute
+   `scanReplies` trigger and is safe to run again.
+
+**Test mode is the default.** Unless the script property `GFY_MAIL_TEST` is exactly
+`0`, every message goes to `goodfriendsyearly@gmail.com` with `[TEST → real address]`
+in the subject, nothing is ticked on the public sheet, and SendLog rows are marked
+`invite-test` (the reply watcher ignores those). The confirm dialog says which mode you are in.
+
+**Going live:** set `GFY_MAIL_TEST` = `0` by hand in Script properties. Nothing else flips it.
+Run `npm run presend` first, as above.
+
+**Using it:** menu **GFY Mail → Send invites…**. It emails each current-season
+Invites row that is not yet `invited`, not `out`/`declined`, not do-not-invite,
+and has an address (`email`, else `email_alt`). It **blocks the whole send** on a
+do-not-invite name with an active row, an unpaired do-not-invite name, or an
+invitee missing from Contacts, and lists the culprits. You get a name → address
+confirm list; Cancel sends nothing. Each send is logged to SendLog (with the Gmail
+`thread_id`) before `invited` is ticked on the public Invites tab, so a hiccup can
+never cause a second email.
+
+**Replies:** every 15 minutes the watcher checks each logged invite thread. A real
+human reply ticks `responded` on the public Invites row. Out-of-office / automatic
+replies and your own messages are ignored. A bounce writes `BOUNCED <date>` into
+that person's Contacts notes and does **not** count as a response. The reply text
+goes only to the private `Replies` tab (`looks_yes` is a guess; `confirm` is yours
+to tick) — **it never auto-commits anyone.** The last successful scan time is
+written to `READ ME` B2 (timestamp only; a scan with an unreadable thread does not
+stamp). The only thing ever written to the public sheet is a TRUE tick in
+`invited`/`responded`; the code refuses any public write containing `@`.
+TODO: publishing the last-scan time on START HERE is a separate piece of work.
+
+Tests: `npm run check-mailer` (also part of `npm run test:all`).
+
 ### Replies (Gmail loop)
 
 When invite replies come in: authenticate Gmail once via `/mcp` in a Claude
@@ -971,6 +1018,7 @@ tools/make_admin_template.py  regenerates tools/gfy-admin-template.xlsx (the nev
 tools/sheet-polish.gs         Apps Script sheet hygiene — checkboxes, dropdowns, Course autofill (see above)
 tools/sheet-triggers.gs       Apps Script live-scoring triggers — form writer + paid_date stamp (see above)
 tools/gfy-promote.gs          Apps Script GFY menu — Promote committed → Field + Seed next season's Invites (see The invite list)
+tools/gfy-mailer.gs           Apps Script for the ADMIN sheet — Send invites button + reply watcher (see Send invites + reply watcher)
 tools/presend-check.mjs       the pre-send checker — vault diff, DNI check, email-leak watchdog (see above)
 tools/check_template.py       drift check: xlsx templates vs their generators (npm run check-template)
 tools/gid-check.mjs           drift check: config.js gids vs the live published sheet (npm run check-gids)
@@ -979,6 +1027,7 @@ tools/print/qr.mjs            QR-svg API used by make-kit.mjs, over the vendored
 tools/print/qr.test.mjs       QR encoder/API test, incl. a decode-side round-trip proof (npm run check-qr)
 tools/print/make-kit.test.mjs make-kit.mjs's own test — vault guard, structural guard, year rules (npm run check-kit)
 fixtures/                     sample CSVs mirroring the 14 tabs, incl. edge cases
+test/mailer.test.mjs          fake-Gmail/Sheets behavioural test of gfy-mailer.gs (npm run check-mailer)
 test/smoke.mjs                headless render test against the fixtures
 ```
 
