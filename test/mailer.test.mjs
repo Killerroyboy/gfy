@@ -17,9 +17,17 @@ function check(name, ok, detail = "") {
 
 // ---------- fakes ----------
 function mkSheet(name, rows, log, ss) {
-  const sh = { name, rows: rows.map(r => r.slice()), writes: [], log, frozen: 0, tabColor: null, protections: [], validations: {}, rules: [], notes: {}, maxRows: 1000, wraps: {}, backgrounds: {} };
+  const sh = { name, rows: rows.map(r => r.slice()), writes: [], log, frozen: 0, tabColor: null, protections: [], validations: {}, rules: [], notes: {}, maxRows: 1000, wraps: {}, backgrounds: {}, fmt: {}, formulas: {} };
+  // Real Sheets coerces typed strings: a date-like string becomes a Date, a digit string a Number,
+  // unless the cell was formatted as plain text ("@") BEFORE the write. The fake does the same.
+  const coerce = (v, r, c) => {
+    if (typeof v !== "string" || sh.fmt[r + "," + c] === "@") return v;
+    if (/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$/.test(v)) return new Date(v.length === 10 ? v + "T00:00:00Z" : v.replace(" ", "T") + (v.length === 16 ? ":00Z" : "Z"));
+    if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+    return v;
+  };
   const ensure = (r, c) => { while (sh.rows.length < r) sh.rows.push([]); const row = sh.rows[r - 1]; while (row.length < c) row.push(""); };
-  const logW = (r, c, v, op) => { sh.writes.push({ r, c, v, op }); log.push({ ev: "write", sheet: name, r, c, v }); };
+  const logW = (r, c, v, op) => { sh.writes.push({ r, c, v, op }); log.push({ ev: "write", sheet: name, r, c, v }); delete sh.formulas[r + "," + c]; };
   sh.getName = () => name;
   sh.getSheetId = () => 1;
   sh.getDataRange = () => ({ getValues: () => { const w = Math.max(0, ...sh.rows.map(r => r.length)); return sh.rows.map(r => { const o = r.slice(); while (o.length < w) o.push(""); return o; }); } });
@@ -40,12 +48,14 @@ function mkSheet(name, rows, log, ss) {
   sh.getRange = (r, c, nr = 1, nc = 1) => {
     if (typeof r === "string") return { protect: () => { const p = { desc: "", warn: false, getDescription: () => p.desc, setDescription: d => { p.desc = d; return p; }, setWarningOnly: w => { p.warn = w; return p; } }; sh.protections.push(p); return p; } };
     const key = `${r},${c},${nr},${nc}`;
-    return {
+    const rng = {
       getSheet: () => sh, getRow: () => r, getColumn: () => c, getNumRows: () => nr, getNumColumns: () => nc,
       getValue: () => (sh.rows[r - 1] || [])[c - 1] ?? "",
       getValues: () => { const out = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push((sh.rows[r - 1 + i] || [])[c - 1 + j] ?? ""); out.push(row); } return out; },
-      setValue: v => { logW(r, c, v, "setValue"); ensure(r, c); sh.rows[r - 1][c - 1] = v; },
-      setValues: vs => { vs.forEach((row, i) => row.forEach((v, j) => { logW(r + i, c + j, v, "setValues"); ensure(r + i, c + j); sh.rows[r - 1 + i][c - 1 + j] = v; })); },
+      setValue: v => { logW(r, c, v, "setValue"); ensure(r, c); sh.rows[r - 1][c - 1] = coerce(v, r, c); },
+      setValues: vs => { vs.forEach((row, i) => row.forEach((v, j) => { logW(r + i, c + j, v, "setValues"); ensure(r + i, c + j); sh.rows[r - 1 + i][c - 1 + j] = coerce(v, r + i, c + j); })); },
+      setNumberFormat: f => { for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) sh.fmt[(r + i) + "," + (c + j)] = f; return rng; },
+      getFormulas: () => { const out = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push(sh.formulas[(r + i) + "," + (c + j)] || ""); out.push(row); } return out; },
       setDataValidation: dv => { sh.validations[key] = { r, c, nr, nc, kind: dv && dv.kind }; },
       clearDataValidations: () => { Object.keys(sh.validations).forEach(k => { const v = sh.validations[k]; if (v.c === c && v.r >= r && v.r < r + nr) delete sh.validations[k]; }); },
       setBackground: b => { sh.backgrounds[key] = b; },
@@ -53,8 +63,9 @@ function mkSheet(name, rows, log, ss) {
       setWrap: w => { sh.wraps[key] = w; },
       setFontWeight: () => {}, setFontSize: () => {},
     };
+    return rng;
   };
-  sh.appendRow = vals => { sh.writes.push({ op: "appendRow", v: vals }); log.push({ ev: "append", sheet: name, v: vals }); sh.rows.push(vals.slice()); };
+  sh.appendRow = vals => { sh.writes.push({ op: "appendRow", v: vals }); log.push({ ev: "append", sheet: name, v: vals }); const rn = sh.rows.length + 1; sh.rows.push(vals.map((v, j) => coerce(v, rn, j + 1))); };
   return sh;
 }
 function mkSS(id, sheets, log) {
@@ -66,7 +77,7 @@ function mkSS(id, sheets, log) {
   ss.moveActiveSheet = i => { ss.sheets = ss.sheets.filter(s => s !== ss.active); ss.sheets.splice(i - 1, 0, ss.active); };
   return ss;
 }
-const mkRuleB = () => { const o = { f: null, bg: null, ranges: [] }; const b = { whenFormulaSatisfied: f => { o.f = f; return b; }, setBackground: c => { o.bg = c; return b; }, setRanges: r => { o.ranges = r; return b; }, build: () => o }; return b; };
+const mkRuleB = () => { const o = { f: null, bg: null, ranges: [], getBooleanCondition: () => ({ getCriteriaValues: () => [o.f] }) }; const b = { whenFormulaSatisfied: f => { o.f = f; return b; }, setBackground: c => { o.bg = c; return b; }, setRanges: r => { o.ranges = r; return b; }, build: () => o }; return b; };
 const mkDVB = () => { const o = { kind: null }; const b = { requireCheckbox: () => { o.kind = "checkbox"; return b; }, build: () => o }; return b; };
 
 const PUB = "PUBLIC_SHEET_ID_FAKE";
@@ -110,12 +121,15 @@ function world(o = {}) {
     Button: { YES: "YES", NO: "NO", OK: "OK" }, ButtonSet: { YES_NO: "YES_NO", OK: "OK" },
   };
   const SpreadsheetApp = {
-    getActiveSpreadsheet: () => admin, getActive: () => admin, getUi: () => ui,
+    getActiveSpreadsheet: () => admin, getActive: () => admin,
+    getUi: () => { if (o.noUi) throw new Error("Cannot call SpreadsheetApp.getUi() from this context."); return ui; },
     newConditionalFormatRule: mkRuleB, newDataValidation: mkDVB, ProtectionType: { RANGE: "RANGE" },
     openById: id => { opened.push(id); if (id === PUB) return pub; throw new Error("unknown id " + id); },
   };
   // Gmail
   const sent = []; const threads = {}; let tn = 0;
+  const hooks = {};
+  const pendingDrafts = new Set();
   const mkMsg = m => ({ getId: () => m.id, getFrom: () => m.from, getSubject: () => m.subject, getDate: () => new Date(m.date || "2027-01-05T12:00:00Z"), getPlainBody: () => m.body || "", getTo: () => m.to || "", getRawContent: () => (m.raw || "") + "\r\n\r\n" + (m.body || "") });
   const draftOps = [];
   const mkDraft = d => {
@@ -131,22 +145,32 @@ function world(o = {}) {
   const threadReplies = [];
   const GmailApp = {
     getDrafts: () => { if (o.draftsError) throw new Error("gmail down"); return drafts; },
-    createDraft: (to, subject, body, opts) => ({ send: () => {
+    createDraft: (to, subject, body, opts) => { const dk = {}; pendingDrafts.add(dk); return {
+      deleteDraft: () => { pendingDrafts.delete(dk); },
+      send: () => {
       if (o.failTo && o.failTo === to) throw new Error("smtp boom");
-      const id = "thr" + (++tn); const t = { id, to, msgs: [{ id: id + "m0", from: "Riley <me@gmail.com>", to, subject, body, date: "2027-01-05T10:00:00Z" }] };
+      pendingDrafts.delete(dk);
+      const id = (o.numericIds ? "0189300" : "thr") + (++tn); const t = { id, to, msgs: [{ id: id + "m0", from: "Riley <me@gmail.com>", to, subject, body, date: "2027-01-05T10:00:00Z" }] };
       threads[id] = t; sent.push({ to, subject, body, html: opts && opts.htmlBody, attachments: opts && opts.attachments, threadId: id }); log.push({ ev: "send", to });
+      if (hooks.afterSend) hooks.afterSend(sent.length);
       return { getThread: () => ({ getId: () => id }) };
-    } }),
+    } }; },
     getThreadById: id => { if (o.threadError && o.threadError === id) throw new Error("gmail down"); const t = threads[id]; if (!t) return null;
-      const rep = all => (body, opts) => { if (o.replyFails && o.replyFails === id) throw new Error("reply boom"); threadReplies.push({ id, body, html: opts && opts.htmlBody, attachments: opts && opts.attachments, subject: opts && opts.subject, all }); t.msgs.push({ id: id + "m" + t.msgs.length, from: "Riley <me@gmail.com>", subject: "Re: x", body }); log.push({ ev: "send", to: "(thread " + id + ")" }); };
-      return { getId: () => id, getMessages: () => t.msgs.map(mkMsg), reply: rep(false), replyAll: rep(true) }; },
+      // Gmail addresses a reply to the LAST message's sender (or, for our own message, its recipients).
+      const rep = all => (body, opts) => { if (o.replyFails && o.replyFails === id) throw new Error("reply boom"); const last = t.msgs[t.msgs.length - 1]; const toWho = /me@gmail\.com/.test(last.from) ? last.to : last.from;
+        threadReplies.push({ id, body, html: opts && opts.htmlBody, attachments: opts && opts.attachments, subject: opts && opts.subject, all, to: toWho }); t.msgs.push({ id: id + "m" + t.msgs.length, from: "Riley <me@gmail.com>", to: toWho, subject: "Re: x", body }); log.push({ ev: "send", to: "(thread " + id + ")" }); };
+      return { getId: () => id, getFirstMessageSubject: () => t.msgs[0].subject, getMessages: () => t.msgs.map(mkMsg), reply: rep(false), replyAll: rep(true) }; },
   };
-  const lockLog = log;
-  const LockService = { getScriptLock: () => ({ waitLock: () => lockLog.push({ ev: "lock" }), releaseLock: () => lockLog.push({ ev: "unlock" }) }) };
+  // The script lock is NOT reentrant: a second wait inside a held lock times out, like production.
+  const lockState = { held: false };
+  const LockService = { getScriptLock: () => ({
+    waitLock: () => { if (lockState.held) throw new Error("Lock timeout: another process was holding the lock for too long."); lockState.held = true; log.push({ ev: "lock" }); },
+    tryLock: () => { if (lockState.held) return false; lockState.held = true; log.push({ ev: "lock" }); return true; },
+    releaseLock: () => { lockState.held = false; log.push({ ev: "unlock" }); } }) };
   const triggers = [];
   const ScriptApp = {
-    getProjectTriggers: () => triggers.map(t => ({ getHandlerFunction: () => t.fn, getUniqueId: () => t.fn })),
-    newTrigger: fn => { const t = { fn, every: null, onEdit: false }; const b = { timeBased: () => b, everyMinutes: n => { t.every = n; return b; }, forSpreadsheet: x => { t.ss = x; return b; }, onEdit: () => { t.onEdit = true; return b; }, create: () => { triggers.push(t); return t; } }; return b; },
+    getProjectTriggers: () => triggers.map(t => ({ getHandlerFunction: () => t.fn, getUniqueId: () => t.uid || t.fn })),
+    newTrigger: fn => { const t = { fn, every: null, onEdit: false, uid: "uid-" + fn }; const b = { timeBased: () => b, everyMinutes: n => { t.every = n; return b; }, forSpreadsheet: x => { t.ss = x; return b; }, onEdit: () => { t.onEdit = true; return b; }, create: () => { triggers.push(t); return t; } }; return b; },
     deleteTrigger: () => {},
   };
   const PropertiesService = { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); } }) };
@@ -154,7 +178,11 @@ function world(o = {}) {
   const MailApp = { getRemainingDailyQuota: () => (o.quota ?? 100), sendEmail: (to, subj, body) => { mails.push({ to, subj, body }); } };
   const Session = { getEffectiveUser: () => ({ getEmail: () => "me@gmail.com" }), getScriptTimeZone: () => "UTC" };
   let uuidN = 0;
-  const Utilities = { getUuid: () => "00000000-0000-4000-8000-" + String(++uuidN).padStart(12, "0"), formatDate: (d, tz, f) => f === "yyyy-MM-dd" ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace("T", " "), parseDate: (str, tz, f) => new Date(String(str).replace(" ", "T") + (f === "yyyy-MM-dd" ? "T00:00:00Z" : ":00Z")) };
+  const Utilities = { getUuid: () => "00000000-0000-4000-8000-" + String(++uuidN).padStart(12, "0"), formatDate: (d, tz, f) => f === "yyyy-MM-dd" ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace("T", " "), parseDate: (str, tz, f) => {
+    // production throws on a non-string (e.g. a Date a cell was coerced to) and on any text not matching the format
+    if (typeof str !== "string") throw new Error("Exception: The parameters (" + typeof str + ") don't match the method signature for Utilities.parseDate.");
+    if (!(f === "yyyy-MM-dd" ? /^\d{4}-\d{2}-\d{2}$/ : /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/).test(str)) throw new Error("Exception: Cannot parse \"" + str + "\" with " + f);
+    return new Date(str.replace(" ", "T") + (f === "yyyy-MM-dd" ? "T00:00:00Z" : ":00Z")); } };
   const Logger = { log() {} };
   const htmlPages = [];
   const HtmlService = { createHtmlOutput: h => { const out = { html: h, title: "", getContent: () => h, setTitle: t => { out.title = t; return out; }, addMetaTag: () => out, setXFrameOptionsMode: () => out }; htmlPages.push(out); return out; }, XFrameOptionsMode: { ALLOWALL: "ALLOWALL" } };
@@ -166,7 +194,7 @@ function world(o = {}) {
   const sheet = n => admin.getSheetByName(n);
   const invSheet = pub.getSheetByName("Invites");
   const addIncoming = (threadId, m) => { threads[threadId].msgs.push({ id: threadId + "m" + threads[threadId].msgs.length, ...m }); };
-  return { M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages };
+  return { M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages, hooks, lockState, pendingDrafts };
 }
 const run = (w, fn) => { try { return { ok: true, v: w.M[fn]() }; } catch (e) { return { ok: false, e: String(e && e.message || e) }; } };
 const pubWrites = w => w.log.filter(e => e.ev !== "lock" && e.ev !== "unlock" && e.ev !== "send" && e.sheet === "Invites");
@@ -1048,6 +1076,40 @@ function failingScanWorld(props = {}) {
   run(w, "adminPolish");
   const list = dashList(w, "Name mismatches") || [];
   check("FX3: a Contacts name is a mismatch only if it matches NO Invites row in ANY year (veteran not invited this year is not one)", list.length === 2 && list.includes("Ghost") && list.some(n => /zed/i.test(n)) && !list.includes("Old Timer"), JSON.stringify(list));
+}
+
+// ---------- REVIEW FIXES (WO-FIX-33-REVIEW) ----------
+// H2 + L2: Sheets coerces text -> Date/Number. The fake does too, so these would have caught it.
+{
+  const w = world({ props: { GFY_MAIL_TEST: "0", ALERT_TO: ALERT } });
+  run(w, "scanReplies");
+  const raw = w.sheet("READ ME").rows[1][1];
+  const r2 = run(w, "scanReplies");
+  check("H2a: the scan stamp is stored as TEXT (not coerced to a Date), so a second scan reads it, stays quiet and the Dashboard says ok",
+    typeof raw === "string" && r2.ok && w.mails.length === 0 && !/STALE/.test(String(dashVals(w)[DASH.status])), JSON.stringify([raw, r2.e, w.mails, dashVals(w)]));
+  // a stamp already coerced to a Date / number by an earlier version is still understood by every reader
+  const mk = v => { const x = world({ props: { ALERT_TO: ALERT } }); x.sheet("READ ME").rows[1][1] = v; return x; };
+  const fresh = mk(new Date(Date.now() - 20 * 60 * 1000)); run(fresh, "scanReplies");
+  const old = mk(new Date(Date.now() - 5 * 3600 * 1000)); run(old, "scanReplies");
+  const oldNum = mk(Date.now() - 5 * 3600 * 1000); run(oldNum, "scanReplies");
+  const dFresh = mk(new Date(Date.now() - 20 * 60 * 1000)); run(dFresh, "adminPolish");
+  const dOld = mk(new Date(Date.now() - 5 * 3600 * 1000)); run(dOld, "adminPolish");
+  check("H2b: readers accept Date | number | string: a fresh Date is quiet + ok, a 5 h-old Date or epoch-ms number alerts, Dashboard STALE only when old",
+    fresh.mails.length === 0 && old.mails.length === 1 && oldNum.mails.length === 1 && !/STALE/.test(String(dashVals(dFresh)[DASH.status])) && /over 1 h/.test(String(dashVals(dOld)[DASH.status])),
+    JSON.stringify([fresh.mails, old.mails, oldNum.mails, dashVals(dFresh), dashVals(dOld)]));
+}
+{
+  const w = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT], numericIds: true });
+  run(w, "sendInvites");
+  const log = w.sheet("SendLog").rows.slice(1);
+  const tok = rsvpRows(w).map(r => r[2]);
+  check("L2a: thread_id and token are written as TEXT (an all-digit id keeps its leading zeros, a token is never a Number)",
+    log.length === 2 && log.every(l => typeof l[5] === "string" && /^0189300\d+$/.test(l[5])) && tok.length === 2 && tok.every(t => typeof t === "string" && t.length >= 22), JSON.stringify([log, tok]));
+  w.addIncoming(log[0][5], { id: "00123456", from: "Alice <alice@example.com>", subject: "Re:", body: "yes" });
+  run(w, "scanReplies");
+  const rep = w.sheet("Replies").rows.slice(1);
+  check("L2b: Replies.msg_id stays TEXT, and a second scan still dedupes on it", rep.length === 1 && rep[0][6] === "00123456" && (run(w, "scanReplies"), w.sheet("Replies").rows.length === 2), JSON.stringify(rep));
+  check("L2c: RSVP.answered_at is TEXT too", (rsvpGo(w, "Alice Able", "IN"), typeof rsvpRows(w).find(r => r[1] === "Alice Able")[4] === "string"), JSON.stringify(rsvpRows(w)));
 }
 
 // ---------- no-'@' leak test ----------

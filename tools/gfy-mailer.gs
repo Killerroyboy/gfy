@@ -81,11 +81,33 @@ function mailEnsureHeader_(sheet, name){
   sheet.getRange(1, Math.max(t.heads.length, sheet.getLastColumn()) + 1).setValue(name);
 }
 
+// Columns that must stay TEXT. Sheets coerces a typed "2027-01-06" to a Date and an all-digit id
+// to a Number (losing leading zeros / precision), so the cell is formatted "@" BEFORE the write.
+const MAIL_TEXT_COLS = ["date", "thread_id", "msg_id", "token", "answered_at", "history"];
+
 function mailAppend_(sheet, obj){
   const t = mailTable_(sheet);
   const row = new Array(t.heads.length).fill("");
   Object.keys(obj).forEach(k => { if (k in t.idx) row[t.idx[k]] = obj[k]; });
-  sheet.appendRow(row);
+  if (!row.length) return;
+  const r = sheet.getLastRow() + 1;
+  MAIL_TEXT_COLS.forEach(k => { if (k in t.idx) sheet.getRange(r, t.idx[k] + 1).setNumberFormat("@"); });
+  sheet.getRange(r, 1, 1, row.length).setValues([row]);
+}
+
+// A stored timestamp as epoch ms, or NaN. Accepts what a cell may hold: a Date (Sheets coerced the
+// text), a number (epoch ms, or a Sheets date serial) or the "yyyy-MM-dd HH:mm" text we write.
+function mailStampMs_(v){
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === "number") return v > 1e11 ? v : (v - 25569) * 864e5;
+  const s = String(v == null ? "" : v).trim();
+  if (!s) return NaN;
+  if (/^\d{12,}$/.test(s)) return Number(s);
+  try { return Utilities.parseDate(s, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm").getTime(); } catch (e){ return NaN; }
+}
+function mailStampText_(v){
+  const ms = mailStampMs_(v);
+  return isNaN(ms) ? String(v == null ? "" : v).trim() : mailStamp_(new Date(ms));
 }
 
 function mailToday_(d){ return Utilities.formatDate(d || new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"); }
@@ -495,7 +517,7 @@ function recordRsvp(token, choice){
     const stamp = mailStamp_();
     out.player = String(row.player).trim();
     const hist = String(row.history == null ? "" : row.history).trim();
-    const set = (name, v) => { if (name in tb.idx) ctx.rsvp.getRange(row._row, tb.idx[name] + 1).setValue(v); };
+    const set = (name, v) => { if (name in tb.idx){ const cell = ctx.rsvp.getRange(row._row, tb.idx[name] + 1); if (MAIL_TEXT_COLS.indexOf(name) >= 0) cell.setNumberFormat("@"); cell.setValue(v); } };
     set("answer", c); set("answered_at", stamp); set("history", (hist ? hist + "; " : "") + stamp + " " + c);
     if (test) return;                                    // TEST MODE: private RSVP tab only
     try {
@@ -580,12 +602,10 @@ function scanReplies(){
   try {                       // stale check at scan start (never-scanned stays quiet)
     const admin = SpreadsheetApp.getActiveSpreadsheet();
     const readme = admin && admin.getSheetByName(MAIL_TAB.readme);
-    const stamp = readme ? String(readme.getRange(2, 2).getValue() == null ? "" : readme.getRange(2, 2).getValue()).trim() : "";
-    if (stamp){
-      const t = Utilities.parseDate(stamp, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
-      if (t && !isNaN(t.getTime()) && Date.now() - t.getTime() > MAIL_ALERT_STALE_MS)
-        mailAlert_(props, "GFY Mail: reply scan is stale", `The last good reply scan was ${stamp}, over 3 hours ago. Check the Apps Script trigger / Executions.`);
-    }
+    const raw = readme ? readme.getRange(2, 2).getValue() : "";
+    const ms = mailStampMs_(raw);
+    if (!isNaN(ms) && Date.now() - ms > MAIL_ALERT_STALE_MS)
+      mailAlert_(props, "GFY Mail: reply scan is stale", `The last good reply scan was ${mailStampText_(raw)}, over 3 hours ago. Check the Apps Script trigger / Executions.`);
   } catch (e){ Logger.log("stale check failed: " + (e && e.message || e)); }
   try { mailScan_(); }
   catch (e){
@@ -636,7 +656,7 @@ function mailScan_(){
 
   if (!errors.length && readme){     // timestamp only — never names (START HERE publication is a TODO above)
     readme.getRange(1, 2).setValue("last_reply_scan");
-    readme.getRange(2, 2).setValue(mailStamp_());
+    readme.getRange(2, 2).setNumberFormat("@").setValue(mailStamp_());
   }
   // Rebuild the private Dashboard even after a failed scan (so STALE can show).
   try { mailDashboard_(admin, props); } catch (e){ Logger.log("dashboard rebuild failed: " + (e && e.message || e)); }
@@ -879,12 +899,12 @@ function mailDashboard_(admin, props){
 
   // last scan health
   const readme = admin.getSheetByName(MAIL_TAB.readme);
-  const stamp = readme ? String(readme.getRange(2, 2).getValue() == null ? "" : readme.getRange(2, 2).getValue()).trim() : "";
+  const rawStamp = readme ? readme.getRange(2, 2).getValue() : "";
+  const stamp = mailStampText_(rawStamp);
   let status = "STALE - never scanned";
   if (stamp){
-    let t = null;
-    try { t = Utilities.parseDate(stamp, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm"); } catch (e){ t = null; }
-    status = (!t || isNaN(t.getTime())) ? "STALE - unreadable scan time" : (Date.now() - t.getTime() > MAIL_STALE_MS ? "STALE - over 1 h old" : "ok");
+    const ms = mailStampMs_(rawStamp);
+    status = isNaN(ms) ? "STALE - unreadable scan time" : (Date.now() - ms > MAIL_STALE_MS ? "STALE - over 1 h old" : "ok");
   }
 
   const draftStatus = prefix => {
@@ -927,6 +947,8 @@ function mailDashboard_(admin, props){
   const have = sh.getLastRow() >= 1 ? mailTrimGrid_(sh.getDataRange().getValues()) : [];
   if (JSON.stringify(want) === JSON.stringify(have)) return;
   sh.clearContents();
+  const scanRow = left.findIndex(x => x[0] === L.scan) + 1;
+  if (scanRow) sh.getRange(scanRow, 2).setNumberFormat("@");        // the stamp must stay text, not be coerced to a Date
   sh.getRange(1, 1, grid.length, grid[0].length).setValues(grid);
   sh.getRange(1, 1).setFontWeight("bold");
   sh.getRange(2, MAIL_DASH_COL0, 1, MAIL_DASH_LISTS.length).setFontWeight("bold");
