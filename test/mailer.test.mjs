@@ -28,7 +28,7 @@ function mkSheet(name, rows, log, ss) {
     return v;
   };
   const ensure = (r, c) => { while (sh.rows.length < r) sh.rows.push([]); const row = sh.rows[r - 1]; while (row.length < c) row.push(""); };
-  const logW = (r, c, v, op) => { sh.writes.push({ r, c, v, op }); log.push({ ev: "write", sheet: name, r, c, v, op, locked: log.isLocked ? log.isLocked() : null }); delete sh.formulas[r + "," + c]; };
+  const logW = (r, c, v, op) => { log.dirty = true; sh.writes.push({ r, c, v, op }); log.push({ ev: "write", sheet: name, r, c, v, op, locked: log.isLocked ? log.isLocked() : null }); delete sh.formulas[r + "," + c]; };
   sh.getName = () => name;
   sh.getSheetId = () => 1;
   sh.getDataRange = () => ({ getValues: () => { const w = Math.max(0, ...sh.rows.map(r => r.length)); return sh.rows.map(r => { const o = r.slice(); while (o.length < w) o.push(""); return o; }); } });
@@ -66,7 +66,7 @@ function mkSheet(name, rows, log, ss) {
     };
     return rng;
   };
-  sh.appendRow = vals => { sh.writes.push({ op: "appendRow", v: vals }); log.push({ ev: "append", sheet: name, v: vals }); const rn = sh.rows.length + 1; sh.rows.push(vals.map((v, j) => coerce(v, rn, j + 1))); };
+  sh.appendRow = vals => { log.dirty = true; sh.writes.push({ op: "appendRow", v: vals }); log.push({ ev: "append", sheet: name, v: vals }); const rn = sh.rows.length + 1; sh.rows.push(vals.map((v, j) => coerce(v, rn, j + 1))); };
   return sh;
 }
 function mkSS(id, sheets, log) {
@@ -118,12 +118,13 @@ function world(o = {}) {
   const opened = [];
   const menus = [];
   const ui = {
-    alert: (title, msg, btns) => { alerts.push({ title, msg, btns }); return btns === "YES_NO" ? (answers.shift() ?? "NO") : "OK"; },
+    alert: (title, msg, btns) => { alerts.push({ title, msg, btns }); if (hooks.onAlert) hooks.onAlert(title, btns); return btns === "YES_NO" ? (answers.shift() ?? "NO") : "OK"; },
     createMenu: t => { const m = { title: t, items: [] }; const b = { addItem: (l, f) => { m.items.push([l, f]); return b; }, addSeparator: () => b, addToUi: () => { menus.push(m); } }; return b; },
     prompt: (title, msg) => { prompts.push({ title, msg }); const txt = (o.promptAnswers || []).shift(); return { getSelectedButton: () => (txt === undefined ? "CANCEL" : "OK"), getResponseText: () => String(txt) }; },
     Button: { YES: "YES", NO: "NO", OK: "OK", CANCEL: "CANCEL" }, ButtonSet: { YES_NO: "YES_NO", OK: "OK", OK_CANCEL: "OK_CANCEL" },
   };
   const SpreadsheetApp = {
+    flush: () => { log.dirty = false; log.push({ ev: "flush" }); },
     getActiveSpreadsheet: () => admin, getActive: () => admin,
     getUi: () => { if (o.noUi || flags.noUi) throw new Error("Cannot call SpreadsheetApp.getUi() from this context."); return ui; },
     newConditionalFormatRule: mkRuleB, newDataValidation: mkDVB, ProtectionType: { RANGE: "RANGE" },
@@ -133,7 +134,7 @@ function world(o = {}) {
   const sent = []; const threads = {}; let tn = 0;
   const hooks = {};
   const flags = {};
-  const counters = { raw: 0, fetched: [], drafts: 0 };
+  const counters = { raw: 0, fetched: [], drafts: 0, draftsWhileLocked: 0, sendsDirty: 0 };
   const pendingDrafts = new Set();
   const mkMsg = m => ({ getId: () => m.id, getFrom: () => m.from, getSubject: () => m.subject, getDate: () => new Date(m.date || "2027-01-05T12:00:00Z"), getPlainBody: () => m.body || "", getTo: () => m.to || "", getRawContent: () => { counters.raw++; return (m.raw || "") + "\r\n\r\n" + (m.body || ""); } });
   const draftOps = [];
@@ -149,11 +150,12 @@ function world(o = {}) {
   const drafts = (o.drafts || [TPL_DRAFT]).map(mkDraft);
   const threadReplies = [];
   const GmailApp = {
-    getDrafts: () => { counters.drafts++; if (o.draftsError) throw new Error("gmail down"); return drafts; },
+    getDrafts: () => { counters.drafts++; if (lockState.held) counters.draftsWhileLocked++; if (o.draftsError) throw new Error("gmail down"); return drafts; },
     createDraft: (to, subject, body, opts) => { const dk = {}; pendingDrafts.add(dk); return {
       deleteDraft: () => { pendingDrafts.delete(dk); },
       send: () => {
       if (lockState.held) lockState.sendsWhileHeld++;
+      if (log.dirty) counters.sendsDirty++;
       if (hooks.beforeSend) hooks.beforeSend(to);
       if ((o.failTo && o.failTo === to) || (flags.failTo && flags.failTo === to)) throw new Error("smtp boom");
       pendingDrafts.delete(dk);
@@ -166,15 +168,15 @@ function world(o = {}) {
       // Gmail addresses a reply to the LAST message's sender (or, for our own message, its recipients).
       const rep = all => (body, opts) => { if (o.replyFails && o.replyFails === id) throw new Error("reply boom"); const last = t.msgs[t.msgs.length - 1]; const toWho = /me@gmail\.com/.test(last.from) ? last.to : last.from;
         threadReplies.push({ id, body, html: opts && opts.htmlBody, attachments: opts && opts.attachments, subject: opts && opts.subject, all, to: toWho }); if (hooks.afterReply) hooks.afterReply(threadReplies.length); t.msgs.push({ id: id + "m" + t.msgs.length, from: "Riley <me@gmail.com>", to: toWho, subject: "Re: x", body }); log.push({ ev: "send", to: "(thread " + id + ")" }); };
-      return { getId: () => id, getFirstMessageSubject: () => t.msgs[0].subject, getMessages: () => t.msgs.map(mkMsg), reply: rep(false), replyAll: rep(true) }; },
+      return { getId: () => id, getFirstMessageSubject: () => t.msgs[0].subject, getMessages: () => { if (o.messagesError && o.messagesError === id) throw new Error("messages boom"); return t.msgs.map(mkMsg); }, reply: rep(false), replyAll: rep(true) }; },
   };
   // The script lock is NOT reentrant: a second wait inside a held lock times out, like production.
-  const lockState = { held: false, sendsWhileHeld: 0 };
+  const lockState = { held: false, sendsWhileHeld: 0, dirtyReleases: 0 };
   log.isLocked = () => lockState.held;
   const LockService = { getScriptLock: () => ({
     waitLock: () => { if (lockState.held) throw new Error("Lock timeout: another process was holding the lock for too long."); lockState.held = true; log.push({ ev: "lock" }); },
     tryLock: () => { if (lockState.held) return false; lockState.held = true; log.push({ ev: "lock" }); return true; },
-    releaseLock: () => { lockState.held = false; log.push({ ev: "unlock" }); } }) };
+    releaseLock: () => { if (log.dirty) lockState.dirtyReleases++; lockState.held = false; log.push({ ev: "unlock" }); } }) };
   const triggers = [];
   const ScriptApp = {
     getProjectTriggers: () => triggers.map(t => ({ getHandlerFunction: () => t.fn, getUniqueId: () => t.uid || t.fn })),
@@ -194,7 +196,9 @@ function world(o = {}) {
   const Logger = { log() {} };
   const htmlPages = [];
   const HtmlService = { createHtmlOutput: h => { const out = { html: h, title: "", getContent: () => h, setTitle: t => { out.title = t; return out; }, addMetaTag: () => out, setXFrameOptionsMode: () => out }; htmlPages.push(out); return out; }, XFrameOptionsMode: { ALLOWALL: "ALLOWALL" } };
-  const env = { SpreadsheetApp, GmailApp, MailApp, PropertiesService, LockService, ScriptApp, Session, Utilities, Logger, HtmlService };
+  const clock = { skew: 0 };
+  class FakeDate extends Date { constructor(...a) { if (a.length) super(...a); else super(Date.now() + clock.skew); } static now() { return Date.now() + clock.skew; } static [Symbol.hasInstance](x) { return x instanceof Date; } }
+  const env = { Date: FakeDate, SpreadsheetApp, GmailApp, MailApp, PropertiesService, LockService, ScriptApp, Session, Utilities, Logger, HtmlService };
   const names = ["onOpen", "sendInvites", "scanReplies", "installMailTriggers", "mailPublicWrite_", "adminPolish", "mailOnEdit", "mailDashboard_", "MAIL_SCHEMA", "sendNudges", "doGet", "recordRsvp", "mailAppend_", "mailWithLock_", "setNudgeDays", "clearRehearsalAnswers"];
   let M;
   try { M = new Function(...Object.keys(env), SRC + "\nreturn {" + names.map(n => `${n}: typeof ${n}!=='undefined'?${n}:undefined`).join(",") + "};")(...Object.values(env)); }
@@ -202,7 +206,7 @@ function world(o = {}) {
   const sheet = n => admin.getSheetByName(n);
   const invSheet = pub.getSheetByName("Invites");
   const addIncoming = (threadId, m) => { threads[threadId].msgs.push({ id: threadId + "m" + threads[threadId].msgs.length, ...m }); };
-  return { M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages, hooks, lockState, pendingDrafts, flags, counters, prompts };
+  return { clock, M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages, hooks, lockState, pendingDrafts, flags, counters, prompts };
 }
 const run = (w, fn) => { try { return { ok: true, v: w.M[fn]() }; } catch (e) { return { ok: false, e: String(e && e.message || e) }; } };
 const pubWrites = w => w.log.filter(e => e.ev !== "lock" && e.ev !== "unlock" && e.ev !== "send" && e.sheet === "Invites");
@@ -497,6 +501,9 @@ function afterSend(extra = {}) {
   const rr = w3.sheet("READ ME").rows;
   check("MC15: one unreadable thread does not abort the others, but the scan then throws and does NOT stamp a 'successful' scan time",
     !r.ok && w3.invSheet.rows.find(x => x[1] === "Alice Able")[3] === true && String(rr[1][1]) === "", r.e || JSON.stringify(rr));
+  const r2 = run(w3, "scanReplies"), r3 = run(w3, "scanReplies");
+  check("MC15b (WO-FIX-33-FINAL #4): the 1st and 2nd consecutive throw of the same thread are errors; the 3rd treats it as MISSING (scan succeeds, stamps, never a permanent failure)",
+    !r2.ok && r3.ok && /^\d{4}-/.test(String(w3.sheet("READ ME").rows[1][1])), JSON.stringify([r2, r3, w3.sheet("READ ME").rows]));
   noteWrites(w3);
 }
 
@@ -696,6 +703,8 @@ function dashWorld(extra = {}) {
   const r = run(w3, "scanReplies");
   check("D9: a scan that fails on an unreadable thread still throws, does not stamp a success time, and still refreshes the Dashboard (so STALE can show)",
     !r.ok && !!w3.sheet("Dashboard") && String(w3.sheet("READ ME").rows[1][1]) === "", r.e);
+  run(w3, "scanReplies"); const r3 = run(w3, "scanReplies");
+  check("D9b (WO-FIX-33-FINAL #4): by the 3rd consecutive throw the thread is 'missing' on the Dashboard and the scan is healthy again", r3.ok && /missing[^"]*Bob Baker/i.test(dashText(w3)) && /^\d{4}-/.test(String(w3.sheet("READ ME").rows[1][1])), r3.e || dashText(w3));
   noteWrites(w3);
 }
 
@@ -797,7 +806,7 @@ const rsvpRows = w => w.sheet("RSVP").rows.slice(1);
 const tokenOf = (w, who) => (rsvpRows(w).find(r => r[1] === who) || [])[2];
 function rsvpWorld(extra = {}) {
   const w = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT], ...extra });
-  if (!extra.noSend) { run(w, "sendInvites"); w.alerts.length = 0; w.log.length = 0; }
+  if (!extra.noSend) { run(w, "sendInvites"); w.alerts.length = 0; w.log.length = 0; w.clock.skew += 61000; }   // past the Dashboard debounce window the send's own rebuild opened
   return w;
 }
 const pageOf = (w, t) => { const n = w.htmlPages.length; const r = w.M.doGet({ parameter: t === undefined ? {} : { t } }); return { r, html: String((r && (r.html || (r.getContent && r.getContent()))) || "") }; };
@@ -849,6 +858,7 @@ function rsvpGo(w, who, choice) { const tk = tokenOf(w, who); try { return { ok:
   const ev = w.log.map(e => e.ev + (e.sheet ? ":" + e.sheet : ""));
   const lockedOk = ev.every((e, i) => e !== "write:Invites" || (ev.slice(0, i).lastIndexOf("lock") > ev.slice(0, i).lastIndexOf("unlock")));
   check("RS10: every public write in recordRsvp happens under the lock", pubWrites(w).length >= 2 && lockedOk, ev.join(","));
+  w.clock.skew += 61000;                                    // RSVP-triggered Dashboard rebuilds are debounced to 1 per 60 s
   const r2 = rsvpGo(w, "Alice Able", "MAYBE");
   const row2 = rsvpRows(w).find(x => x[1] === "Alice Able");
   check("RS11: answering again replaces the answer and APPENDS to history; committed is never unticked", r2.ok && row2[3] === "MAYBE" && (String(row2[5]).match(/IN|MAYBE/g) || []).length >= 2 && al[5] === true, JSON.stringify(row2));
@@ -929,8 +939,8 @@ function nudgeWorld(extra = {}, ageFor = {}) {
     r.ok && !!conf && /Alice Able/.test(conf.msg) && /Bob Baker/.test(conf.msg) && !/Gil|Hal|Ivy|Dee/.test(conf.msg) && JSON.stringify(replied) === JSON.stringify(["alice@example.com", "bob@example.com"]), r.e || JSON.stringify([conf && conf.msg, replied]));
   const ra = w.sent.find(t => t.to === "alice@example.com");
   const ta = tokenOf(w, "Alice Able");
-  check("NU3: nudge = a FRESH email (WO-FIX-33-REREVIEW N4: never thread.reply), body+HTML from the [GFY NUDGE] draft with {first} and {rsvp} filled, subject 'Re: <invite subject>'",
-    w.threadReplies.length === 0 && Object.keys(w.threads).length === nThreads + 2 && ra.body === `Alice, nudge: ${WEBAPP}?t=${ta}` && ra.html.includes(`href="${WEBAPP}?t=${ta}"`) && ra.subject === "Re: Are you in, Alice?", JSON.stringify(ra));
+  check("NU3: nudge = a FRESH email (WO-FIX-33-REREVIEW N4: never thread.reply), body+HTML from the [GFY NUDGE] draft with {first} and {rsvp} filled, subject 'Reminder: <invite subject>'",
+    w.threadReplies.length === 0 && Object.keys(w.threads).length === nThreads + 2 && ra.body === `Alice, nudge: ${WEBAPP}?t=${ta}` && ra.html.includes(`href="${WEBAPP}?t=${ta}"`) && ra.subject === "Reminder: Are you in, Alice?", JSON.stringify(ra));
   const log = w.sheet("SendLog").rows.slice(1).filter(x => x[3] === "nudge");
   check("NU4: SendLog what=nudge, one row each, with the NEW thread_id of the fresh nudge email", log.length === 2 && log.some(x => x[1] === "Alice Able" && x[5] === ra.threadId && x[5] !== tidA && x[2] === "alice@example.com") && log.every(x => /^\d{4}-/.test(String(x[0]))), JSON.stringify(log));
   check("NU4b: tokens reused from the invite (RSVP tab unchanged: one row per player)", rsvpRows(w).length === 5 && tokenOf(w, "Alice Able") === ta);
@@ -1008,7 +1018,7 @@ function nudgeWorld(extra = {}, ageFor = {}) {
 // ---------- E: health alerts (WO-PROGRAM-33 s4) ----------
 const ALERT = "ops@example.org";
 function failingScanWorld(props = {}) {
-  const w = world({ props: { GFY_MAIL_TEST: "0", ...props }, threadError: "thr2" });
+  const w = world({ props: { GFY_MAIL_TEST: "0", ...props }, messagesError: "thr2" });
   run(w, "sendInvites"); w.alerts.length = 0; w.mails.length = 0;
   return w;
 }
@@ -1050,7 +1060,7 @@ function failingScanWorld(props = {}) {
 {
   const w = failingScanWorld({ ALERT_TO: ALERT });
   w.M.__mailFail = true;
-  const w2 = world({ props: { GFY_MAIL_TEST: "0", ALERT_TO: ALERT }, threadError: "thr2" });
+  const w2 = world({ props: { GFY_MAIL_TEST: "0", ALERT_TO: ALERT }, messagesError: "thr2" });
   run(w2, "sendInvites");
   w2.mails.length = 0;
   const r = run(w2, "scanReplies");
@@ -1073,6 +1083,7 @@ function failingScanWorld(props = {}) {
   const cc = colOf(w.sheet("Replies").rows, "confirm");
   run(w, "adminPolish");
   const before = dashVals(w)[DASH.committed];
+  w.clock.skew += 61000;                                    // onEdit rebuilds are debounced to 1 per 60 s
   w.M.mailOnEdit(editEvent(w, 2, cc));
   check("FX2: the Dashboard is rebuilt after a mailOnEdit commit (committed count moves)", before === 1 && dashVals(w)[DASH.committed] === 2, JSON.stringify([before, dashVals(w)]));
 }
@@ -1256,8 +1267,8 @@ for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
   w.alerts.length = 0;
   const r = run(w, "sendNudges");
   const fresh = w.sent.find(x => x.to === "alice@example.com");
-  check("M2a: the thread's LAST message is a bounce => nothing is replied into that thread (never replyAll to mailer-daemon); a fresh email goes to the logged address with 'Re: <invite subject>'",
-    r.ok && !w.threadReplies.some(t => t.id === tidA) && !w.threadReplies.some(t => /mailer-daemon/i.test(t.to)) && !!fresh && fresh.subject === "Re: Are you in, Alice?" && fresh.threadId !== tidA, r.e || JSON.stringify([w.threadReplies, w.sent]));
+  check("M2a: the thread's LAST message is a bounce => nothing is replied into that thread (never replyAll to mailer-daemon); a fresh email goes to the logged address with 'Reminder: <invite subject>'",
+    r.ok && !w.threadReplies.some(t => t.id === tidA) && !w.threadReplies.some(t => /mailer-daemon/i.test(t.to)) && !!fresh && fresh.subject === "Reminder: Are you in, Alice?" && fresh.threadId !== tidA, r.e || JSON.stringify([w.threadReplies, w.sent]));
   const nl = w.sheet("SendLog").rows.slice(1).filter(x => x[3] === "nudge" && x[1] === "Alice Able");
   check("M2b: the fresh nudge is logged with its NEW thread_id", nl.length === 1 && !!fresh && nl[0][5] === fresh.threadId && nl[0][2] === "alice@example.com", JSON.stringify(nl));
   w.addIncoming((fresh || { threadId: tidA }).threadId, { from: "Alice Able <alice@example.com>", subject: "Re: Are you in, Alice?", body: "yes in" });
@@ -1571,8 +1582,8 @@ const slRows = w => w.sheet("SendLog").rows.slice(1);
   const fa = w.sent.find(x => x.to === "alice@example.com");
   const nl = slRows(w).filter(x => x[3] === "nudge" && x[1] === "Alice Able");
   const ta = tokenOf(w, "Alice Able");
-  check("N4: LIVE nudge = a fresh email to the exact logged address, subject 'Re: <original invite subject>', body from the NUDGE draft; thread.reply is never used",
-    r.ok && w.threadReplies.length === 0 && !!fa && fa.subject === "Re: Are you in, Alice?" && fa.body === `Alice, nudge: ${WEBAPP}?t=${ta}` && fa.threadId !== tidA, r.e || JSON.stringify([w.threadReplies, w.sent]));
+  check("N4: LIVE nudge = a fresh email to the exact logged address, subject 'Reminder: <original invite subject>', body from the NUDGE draft; thread.reply is never used",
+    r.ok && w.threadReplies.length === 0 && !!fa && fa.subject === "Reminder: Are you in, Alice?" && fa.body === `Alice, nudge: ${WEBAPP}?t=${ta}` && fa.threadId !== tidA, r.e || JSON.stringify([w.threadReplies, w.sent]));
   check("N4b: ... its NEW thread_id is logged on the nudge row and the scanner watches it", nl.length === 1 && !!fa && nl[0][5] === fa.threadId && nl[0][4] === "season 2027 sent", JSON.stringify(nl));
   if (fa) w.addIncoming(fa.threadId, { from: "Alice Able <alice@example.com>", subject: "Re: Are you in, Alice?", body: "yes in" });
   run(w, "scanReplies");
@@ -1684,6 +1695,112 @@ const slRows = w => w.sheet("SendLog").rows.slice(1);
   const ok = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT] });
   run(ok, "sendInvites");
   check("PD3: a normal draft is unaffected", ok.sent.length === 2);
+}
+
+
+// ---------- WO-FIX-33-FINAL (round 4) ----------
+const FIVE = 5 * 60 * 1000;
+const fourPlayers = () => { const names = ["Ann Zed", "Ben Zed", "Cat Zed", "Dan Zed"]; return { contacts: names.map((n, i) => [n, `z${i}@example.com`, "", "", "FALSE", "", ""]), invites: names.map(n => [2027, n, false, false, "", false, ""]) }; };
+{ // #1: flush before releaseLock; every send is preceded by a flush after the reservation append
+  const w = world({ props: { GFY_MAIL_TEST: "0" } });
+  run(w, "sendInvites");
+  check("F1a: invites - every send() happens with NO unflushed write (SpreadsheetApp.flush() ran after the reservation append)", w.sent.length === 2 && w.counters.sendsDirty === 0, String(w.counters.sendsDirty));
+  check("F1b: invites - no lock is ever released with unflushed writes (flush in the finally BEFORE releaseLock)", w.lockState.dirtyReleases === 0 && w.log.some(e => e.ev === "flush"), String(w.lockState.dirtyReleases));
+  const n = nudgeWorld(); n.counters.sendsDirty = 0; n.lockState.dirtyReleases = 0;
+  run(n, "sendNudges");
+  check("F1c: nudges - same: flushed before every send and before every lock release", n.sent.length === 2 && n.counters.sendsDirty === 0 && n.lockState.dirtyReleases === 0, JSON.stringify([n.counters.sendsDirty, n.lockState.dirtyReleases]));
+}
+{ // #2: time budget in the send + nudge loops
+  const mk = (extra = {}) => { const p = fourPlayers(); return world({ props: { GFY_MAIL_TEST: "0" }, ...p, answers: ["YES", "YES"], ...extra }); };
+  const w = mk(); w.hooks.afterSend = n => { if (n === 1) w.clock.skew += FIVE; };
+  run(w, "sendInvites");
+  const sum = w.alerts[w.alerts.length - 1];
+  check("F2a: invites - past 4.5 min the loop stops before the next email: 1 sent, summary says '3 not sent yet — run again'", w.sent.length === 1 && /3 not sent yet — run again/.test(sum.msg), JSON.stringify([w.sent.length, sum]));
+  run(w, "sendInvites");
+  check("F2b: ... re-run is safe: the other 3 go out, nobody twice", w.sent.length === 4 && new Set(w.sent.map(x => x.to)).size === 4 && slRows(w).length === 4, JSON.stringify(w.sent.map(x => x.to)));
+  const u = mk(); u.hooks.afterSend = n => { if (n === 1) u.clock.skew += 4 * 60 * 1000; };
+  run(u, "sendInvites");
+  check("F2c: under 4.5 min (4 min) everything still sends", u.sent.length === 4 && !/not sent yet/.test(u.alerts[u.alerts.length - 1].msg), JSON.stringify(u.alerts[u.alerts.length - 1]));
+  const d = mk(); d.hooks.onAlert = (t, b) => { if (b === "YES_NO") d.clock.skew += FIVE; };
+  run(d, "sendInvites");
+  check("F2d: t0 is the function ENTRY: 5 min spent in the confirm dialog leaves no budget - nothing sent, '4 not sent yet — run again'", d.sent.length === 0 && /4 not sent yet — run again/.test(d.alerts[d.alerts.length - 1].msg), JSON.stringify(d.alerts[d.alerts.length - 1]));
+  const n = nudgeWorld(); n.hooks.afterSend = k => { if (k === 1) n.clock.skew += FIVE; };
+  run(n, "sendNudges");
+  check("F2e: nudges - same stop: 1 nudged, '1 not sent yet — run again'", n.sent.length === 1 && /1 not sent yet — run again/.test(n.alerts[n.alerts.length - 1].msg), JSON.stringify([n.sent.length, n.alerts[n.alerts.length - 1]]));
+  run(n, "sendNudges");
+  check("F2f: ... nudge re-run is safe: the other one goes, nobody twice", n.sent.length === 2 && new Set(n.sent.map(x => x.to)).size === 2, JSON.stringify(n.sent.map(x => x.to)));
+}
+{ // #3: draft status computed OUTSIDE the lock; RSVP / onEdit rebuilds debounced (DASH_AT)
+  const w = world({ props: { GFY_MAIL_TEST: "0" } });
+  run(w, "sendInvites"); run(w, "scanReplies"); run(w, "adminPolish");
+  const n = nudgeWorld(); run(n, "sendNudges");
+  check("F3a: Gmail drafts are never read while the script lock is held (sendInvites, scan, adminPolish, sendNudges)", w.counters.drafts > 0 && w.counters.draftsWhileLocked === 0 && n.counters.draftsWhileLocked === 0, JSON.stringify([w.counters, n.counters]));
+  const r = rsvpWorld(); r.clock.skew += 61000;
+  rsvpGo(r, "Alice Able", "IN");
+  const at = r.props.DASH_AT;
+  r.sheet("Contacts").rows[2][6] = "BOUNCED 2027-01-02";                // Bob bounces; the Dashboard would list him
+  rsvpGo(r, "Bob Baker", "MAYBE");
+  check("F3b: an RSVP within 60 s of the last Dashboard rebuild does NOT rebuild it (DASH_AT recorded)", !!at && (dashList(r, "Bounced") || []).length === 0 && dashVals(r).responded === 1, JSON.stringify([at, dashList(r, "Bounced"), dashVals(r)]));
+  r.clock.skew += 61000;
+  rsvpGo(r, "Alice Able", "MAYBE");
+  check("F3c: after 60 s the next RSVP rebuilds it", (dashList(r, "Bounced") || []).includes("Bob Baker") && r.props.DASH_AT !== at, JSON.stringify(dashList(r, "Bounced")));
+  r.sheet("Contacts").rows[1][6] = "BOUNCED 2027-01-03";                // Alice
+  r.M.mailOnEdit(editEvent(r, 2, 6));
+  check("F3d: an onEdit-triggered rebuild is debounced the same way", !(dashList(r, "Bounced") || []).includes("Alice Able"), JSON.stringify(dashList(r, "Bounced")));
+  run(r, "scanReplies");
+  check("F3e: ... but the scan rebuild always runs (no debounce)", (dashList(r, "Bounced") || []).includes("Alice Able"), JSON.stringify(dashList(r, "Bounced")));
+  r.sheet("Contacts").rows[3][6] = "BOUNCED 2027-01-04";
+  run(r, "adminPolish");
+  check("F3f: ... and so does the menu (adminPolish) rebuild", (dashList(r, "Bounced") || []).includes("Cy Dnì"), JSON.stringify(dashList(r, "Bounced")));
+}
+{ // #4: 3 consecutive getThreadById throws => missing
+  const opts = { props: { GFY_MAIL_TEST: "0" }, threadError: "thr2" };
+  const w = world(opts); run(w, "sendInvites");
+  const a = run(w, "scanReplies"), b = run(w, "scanReplies"), c = run(w, "scanReplies");
+  check("F4a: throw #1 and #2 are scan errors (alert/stale path); the 3rd consecutive throw => 'missing' and the scan succeeds + stamps", !a.ok && !b.ok && c.ok && /^\d{4}-/.test(String(w.sheet("READ ME").rows[1][1])) && /missing[^"]*Bob Baker/i.test(dashText(w)), JSON.stringify([a, b, c]));
+  const d = run(w, "scanReplies");
+  check("F4b: a thread that keeps throwing stays 'missing' (never a permanent failure)", d.ok, d.e);
+  const o2 = { props: { GFY_MAIL_TEST: "0" }, threadError: "thr2" };
+  const x = world(o2); run(x, "sendInvites");
+  run(x, "scanReplies"); run(x, "scanReplies"); delete o2.threadError;
+  const ok3 = run(x, "scanReplies"); o2.threadError = "thr2";
+  const e1 = run(x, "scanReplies"), e2 = run(x, "scanReplies"), ok6 = run(x, "scanReplies");
+  check("F4c: a successful read resets the counter (throws must be CONSECUTIVE): 2 throws, ok, then 2 more throws are errors again, the 3rd is missing", ok3.ok && !e1.ok && !e2.ok && ok6.ok, JSON.stringify([ok3, e1, e2, ok6]));
+}
+{ // #6: every send/nudge run ends with a Dashboard rebuild that refreshes the draft status
+  const w = world({ props: { GFY_MAIL_TEST: "0", TPL_STATUS: "old-marker" } });
+  run(w, "sendInvites");
+  check("F6a: sendInvites ends with a Dashboard rebuild with refreshDrafts=true (TPL_STATUS refreshed, Dashboard exists)", !!w.sheet("Dashboard") && /^OK/.test(w.props.TPL_STATUS || ""), String(w.props.TPL_STATUS));
+  const n = nudgeWorld(); n.props.TPL_STATUS = "old-marker";
+  run(n, "sendNudges");
+  check("F6b: sendNudges ends with refreshDrafts=true too", /^OK/.test(n.props.TPL_STATUS || ""), String(n.props.TPL_STATUS));
+}
+{ // #7: a mid-run block names the block
+  const w = world({ props: { GFY_MAIL_TEST: "0" } });
+  w.hooks.afterSend = n => { if (n === 1) w.sheet("Contacts").rows.find(r => r[0] === "Bob Baker")[4] = true; };
+  run(w, "sendInvites");
+  const msg = w.alerts[w.alerts.length - 1].msg;
+  check("F7: a block that appears mid-run is NAMED (who + what), not 'changed while sending'; nothing more is sent", w.sent.length === 1 && /Bob Baker: do-not-invite/.test(msg) && !/changed while sending/.test(msg), msg);
+}
+{ // #8: missing-thread note keyed per thread kind
+  const w = nudgeWorld(); run(w, "sendNudges");
+  const inv = Object.values(w.threads).find(t => t.to === "alice@example.com" && /Are you in/.test(t.msgs[0].subject)), nud = Object.values(w.threads).filter(t => t.to === "bob@example.com");
+  delete w.threads[inv.id];                                                 // Alice's INVITE thread is gone, her nudge thread is fine
+  delete w.threads[nud[nud.length - 1].id];                                 // Bob's NUDGE thread is gone, his invite thread is fine
+  const t1 = (run(w, "scanReplies"), dashText(w)), t2 = (run(w, "scanReplies"), dashText(w));
+  check("F8: the missing note is per thread kind and deterministic: Alice 'invite thread missing', Bob 'nudge thread missing' (a healthy sibling thread does not erase it), same on every scan",
+    /invite thread missing[^"]*Alice Able/.test(t1) && /nudge thread missing[^"]*Bob Baker/.test(t1) && !/invite thread missing[^"]*Bob/.test(t1) && !/nudge thread missing[^"]*Alice/.test(t1) && t1 === t2, t1);
+}
+{ // #9
+  const code = SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\n[ \t]*\/\/[^\n]*/g, "");
+  check("F9: dead mailRsvpToken_ deleted; the Dashboard column comment says D..J", !/function mailRsvpToken_\(/.test(SRC) && /D\.\.J/.test(SRC) && !/D\.\.G/.test(SRC), "");
+}
+{ // #10
+  const n = nudgeWorld(); run(n, "sendNudges");
+  const conf = n.alerts.find(a => a.btns === "YES_NO");
+  check("F10: nudge subject is 'Reminder: <invite subject>' (no fake Re:), and the confirm dialog says so", n.sent.every(s => /^Reminder: Are you in, /.test(s.subject)) && n.sent.length === 2 && !!conf && /Reminder:/.test(conf.msg) && !/Re: </.test(conf.msg), JSON.stringify([n.sent.map(s => s.subject), conf && conf.msg]));
+  const docs = readFileSync(path.join(ROOT, "docs", "invite-copy.md"), "utf8") + readFileSync(path.join(ROOT, "README.md"), "utf8");
+  check("F10b: README + invite-copy describe the Reminder: subject", /Reminder: <(their )?original invite subject>|Reminder: <invite subject>/.test(docs) && !/`Re: <(their )?original invite subject>`/.test(docs));
 }
 
 // ---------- no-'@' leak test ----------

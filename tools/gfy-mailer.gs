@@ -22,7 +22,8 @@
  *    NUDGE_DAYS     optional: days between a send and its nudge (default 7). Set it from the menu
  *                   (GFY Mail > Set nudge days...); the Dashboard only DISPLAYS it.
  *    (managed by the code, do not edit: SEND_RUN = the send/nudge run lease, SCAN_CURSOR, SCAN_MISSING,
- *     SCAN_AUTO, TPL_STATUS, ALERT_LAST)
+ *     SCAN_THROWS = per-thread count of consecutive unreadable scans, SCAN_AUTO, TPL_STATUS,
+ *     DASH_AT = when the Dashboard was last rebuilt (RSVP / onEdit rebuilds are skipped within 60 s), ALERT_LAST)
  *    ADMIN_ID       optional fallback for the Web App if getActiveSpreadsheet() is
  *                   unavailable there: the Admin sheet's own id.
  *
@@ -175,8 +176,16 @@ function mailWithLock_(fn, waitMs){
   const lock = LockService.getScriptLock();
   lock.waitLock(waitMs || 30000);
   MAIL_LOCK_HELD_ = true;
-  try { return fn(); } finally { MAIL_LOCK_HELD_ = false; lock.releaseLock(); }
+  // flush BEFORE releasing: Sheets writes are buffered, and the next execution (or this run's own next lock) must
+  // see them. A flush error propagates (the caller then treats the step as failed) but the lock is still released.
+  try { return fn(); } finally { MAIL_LOCK_HELD_ = false; try { SpreadsheetApp.flush(); } finally { lock.releaseLock(); } }
 }
+
+// A send/nudge run stops starting new emails after 4.5 min (Apps Script kills an execution at 6): t0 = function entry
+// (the confirm dialog counts). Whoever was not reached is told to run again - every re-run is safe (SendLog excludes the sent).
+const MAIL_SEND_BUDGET_MS = 270000;
+const mailOverBudget_ = t0 => Date.now() - t0 >= MAIL_SEND_BUDGET_MS;
+const mailNotYet_ = n => `${n} not sent yet — run again (stopped to stay inside the 6-minute Apps Script limit; nobody who was sent is emailed twice)`;
 
 // ---- run lease (WO-FIX-33-REREVIEW N1): one send/nudge run at a time, without holding the lock across sends ----
 const MAIL_LEASE_MS = 8 * 60 * 1000;
@@ -399,6 +408,7 @@ function mailSendOpts_(m){
 
 function sendInvites(e){ mailGuard_(e, "sendInvites"); mailSendInvites_(); }
 function mailSendInvites_(){
+  const t0 = Date.now();
   const ui = SpreadsheetApp.getUi();
   const say = (title, msg) => ui.alert(title, msg, ui.ButtonSet.OK);
   const props = PropertiesService.getScriptProperties();
@@ -445,18 +455,23 @@ function mailSendInvites_(){
   let runId = "";
   try { runId = mailRunBegin_(props); } catch (e){ runId = ""; }
   if (!runId){ say("GFY Mail", MAIL_ANOTHER_RUN); return; }
-  const failed = [], tickFailed = [], skipped = [], unconfirmed = [];
-  let sent = 0;
+  const failed = [], tickFailed = [], skipped = [], unconfirmed = [], notYet = [];
+  let sent = 0, stop = "", blockMsgs = [];
   try {
     mailWithLock_(() => mailEnsureHeader_(logSheet, "thread_id"), 10000);
     plan.recipients.forEach(r => {
+      if (!stop && mailOverBudget_(t0)) stop = "time";
+      if (stop){ notYet.push(r.player); return; }
       let res;
       try {
         res = mailWithLock_(() => {
           // Re-read EVERYTHING under the lock right before this send: invited tick, SendLog, DNI, status.
           const fresh = mailPlan_(mailTable_(conSheet).rows, mailTable_(invSheet).rows, mailTable_(logSheet).rows);
           const still = fresh.recipients.find(x => mailNorm_(x.player) === mailNorm_(r.player));
-          if (fresh.blocks.length || fresh.year !== plan.year || !still || still.address !== r.address) return null;
+          if (fresh.blocks.length) return { blocks: fresh.blocks };
+          if (fresh.year !== plan.year) return { skip: "the season changed" };
+          if (!still) return { skip: "no longer due - already invited / logged, or its status was edited" };
+          if (still.address !== r.address) return { skip: "its address was edited" };
           const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpTokenNL_(admin.getSheetByName(MAIL_TAB.rsvp), plan.year, r.player, test)) : "";
           const m = mailBuild_(tpl, r.player, r.address, test, url);
           const base = { date: mailToday_(), player: r.player, address_used: m.to, what: test ? "invite-test" : "invite" };
@@ -464,7 +479,8 @@ function mailSendInvites_(){
           return { m, base };
         }, 10000);
       } catch (e){ failed.push(`${r.player} (${e && e.message || e}; nothing was sent to them)`); return; }
-      if (!res){ skipped.push(r.player); return; }
+      if (res.blocks){ stop = "block"; blockMsgs = res.blocks; notYet.push(r.player); return; }
+      if (res.skip){ skipped.push(`${r.player} (${res.skip})`); return; }
       let threadId;
       try { threadId = mailSendNew_(res.m); }
       catch (e){
@@ -484,9 +500,12 @@ function mailSendInvites_(){
       } catch (e){ unconfirmed.push(r.player); }
     });
   } finally { mailRunEnd_(props, runId); }
+  try { mailDashboard_(admin, props, true); } catch (e){ Logger.log("dashboard rebuild failed: " + (e && e.message || e)); }
   say("GFY Mail", `${test ? "TEST " : ""}Sent ${sent} of ${plan.recipients.length}.`
     + (failed.length ? `\n\nSEND FAILED (a SendLog row stays, marked 'send error' if the email may have gone out — check Gmail Sent BEFORE re-running; the person is not emailed again until that row is removed): ${failed.join("; ")}` : "")
-    + (skipped.length ? `\n\nSKIPPED (changed while sending — already invited, or edited): ${skipped.join(", ")}` : "")
+    + (stop === "time" ? `\n\n${mailNotYet_(notYet.length)}: ${notYet.join(", ")}` : "")
+    + (stop === "block" ? `\n\nSTOPPED - a block appeared while sending (${notYet.length} not sent: ${notYet.join(", ")}). Fix it, then run again: ${blockMsgs.join("; ")}` : "")
+    + (skipped.length ? `\n\nSKIPPED: ${skipped.join("; ")}` : "")
     + (unconfirmed.length ? `\n\nSent, but the SendLog row could not be settled (it stays 'pending' - listed on the Dashboard; fill its thread_id by hand): ${unconfirmed.join(", ")}` : "")
     + (tickFailed.length ? `\n\nSent and logged, but could NOT tick invited on the public sheet — tick by hand: ${tickFailed.join(", ")}` : ""));
 }
@@ -607,6 +626,7 @@ function mailClearRehearsal_(){
 
 function sendNudges(e){ mailGuard_(e, "sendNudges"); mailSendNudges_(); }
 function mailSendNudges_(){
+  const t0 = Date.now();
   const ui = SpreadsheetApp.getUi();
   const say = (title, msg) => ui.alert(title, msg, ui.ButtonSet.OK);
   const props = PropertiesService.getScriptProperties();
@@ -640,17 +660,19 @@ function mailSendNudges_(){
 
   const quota = MailApp.getRemainingDailyQuota();
   if (quota < cands.length){ say("GFY Mail", `Daily send quota too low: ${quota} left, ${cands.length} needed. Nothing sent.`); return; }
-  const msg = (test ? `TEST MODE: fresh messages go to ${MAIL_TEST_ADDR} only; nobody real is contacted.\n\n` : "LIVE: each person gets a FRESH email to the address we invited, subject \"Re: <their invite subject>\".\n\n")
+  const msg = (test ? `TEST MODE: fresh messages go to ${MAIL_TEST_ADDR} only; nobody real is contacted.\n\n` : "LIVE: each person gets a FRESH email to the address we invited, subject \"Reminder: <their invite subject>\".\n\n")
     + `Nudge ${cands.length} ${year} player(s) (last send ${days}+ days ago)?\n\n${cands.map(c => c.player).join("\n")}` + skipNote;
   if (ui.alert("Send nudges", msg, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
 
   let runId = "";
   try { runId = mailRunBegin_(props); } catch (e){ runId = ""; }
   if (!runId){ say("GFY Mail", MAIL_ANOTHER_RUN); return; }
-  const failed = [], skipped = [], unconfirmed = [];
-  let sent = 0;
+  const failed = [], skipped = [], unconfirmed = [], notYet = [];
+  let sent = 0, stop = "";
   try {
     cands.forEach(c0 => {
+      if (!stop && mailOverBudget_(t0)) stop = "time";
+      if (stop){ notYet.push(c0.player); return; }
       let res;
       try {
         res = mailWithLock_(() => {
@@ -658,7 +680,9 @@ function mailSendNudges_(){
           const freshInv = mailTable_(invSheet).rows;
           const freshCur = freshInv.filter(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player));
           const c = mailNudgeRows_(freshCur, mailTable_(conSheet).rows, mailTable_(logSheet).rows, days, test).find(x => mailNorm_(x.player) === mailNorm_(c0.player));
-          if (!c || c.bounced || !c.threadId) return null;
+          if (!c) return { skip: "no longer due - answered, out, or nudged meanwhile" };
+          if (c.bounced) return { skip: "bounced meanwhile" };
+          if (!c.threadId) return { skip: "no confirmed invite thread" };
           if (!test && !c.address) throw new Error("no address on file");
           const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpTokenNL_(admin.getSheetByName(MAIL_TAB.rsvp), year, c.player, test)) : "";
           const m = mailBuild_(tpl, c.player, c.address, test, url);
@@ -667,13 +691,13 @@ function mailSendNudges_(){
           return { c, m, base };
         }, 10000);
       } catch (e){ failed.push(`${c0.player} (${e && e.message || e}; nothing was sent to them)`); return; }
-      if (!res){ skipped.push(c0.player); return; }
+      if (res.skip){ skipped.push(`${c0.player} (${res.skip})`); return; }
       const { c, m, base } = res;
       const realNote = test ? `TEST MODE (real address ${c.address})` : `season ${year} sent`;
       let threadId;
       try {
-        // ALWAYS a fresh email (never a thread reply): live goes to the exact logged address as "Re: <invite subject>";
-        // Gmail threads it for most recipients, and its own thread id is logged and watched.
+        // ALWAYS a fresh email (never a thread reply): live goes to the exact logged address as "Reminder: <invite subject>"
+        // (PM ruling: no fake "Re:"); its own thread id is logged and watched.
         const out = test ? m : { to: c.address, subject: mailNudgeSubject_(c.threadId, m.subject), body: m.body, htmlBody: m.htmlBody, attachments: m.attachments };
         threadId = mailSendNew_(out);
       } catch (e){
@@ -684,15 +708,16 @@ function mailSendNudges_(){
       try { mailWithLock_(() => mailLogSettle_(logSheet, runId, base, threadId, realNote), 10000); } catch (e){ unconfirmed.push(c.player); }
     });
   } finally { mailRunEnd_(props, runId); }
-  try { mailDashboard_(admin, props, false); } catch (e){ Logger.log("dashboard rebuild failed: " + (e && e.message || e)); }
+  try { mailDashboard_(admin, props, true); } catch (e){ Logger.log("dashboard rebuild failed: " + (e && e.message || e)); }
   say("GFY Mail", `${test ? "TEST " : ""}Nudged ${sent} of ${cands.length}.`
     + (failed.length ? `\n\nNUDGE FAILED (a SendLog row stays, marked 'send error' if the email may have gone out — check Gmail Sent BEFORE re-running): ${failed.join("; ")}` : "")
-    + (skipped.length ? `\n\nSKIPPED (changed while sending): ${skipped.join(", ")}` : "")
+    + (stop === "time" ? `\n\n${mailNotYet_(notYet.length)}: ${notYet.join(", ")}` : "")
+    + (skipped.length ? `\n\nSKIPPED: ${skipped.join("; ")}` : "")
     + (unconfirmed.length ? `\n\nSent, but the SendLog row could not be settled (it stays 'pending' - fill its thread_id by hand): ${unconfirmed.join(", ")}` : "")
     + skipNote);
 }
 
-// "Re: " + the subject of the person's original invite (read from the logged invite thread). A missing,
+// "Reminder: " + the subject of the person's original invite (read from the logged invite thread). A missing,
 // deleted or unreadable thread is not an error: fall back to the nudge draft's own subject.
 function mailNudgeSubject_(threadId, fallback){
   let subject = "";
@@ -700,7 +725,7 @@ function mailNudgeSubject_(threadId, fallback){
     const thread = GmailApp.getThreadById(threadId);
     if (thread) subject = String(thread.getFirstMessageSubject() || "").trim();
   } catch (e){ subject = ""; }
-  return subject ? (/^re:/i.test(subject) ? subject : "Re: " + subject) : fallback;
+  return subject ? (/^reminder:/i.test(subject) ? subject : "Reminder: " + subject) : fallback;
 }
 
 // ---- B: RSVP links (Web App in this same project) ---------------------------------
@@ -728,7 +753,6 @@ function mailRsvpUrl_(props, token){
 // One random token per (year, player, test?), created once and reused. Stored ONLY in the private RSVP tab.
 // TEST-mode sends use their own tokens (RSVP.test = TRUE) so a rehearsal answer can never sit on the
 // token a real player later receives; live sends never reuse a test token.
-function mailRsvpToken_(sheet, year, player, test){ return mailWithLock_(() => mailRsvpTokenNL_(sheet, year, player, test)); }
 // Caller MUST already hold the script lock (the lock is not reentrant).
 function mailRsvpTokenNL_(sheet, year, player, test){
   mailEnsureHeader_(sheet, "test");
@@ -840,7 +864,7 @@ function recordRsvp(token, choice){
       catch (e2){ Logger.log("could not log the public-write failure: " + (e2 && e2.message || e2)); }
     }
   });
-  try { mailDashboard_(ctx.admin, props, false); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
+  try { mailDashboard_(ctx.admin, props, false, true); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
   return { answer: c, first: out.player.split(/\s+/)[0] };
 }
 
@@ -893,6 +917,7 @@ function mailLooksYes_(text){
 
 // ---- E: health alerts -------------------------------------------------------------
 
+const MAIL_THROWS_MISSING = 3;                           // consecutive unreadable scans before a thread counts as missing
 const MAIL_SCAN_BUDGET_MS = 270000;                      // 4.5 min of the 6 min execution limit
 const MAIL_ALERT_STALE_MS = 3 * 60 * 60 * 1000;
 const MAIL_ALERT_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -948,8 +973,12 @@ function mailScan_(){
   let autoIds;
   try { autoIds = JSON.parse(props.getProperty("SCAN_AUTO") || "[]"); if (!Array.isArray(autoIds)) autoIds = []; } catch (e){ autoIds = []; }
   const autoSeen = new Set(autoIds);
-  let missing;
-  try { missing = JSON.parse(props.getProperty("SCAN_MISSING") || "[]"); if (!Array.isArray(missing)) missing = []; } catch (e){ missing = []; }
+  // threads Gmail no longer has: [{ k: "invite" | "nudge", id: thread id, p: player }] - keyed per THREAD so one
+  // healthy sibling thread can never erase another's entry (deterministic whatever order the threads are read in)
+  let missing = mailMissingLoad_(props.getProperty("SCAN_MISSING"));
+  // consecutive scans in which getThreadById THREW, per thread id: 1-2 = a scan error, the 3rd = treat as missing
+  let throwsN = {};
+  try { throwsN = JSON.parse(props.getProperty("SCAN_THROWS") || "{}"); if (!throwsN || typeof throwsN !== "object" || Array.isArray(throwsN)) throwsN = {}; } catch (e){ throwsN = {}; }
 
   // every logged LIVE thread (invites AND fresh nudge threads), once each; test-mode rows are never watched
   const watched = new Set();
@@ -970,11 +999,18 @@ function mailScan_(){
     done++;
     const entry = entries[at];
     const player = String(entry.player).trim(), pk = mailNorm_(player);
-    if (responded.has(pk)){ missing = missing.filter(n => mailNorm_(n) !== pk); continue; }     // already answered: no Gmail calls
+    if (responded.has(pk)){ missing = missing.filter(m => mailNorm_(m.p) !== pk); continue; }     // already answered: no Gmail calls
+    const tid = String(entry.thread_id).trim(), kind = mailNorm_(entry.what) === "nudge" ? "nudge" : "invite";
     try {
-      const thread = GmailApp.getThreadById(String(entry.thread_id).trim());
-      if (!thread){ if (!missing.some(n => mailNorm_(n) === pk)) missing.push(player); continue; }   // deleted in Gmail: reported on the Dashboard, not an error
-      missing = missing.filter(n => mailNorm_(n) !== pk);
+      let thread;
+      try { thread = GmailApp.getThreadById(tid); delete throwsN[tid]; }
+      catch (ge){
+        const n = (Number(throwsN[tid]) || 0) + 1; throwsN[tid] = n;
+        if (n < MAIL_THROWS_MISSING) throw ge;      // 1st / 2nd consecutive throw: a real scan error
+        thread = null;                              // 3rd: Gmail cannot read it - same as deleted, never a permanent failure
+      }
+      if (!thread){ if (!missing.some(m => m.id === tid)) missing.push({ k: kind, id: tid, p: player }); continue; }   // deleted in Gmail: reported on the Dashboard, not an error
+      missing = missing.filter(m => !(m.id === tid || (m.id === "" && m.k === kind && mailNorm_(m.p) === pk)));
       let replied = false;
       thread.getMessages().forEach(msg => {
         const id = String(msg.getId());
@@ -997,6 +1033,8 @@ function mailScan_(){
   }
   props.setProperty("SCAN_CURSOR", partial ? String(at) : "0");
   props.setProperty("SCAN_MISSING", JSON.stringify(missing));
+  const liveIds = new Set(entries.map(x => String(x.thread_id).trim())); Object.keys(throwsN).forEach(k => { if (!liveIds.has(k)) delete throwsN[k]; });
+  props.setProperty("SCAN_THROWS", JSON.stringify(throwsN));
   props.setProperty("SCAN_AUTO", JSON.stringify(autoIds.slice(-250)));
 
   if (!errors.length && !partial && readme){     // timestamp only - never names (START HERE publication is a TODO above)
@@ -1006,6 +1044,12 @@ function mailScan_(){
   // Rebuild the private Dashboard even after a failed scan (so STALE can show).
   try { mailDashboard_(admin, props, true); } catch (e){ Logger.log("dashboard rebuild failed: " + (e && e.message || e)); }
   if (errors.length) throw new Error("reply scan incomplete — " + errors.join("; "));
+}
+
+function mailMissingLoad_(raw){
+  let a; try { a = JSON.parse(raw || "[]"); } catch (e){ a = []; }
+  if (!Array.isArray(a)) return [];
+  return a.map(x => typeof x === "string" ? { k: "invite", id: "", p: x } : x).filter(x => x && typeof x === "object" && x.p);     // an older run stored bare names
 }
 
 function mailNoteBounce_(conSheet, player, date){
@@ -1062,7 +1106,7 @@ function mailOnEditRun_(e){
       if (row && "committed" in pt.idx && mailYes_(row.committed)) note(player, "confirm unticked - committed left ticked on the public sheet (untick it there by hand if wanted)");
     }
   });
-  try { mailDashboard_(SpreadsheetApp.getActiveSpreadsheet(), PropertiesService.getScriptProperties(), false); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
+  try { mailDashboard_(SpreadsheetApp.getActiveSpreadsheet(), PropertiesService.getScriptProperties(), false, true); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
 }
 
 // ---- adminPolish (menu: GFY Mail -> Polish admin sheet) -----------------------
@@ -1176,7 +1220,7 @@ function mailAdminPolish_(){
 // ---- Dashboard (PRIVATE admin tab - names are fine here, never on a published tab) ----
 
 const MAIL_DASH_LISTS = ["Needs nudge", "Bounced", "Unconfirmed looks_yes", "Name mismatches", "Changed answer \u2014 fix by hand", "RSVP from out / DNI", "Pending / unconfirmed sends"];
-const MAIL_DASH_COL0 = 4;                               // lists live in D..G, headers on row 2, entries from row 3
+const MAIL_DASH_COL0 = 4;                               // lists live in D..J (7 lists), headers on row 2, entries from row 3
 const MAIL_DASH_LABELS = { nudge: "nudge after (days)", scan: "last reply scan", status: "scan status" };
 
 function mailTrimGrid_(g){
@@ -1194,11 +1238,28 @@ function mailDateOf_(v){
 
 // The rebuild runs under the script lock (it rewrites the whole tab). `refreshDrafts` = read the Gmail drafts to
 // re-check the template (slow): only adminPolish / the menu / the scan do; RSVP / onEdit / nudge rebuilds reuse the
-// status cached in the TPL_STATUS Script Property.
-function mailDashboard_(admin, props, refreshDrafts){
-  mailWithLock_(() => mailDashboardNL_(admin, props, !!refreshDrafts));
+// status cached in the TPL_STATUS Script Property. The slow Gmail draft read happens BEFORE the lock is taken.
+// `debounce` (RSVP / onEdit rebuilds only): skip when the last rebuild (DASH_AT) is under 60 s old; the scan,
+// the menu items and the end of a send/nudge run never debounce.
+const MAIL_DASH_DEBOUNCE_MS = 60000;
+function mailDashboard_(admin, props, refreshDrafts, debounce){
+  if (debounce){
+    const age = Date.now() - (Number(props.getProperty("DASH_AT")) || 0);
+    if (age >= 0 && age < MAIL_DASH_DEBOUNCE_MS) return;
+  }
+  const tplStatus = refreshDrafts ? mailTplStatusLive_(props) : null;
+  mailWithLock_(() => mailDashboardNL_(admin, props, tplStatus));
+  try { props.setProperty("DASH_AT", String(Date.now())); } catch (e){ /* debounce stamp only */ }
 }
-function mailDashboardNL_(admin, props, refreshDrafts){
+function mailTplStatusLive_(props){
+  try {
+    const t = mailLoadDraft_(mailTplPrefix_(props));
+    if (t.ok) return `OK \u2014 ${t.subject}`;
+    return ({ none: "MISSING \u2014 ", many: "2+ drafts \u2014 ", fill: "has [FILL] spots \u2014 " }[t.kind] || "BLOCKED \u2014 ") + t.msg;
+  } catch (e){ return "UNKNOWN \u2014 Gmail unreadable"; }
+}
+// Caller holds the lock. tplStatus = a freshly read status (string) or null = use the cached TPL_STATUS.
+function mailDashboardNL_(admin, props, tplStatus){
   let sh = admin.getSheetByName(MAIL_TAB.dash);
   if (!sh) sh = admin.insertSheet(MAIL_TAB.dash);
 
@@ -1290,24 +1351,14 @@ function mailDashboardNL_(admin, props, refreshDrafts){
     status = isNaN(ms) ? "STALE - unreadable scan time" : (Date.now() - ms > MAIL_STALE_MS ? "STALE - over 1 h old" : "ok");
   }
 
-  const draftStatusLive = prefix => {
-    try {
-      const t = mailLoadDraft_(prefix);
-      if (t.ok) return `OK \u2014 ${t.subject}`;
-      return ({ none: "MISSING \u2014 ", many: "2+ drafts \u2014 ", fill: "has [FILL] spots \u2014 " }[t.kind] || "BLOCKED \u2014 ") + t.msg;
-    } catch (e){ return "UNKNOWN \u2014 Gmail unreadable"; }
-  };
-  let tplStatus;
-  if (refreshDrafts){
-    tplStatus = draftStatusLive(mailTplPrefix_(props));
+  if (tplStatus != null){
     try { props.setProperty("TPL_STATUS", String(tplStatus).slice(0, 600)); } catch (e){ /* cache only */ }
   } else {
     tplStatus = props.getProperty("TPL_STATUS") || "not checked yet \u2014 run Polish admin sheet";
   }
-  try {
-    const miss = JSON.parse(props.getProperty("SCAN_MISSING") || "[]");
-    if (Array.isArray(miss) && miss.length) notes.push("invite thread missing in Gmail (deleted?) - replies not watched for: " + miss.join(", "));
-  } catch (e){ /* ignore a corrupt property */ }
+  const missByKind = {};      // per THREAD kind (an invite thread and a nudge thread are different things)
+  mailMissingLoad_(props.getProperty("SCAN_MISSING")).forEach(m => { (missByKind[m.k] = missByKind[m.k] || new Set()).add(String(m.p).trim()); });
+  ["invite", "nudge"].forEach(k => { if (missByKind[k] && missByKind[k].size) notes.push(`${k} thread missing in Gmail (deleted?) - replies not watched for: ` + Array.from(missByKind[k]).sort().join(", ")); });
   if (admin.getSheetByName(MAIL_TAB.oldTpl)) notes.push("InviteTemplate tab is no longer used \u2014 safe to delete");
   const L = MAIL_DASH_LABELS;
   const left = [
