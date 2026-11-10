@@ -1349,6 +1349,7 @@ function mailDashboardNL_(admin, props, tplStatus){
       const pr = cur.find(x => mailNorm_(x.player) === mailNorm_(r.player));
       const dni = dniSet.has(mailNorm_(r.player)), out = !!pr && isOut(pr);
       if (!dni && !out) return;
+      if (!dni && /^out$/i.test(String(r.answer).trim())) return;     // OUT from an out/declined row is consistent, not a flag
       lists["RSVP from out / DNI"].push(String(r.player).trim());
       if (out && !dni && String(r.answer).trim().toUpperCase() === "IN") lists["Changed answer \u2014 fix by hand"].push(String(r.player).trim());
     });

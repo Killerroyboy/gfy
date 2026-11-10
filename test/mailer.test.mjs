@@ -1252,6 +1252,12 @@ const todayStr = new Date().toISOString().slice(0, 10);
   const dee = x.invSheet.rows.find(y => y[1] === "Dee Out");
   check("M5b: OUT/declined -> IN: committed is NOT ticked, status stays 'declined'; the player lands on 'Changed answer - fix by hand' and the out/DNI list",
     dee[5] === false && dee[4] === "declined" && (dashList(x, "Changed answer — fix by hand") || []).includes("Dee Out") && (dashList(x, "RSVP from out / DNI") || []).includes("Dee Out"), JSON.stringify([dee, dashText(x)]));
+  const y = rsvpWorld({ noSend: true, rsvp: [[2027, "Ed Exit", "E".repeat(24), "", "", "", ""]],
+    contacts: [["Ed Exit", "e@example.com", "", "", "FALSE", "", ""]], invites: [[2027, "Ed Exit", true, false, "", false, ""]] });
+  rsvpGo(y, "Ed Exit", "OUT");
+  const ed = y.invSheet.rows.find(z => z[1] === "Ed Exit");
+  check("M5c: a plain OUT tap (status becomes 'declined') is consistent - NOT listed on 'RSVP from out / DNI' (staging e2e false alarm)",
+    ed[4] === "declined" && !(dashList(y, "RSVP from out / DNI") || []).includes("Ed Exit"), JSON.stringify([ed, dashList(y, "RSVP from out / DNI")]));
   noteWrites(w); noteWrites(x);
 }
 // L1: fill-down over Replies - the player counts as confirmed if ANY of their rows is ticked
