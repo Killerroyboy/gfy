@@ -735,6 +735,7 @@ function mailLooksYes_(text){
 
 // ---- E: health alerts -------------------------------------------------------------
 
+const MAIL_SCAN_BUDGET_MS = 270000;                      // 4.5 min of the 6 min execution limit
 const MAIL_ALERT_STALE_MS = 3 * 60 * 60 * 1000;
 const MAIL_ALERT_EVERY_MS = 24 * 60 * 60 * 1000;
 
@@ -780,28 +781,46 @@ function mailScan_(){
 
   mailEnsureHeader_(repSheet, "msg_id");
   const me = Session.getEffectiveUser().getEmail();
-  const year = mailCurrentYear_(mailTable_(invSheet).rows);
+  const invRows = mailTable_(invSheet).rows, year = mailCurrentYear_(invRows);
   const test = mailIsTest_(props);                  // TEST MODE: the public sheet is never written (the Dashboard says what would be)
   const seen = new Set(mailTable_(repSheet).rows.map(r => String(r.msg_id)));
+  const responded = new Set(invRows.filter(r => (parseInt(r.year, 10) || 0) === year && mailYes_(r.responded)).map(r => mailNorm_(r.player)));
   const errors = [];
+  let missing;
+  try { missing = JSON.parse(props.getProperty("SCAN_MISSING") || "[]"); if (!Array.isArray(missing)) missing = []; } catch (e){ missing = []; }
 
   // every logged LIVE thread (invites AND fresh nudge threads), once each; test-mode rows are never watched
   const watched = new Set();
-  mailTable_(logSheet).rows.filter(r => { const w = mailNorm_(r.what); return (w === "invite" || w === "nudge") && String(r.thread_id || "").trim(); }).filter(r => {
+  const entries = mailTable_(logSheet).rows.filter(r => { const w = mailNorm_(r.what); return (w === "invite" || w === "nudge") && String(r.thread_id || "").trim(); }).filter(r => {
     const id = String(r.thread_id).trim(); if (watched.has(id)) return false; watched.add(id); return true;
-  }).forEach(entry => {
-    const player = String(entry.player).trim();
+  });
+
+  // Time budget (Apps Script kills an execution at 6 min): stop early, remember where, resume next run.
+  // The last-scan stamp is only written when a whole pass over the threads has completed.
+  const rawBudget = props.getProperty("SCAN_BUDGET_MS");
+  const budget = rawBudget != null && String(rawBudget).trim() !== "" && !isNaN(Number(rawBudget)) ? Number(rawBudget) : MAIL_SCAN_BUDGET_MS;
+  const t0 = Date.now();
+  let at = parseInt(props.getProperty("SCAN_CURSOR"), 10) || 0;
+  if (at < 0 || at >= entries.length) at = 0;
+  let partial = false, done = 0;
+  for (; at < entries.length; at++){
+    if (done > 0 && Date.now() - t0 > budget){ partial = true; break; }
+    done++;
+    const entry = entries[at];
+    const player = String(entry.player).trim(), pk = mailNorm_(player);
+    if (responded.has(pk)){ missing = missing.filter(n => mailNorm_(n) !== pk); continue; }     // already answered: no Gmail calls
     try {
       const thread = GmailApp.getThreadById(String(entry.thread_id).trim());
-      if (!thread) throw new Error("thread not found");
+      if (!thread){ if (!missing.some(n => mailNorm_(n) === pk)) missing.push(player); continue; }   // deleted in Gmail: reported on the Dashboard, not an error
+      missing = missing.filter(n => mailNorm_(n) !== pk);
       let replied = false;
       thread.getMessages().forEach(msg => {
+        const id = String(msg.getId());
+        if (seen.has(id)){ replied = true; return; }     // already logged => it WAS a real reply: no classification, no raw fetch
         const kind = mailClassify_(msg, me);
         if (kind === "own" || kind === "auto") return;
         if (kind === "bounce"){ mailNoteBounce_(conSheet, player, mailToday_(msg.getDate())); return; }
         replied = true;
-        const id = String(msg.getId());
-        if (seen.has(id)) return;
         seen.add(id);
         const snippet = mailSnippet_(msg.getPlainBody());
         mailAppend_(repSheet, {
@@ -809,11 +828,13 @@ function mailScan_(){
           looks_yes: mailLooksYes_(snippet), confirm: false, msg_id: id,
         });
       });
-      if (replied && !test) mailTickPublic_(invSheet, year, player, "responded");
+      if (replied && !test){ mailTickPublic_(invSheet, year, player, "responded"); responded.add(pk); }
     } catch (e){ errors.push(`${player}: ${e && e.message || e}`); }
-  });
+  }
+  props.setProperty("SCAN_CURSOR", partial ? String(at) : "0");
+  props.setProperty("SCAN_MISSING", JSON.stringify(missing));
 
-  if (!errors.length && readme){     // timestamp only — never names (START HERE publication is a TODO above)
+  if (!errors.length && !partial && readme){     // timestamp only - never names (START HERE publication is a TODO above)
     readme.getRange(1, 2).setValue("last_reply_scan");
     readme.getRange(2, 2).setNumberFormat("@").setValue(mailStamp_());
   }
@@ -910,25 +931,32 @@ function mailProtectHeader_(sh){
 }
 
 // Real checkboxes on the closed column list; "TRUE"/"FALSE" TEXT becomes a real
-// boolean, nothing else is touched. Validation stops at last data row + 50.
+// boolean, nothing else is touched - a cell holding a FORMULA is never overwritten.
+// Validation stops at last data row + 50.
 function mailCheckboxes_(sh, cols){
   cols.forEach(c => {
     const i = mailHeaderCol_(sh, c); if (!i) return;
     const last = sh.getLastRow();
     if (last >= 2){
       const rng = sh.getRange(2, i, last - 1, 1);
-      const vals = rng.getValues();
-      let changed = false;
-      const out = vals.map(r => {
+      const vals = rng.getValues(), fx = rng.getFormulas();
+      vals.forEach((r, k) => {
         const v = r[0];
-        if (typeof v === "string" && /^(true|false)$/i.test(v.trim())){ changed = true; return [/^true$/i.test(v.trim())]; }
-        return [v];
+        if (typeof v === "string" && /^(true|false)$/i.test(v.trim()) && !String((fx[k] || [""])[0] || "")) sh.getRange(2 + k, i).setValue(/^true$/i.test(v.trim()));
       });
-      if (changed) rng.setValues(out);
     }
     const end = Math.min(sh.getMaxRows(), last + 50);
     sh.getRange(2, i, Math.max(1, end - 1), 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
   });
+}
+
+// Our conditional-format rules carry a harmless tag clause so they can be told apart from a user's own rules.
+const MAIL_CF_TAG = '"' + MAIL_POLISH_TAG + '"<>""';
+function mailIsOurRule_(r){
+  try {
+    const vals = r.getBooleanCondition().getCriteriaValues() || [];
+    return vals.some(v => { const f = String(v); return f.indexOf(MAIL_POLISH_TAG) >= 0 || /REGEXMATCH\(\$[A-Z]+2&""/.test(f) || /INDIRECT\("Dashboard!/.test(f); });   // tagged, or an untagged one from an earlier version
+  } catch (e){ return false; }
 }
 
 function mailContactsRules_(sh){
@@ -939,7 +967,7 @@ function mailContactsRules_(sh){
     const i = mailHeaderCol_(sh, h); if (!i) return;
     const L = mailColLetter_(i);
     rules.push(SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied(`=AND($${L}2<>"",NOT(REGEXMATCH($${L}2&"",${re})))`)       // highlight only - never rejects input
+      .whenFormulaSatisfied(`=AND($${L}2<>"",NOT(REGEXMATCH($${L}2&"",${re})),${MAIL_CF_TAG})`)       // highlight only - never rejects input
       .setBackground("#f4cccc").setRanges([sh.getRange(2, i, n, 1)]).build());
   });
   const p = mailHeaderCol_(sh, "player");
@@ -947,10 +975,12 @@ function mailContactsRules_(sh){
     const P = mailColLetter_(p), M = mailColLetter_(MAIL_DASH_COL0 + MAIL_DASH_LISTS.indexOf("Name mismatches"));
     const esc = `SUBSTITUTE(SUBSTITUTE(SUBSTITUTE($${P}2,"~","~~"),"*","~*"),"?","~?")`;
     rules.push(SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied(`=AND($${P}2<>"",COUNTIF(INDIRECT("Dashboard!${M}3:${M}"),${esc})>0)`)
+      .whenFormulaSatisfied(`=AND($${P}2<>"",COUNTIF(INDIRECT("Dashboard!${M}3:${M}"),${esc})>0,${MAIL_CF_TAG})`)
       .setBackground("#fce5cd").setRanges([sh.getRange(2, p, n, 1)]).build());
   }
-  sh.setConditionalFormatRules(rules);                  // polish owns CF on Contacts (replaced wholesale, idempotent)
+  // replace ONLY our own rules (idempotent); the user's rules stay, ours go last
+  const keep = (sh.getConditionalFormatRules() || []).filter(r => !mailIsOurRule_(r));
+  sh.setConditionalFormatRules(keep.concat(rules));
 }
 
 function mailOrderTabs_(admin){
@@ -1096,6 +1126,10 @@ function mailDashboard_(admin, props){
       return ({ none: "MISSING \u2014 ", many: "2+ drafts \u2014 ", fill: "has [FILL] spots \u2014 " }[t.kind] || "BLOCKED \u2014 ") + t.msg;
     } catch (e){ return "UNKNOWN \u2014 Gmail unreadable"; }
   };
+  try {
+    const miss = JSON.parse(props.getProperty("SCAN_MISSING") || "[]");
+    if (Array.isArray(miss) && miss.length) notes.push("invite thread missing in Gmail (deleted?) - replies not watched for: " + miss.join(", "));
+  } catch (e){ /* ignore a corrupt property */ }
   if (admin.getSheetByName(MAIL_TAB.oldTpl)) notes.push("InviteTemplate tab is no longer used \u2014 safe to delete");
   const L = MAIL_DASH_LABELS;
   const left = [

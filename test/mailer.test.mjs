@@ -130,8 +130,9 @@ function world(o = {}) {
   const sent = []; const threads = {}; let tn = 0;
   const hooks = {};
   const flags = {};
+  const counters = { raw: 0, fetched: [] };
   const pendingDrafts = new Set();
-  const mkMsg = m => ({ getId: () => m.id, getFrom: () => m.from, getSubject: () => m.subject, getDate: () => new Date(m.date || "2027-01-05T12:00:00Z"), getPlainBody: () => m.body || "", getTo: () => m.to || "", getRawContent: () => (m.raw || "") + "\r\n\r\n" + (m.body || "") });
+  const mkMsg = m => ({ getId: () => m.id, getFrom: () => m.from, getSubject: () => m.subject, getDate: () => new Date(m.date || "2027-01-05T12:00:00Z"), getPlainBody: () => m.body || "", getTo: () => m.to || "", getRawContent: () => { counters.raw++; return (m.raw || "") + "\r\n\r\n" + (m.body || ""); } });
   const draftOps = [];
   const mkDraft = d => {
     const msg = { getSubject: () => d.subject, getBody: () => d.html, getPlainBody: () => d.plain, getAttachments: opt => {
@@ -156,7 +157,7 @@ function world(o = {}) {
       if (hooks.afterSend) hooks.afterSend(sent.length);
       return { getThread: () => ({ getId: () => id }) };
     } }; },
-    getThreadById: id => { if (o.threadError && o.threadError === id) throw new Error("gmail down"); const t = threads[id]; if (!t) return null;
+    getThreadById: id => { counters.fetched.push(id); if (o.threadError && o.threadError === id) throw new Error("gmail down"); const t = threads[id]; if (!t) return null;
       // Gmail addresses a reply to the LAST message's sender (or, for our own message, its recipients).
       const rep = all => (body, opts) => { if (o.replyFails && o.replyFails === id) throw new Error("reply boom"); const last = t.msgs[t.msgs.length - 1]; const toWho = /me@gmail\.com/.test(last.from) ? last.to : last.from;
         threadReplies.push({ id, body, html: opts && opts.htmlBody, attachments: opts && opts.attachments, subject: opts && opts.subject, all, to: toWho }); if (hooks.afterReply) hooks.afterReply(threadReplies.length); t.msgs.push({ id: id + "m" + t.msgs.length, from: "Riley <me@gmail.com>", to: toWho, subject: "Re: x", body }); log.push({ ev: "send", to: "(thread " + id + ")" }); };
@@ -195,7 +196,7 @@ function world(o = {}) {
   const sheet = n => admin.getSheetByName(n);
   const invSheet = pub.getSheetByName("Invites");
   const addIncoming = (threadId, m) => { threads[threadId].msgs.push({ id: threadId + "m" + threads[threadId].msgs.length, ...m }); };
-  return { M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages, hooks, lockState, pendingDrafts, flags };
+  return { M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages, hooks, lockState, pendingDrafts, flags, counters };
 }
 const run = (w, fn) => { try { return { ok: true, v: w.M[fn]() }; } catch (e) { return { ok: false, e: String(e && e.message || e) }; } };
 const pubWrites = w => w.log.filter(e => e.ev !== "lock" && e.ev !== "unlock" && e.ev !== "send" && e.sheet === "Invites");
@@ -1403,6 +1404,65 @@ for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
   const g = dw.M.doGet({ parameter: { t: "A".repeat(24) } });
   let rr = true; try { dw.M.recordRsvp("A".repeat(24), "MAYBE"); } catch (x) { rr = false; }
   check("M4g: doGet and recordRsvp stay web-callable (no UI needed)", /are you in/.test(String(g.html)) && rr && dw.sheet("RSVP").rows[1][3] === "MAYBE", "");
+}
+
+// M6: scan quota / robustness
+{
+  const { w, tid } = afterSend();
+  w.invSheet.rows.find(x => x[1] === "Alice Able")[3] = true;          // Alice already responded (publicly)
+  w.addIncoming(tid("bob@example.com"), { from: "Bob <bob@example.com>", subject: "Re:", body: "yes" });
+  w.counters.fetched.length = 0;
+  run(w, "scanReplies");
+  check("M6a: a thread whose player is already `responded` is not fetched at all; others still are",
+    !w.counters.fetched.includes(tid("alice@example.com")) && w.counters.fetched.includes(tid("bob@example.com")), JSON.stringify(w.counters.fetched));
+}
+{
+  const { w, tid } = afterSend();
+  w.props.GFY_MAIL_TEST = "";                                          // test mode: `responded` never ticks, so threads are revisited every scan
+  w.addIncoming(tid("alice@example.com"), { from: "Alice <alice@example.com>", subject: "Re:", body: "yes" });
+  w.addIncoming(tid("alice@example.com"), { from: "Riley <me@gmail.com>", subject: "Re:", body: "thanks" });
+  w.addIncoming(tid("alice@example.com"), { from: "Mail Delivery <mailer-daemon@x.com>", subject: "Bounce", body: "x" });
+  w.addIncoming(tid("alice@example.com"), { from: "Alice <alice@example.com>", subject: "Out of Office", body: "away" });
+  run(w, "scanReplies");
+  const raw1 = w.counters.raw;
+  run(w, "scanReplies");
+  check("M6b: getRawContent is only fetched when the cheap checks (already logged / own / bounce / auto subject) cannot decide: 1 real reply costs 1 raw fetch once, 0 on every re-scan",
+    raw1 === 1 && w.counters.raw === raw1, JSON.stringify([raw1, w.counters.raw]));
+}
+{
+  const { w, tid } = afterSend();
+  delete w.threads[tid("alice@example.com")];                          // Alice's invite thread was deleted in Gmail
+  w.addIncoming(tid("bob@example.com"), { from: "Bob <bob@example.com>", subject: "Re:", body: "yes in" });
+  const r = run(w, "scanReplies");
+  check("M6c: a deleted/missing thread does not fail the scan: it still succeeds, still stamps, processes the other threads, and the Dashboard names the missing one",
+    r.ok && w.invSheet.rows.find(x => x[1] === "Bob Baker")[3] === true && /^\d{4}-/.test(String(w.sheet("READ ME").rows[1][1])) && /missing[^"]*Alice Able/i.test(dashText(w)), r.e || dashText(w));
+  const r2 = run(w, "scanReplies");
+  check("M6c2: ... and keeps reporting it on later scans (no alert loop: it is not an error)", r2.ok && /missing[^"]*Alice Able/i.test(dashText(w)), r2.e);
+}
+{
+  const { w, tid } = afterSend({ props: { GFY_MAIL_TEST: "0", SCAN_BUDGET_MS: "-1" } });
+  w.addIncoming(tid("alice@example.com"), { from: "Alice <alice@example.com>", subject: "Re:", body: "yes" });
+  w.addIncoming(tid("bob@example.com"), { from: "Bob <bob@example.com>", subject: "Re:", body: "yes" });
+  const r1 = run(w, "scanReplies");
+  const after1 = w.sheet("Replies").rows.length - 1, stamp1 = String(w.sheet("READ ME").rows[1][1]);
+  const r2 = run(w, "scanReplies");
+  const after2 = w.sheet("Replies").rows.length - 1, stamp2 = String(w.sheet("READ ME").rows[1][1]);
+  check("M6d: the scan is budgeted: when the time budget is spent it stops, remembers where, does not stamp a success time, and the next run resumes and completes (then stamps)",
+    r1.ok && after1 === 1 && stamp1 === "" && r2.ok && after2 === 2 && /^\d{4}-/.test(stamp2), JSON.stringify([r1, after1, stamp1, r2, after2, stamp2]));
+}
+// L3: adminPolish never overwrites formulas and only replaces ITS OWN conditional-format rules
+{
+  const w = world({ contacts: [["Alice Able", "a@example.com", "", "", "TRUE", "", ""], ["Bob Baker", "b@example.com", "", "", "FALSE", "", ""]] });
+  const con = w.sheet("Contacts");
+  con.formulas["3,5"] = '=IF(1=1,"FALSE","TRUE")';                   // do_not_invite on Bob is a formula whose text result is "FALSE"
+  const userRule = { f: '=$A2="vip"', bg: "#00ff00", ranges: [], getBooleanCondition: () => ({ getCriteriaValues: () => ['=$A2="vip"'] }) };
+  con.rules = [userRule];
+  run(w, "adminPolish"); run(w, "adminPolish");
+  const mine = con.rules.filter(r => /gfy-admin-polish/.test(r.f || "")), others = con.rules.filter(r => !/gfy-admin-polish/.test(r.f || ""));
+  check("L3a: a formula in a checkbox column is left alone (still a formula, not overwritten by a literal)", con.formulas["3,5"] === '=IF(1=1,"FALSE","TRUE")', JSON.stringify([con.formulas, con.rows[2]]));
+  check("L3b: the text-TRUE next to it is still converted to a real checkbox boolean", con.rows[1][4] === true, JSON.stringify(con.rows[1]));
+  check("L3c: a user's own conditional-format rule on Contacts survives (twice), and our 3 tagged rules appear exactly once each after two runs",
+    others.length === 1 && others[0] === userRule && mine.length === 3, JSON.stringify(con.rules.map(r => r.f)));
 }
 
 // ---------- no-'@' leak test ----------
