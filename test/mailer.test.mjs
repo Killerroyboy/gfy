@@ -1340,6 +1340,29 @@ for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
   check("M3f: the nudge draft gets the same button treatment", nd.threadReplies.length >= 1 && nd.threadReplies.every(t => /<a href="[^"]+" style="[^"]*#0E2019/i.test(t.html)), JSON.stringify(nd.threadReplies));
 }
 
+// B: staging isolation - TEMPLATE_PREFIX / NUDGE_PREFIX script properties, exact prefix match
+{
+  const STG = { ...TPL_DRAFT, subject: "[GFY STAGING TEMPLATE] STAGING {first}" };
+  const LONGER = { ...TPL_DRAFT, subject: "[GFY TEMPLATE STAGING] longer {first}" };
+  const live = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [STG, LONGER, TPL_DRAFT] });
+  run(live, "sendInvites");
+  check("B1: LIVE ignores staging-prefixed drafts: with a '[GFY STAGING TEMPLATE]' and a longer '[GFY TEMPLATE STAGING]' draft present, the one real template is used (exactly 1 found)",
+    live.sent.length === 2 && live.sent.every(m => !/STAGING/.test(m.subject)) && live.sent.some(m => m.subject === "Good Friends Yearly 2027, Alice?"), JSON.stringify([live.sent.map(m => m.subject), live.alerts]));
+  const only = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [STG, LONGER] });
+  run(only, "sendInvites");
+  check("B2: LIVE with only staging drafts present => 'no template draft' BLOCK, nothing sent", only.sent.length === 0 && only.alerts.some(a => /No draft/i.test(a.msg)), JSON.stringify(only.alerts));
+  const stg = world({ props: { GFY_MAIL_TEST: "0", TEMPLATE_PREFIX: "[GFY STAGING TEMPLATE]" }, drafts: [STG, TPL_DRAFT] });
+  run(stg, "sendInvites");
+  check("B3: TEMPLATE_PREFIX picks the staging draft and ignores the live one (prefix stripped from the subject)", stg.sent.length === 2 && stg.sent.every(m => /^STAGING (Alice|Bob)$/.test(m.subject)), JSON.stringify(stg.sent.map(m => m.subject)));
+  const SN = { subject: "[GFY STAGING NUDGE] stg {first}", html: "<p>STG {first} {rsvp}</p>", plain: "STG {first}: {rsvp}" };
+  const nu = nudgeWorld({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP, NUDGE_PREFIX: "[GFY STAGING NUDGE]" }, drafts: [RSVP_DRAFT, NUDGE_DRAFT, SN] });
+  run(nu, "sendNudges");
+  check("B4: NUDGE_PREFIX likewise (a staging nudge draft is used; the live [GFY NUDGE] draft is ignored)", nu.threadReplies.length >= 1 && nu.threadReplies.every(t => /^STG (Alice|Bob): /.test(t.body)), JSON.stringify(nu.threadReplies.map(t => t.body)));
+  const dl = world({ drafts: [STG, TPL_DRAFT] }); run(dl, "adminPolish");
+  const ds = world({ props: { TEMPLATE_PREFIX: "[GFY STAGING TEMPLATE]" }, drafts: [STG, TPL_DRAFT] }); run(ds, "adminPolish");
+  check("B5: the Dashboard's template-draft line follows the same prefix", /^OK — Good Friends Yearly/.test(dashVals(dl)["template draft"]) && /^OK — STAGING/.test(dashVals(ds)["template draft"]), JSON.stringify([dashVals(dl)["template draft"], dashVals(ds)["template draft"]]));
+}
+
 // ---------- no-'@' leak test ----------
 {
   const bad = allPublicWrites.filter(e => /@/.test(String(e.v)));
