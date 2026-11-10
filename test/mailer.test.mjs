@@ -1310,6 +1310,36 @@ for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
     r.ok && !!conf && /Alice Able/.test(conf.msg) && /Bob Baker/.test(conf.msg) && w.sent.length >= 2 && w.sent.every(m => m.to === TEST_ADDR) && w.sheet("SendLog").rows.slice(1).filter(x => x[3] === "nudge-test").length === w.sent.length && pubWrites(w).length === 0, r.e || JSON.stringify([w.alerts, w.sent.map(m => m.to)]));
 }
 
+// M3: Gmail rewrites links typed in a draft (javascript:void, google.com/url?q= wrappers, no button styles) - the mailer injects the button
+{
+  const BTN = { subject: "[GFY TEMPLATE] In, {first}?", html: "<p>Hi {first}</p><p>{rsvp_button}</p><p>or {rsvp}</p>", plain: "Hi {first}\nTap: {rsvp_button}\nor {rsvp}" };
+  const w = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [BTN] });
+  const r = run(w, "sendInvites");
+  const a = w.sent.find(x => x.to === "alice@example.com"), ta = tokenOf(w, "Alice Able"), url = `${WEBAPP}?t=${ta}`;
+  check("M3a: {rsvp_button} becomes a full inline-styled <a href=URL> in the HTML (GFY pine #0E2019 / bone #E9E3D3) and the bare URL in the plain body",
+    r.ok && !!a && a.html.includes(`<a href="${url}" style="`) && /background:#0E2019/i.test(a.html) && /color:#E9E3D3/i.test(a.html) && a.body === `Hi Alice\nTap: ${url}\nor ${url}`, r.e || JSON.stringify(a));
+  check("M3b: a bare {rsvp} in the HTML text is a linked URL (<a href=URL>URL</a>), never loose text", !!a && a.html.includes(`or <a href="${url}">${url}</a>`), JSON.stringify(a && a.html));
+  const nb = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [BTN] });
+  run(nb, "sendInvites");
+  check("M3c: {rsvp_button} counts as an RSVP token: without WEBAPP_URL the send is BLOCKED", nb.sent.length === 0 && nb.alerts.some(x => /WEBAPP_URL/.test(x.msg)), JSON.stringify(nb.alerts));
+  for (const [label, html, re] of [
+    ["href=\"javascript:void(0);\" (what Gmail turns a {rsvp} href into)", "<p><a href=\"javascript:void(0);\">IN</a> {first}</p>", /javascript/i],
+    ["a percent-encoded token href (%7Brsvp%7D)", "<p><a href=\"%7Brsvp%7D\">IN</a> {first}</p>", /%7B|encoded|token/i],
+  ]) {
+    const x = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [{ ...RSVP_DRAFT, html }] });
+    run(x, "sendInvites");
+    check(`M3d: a draft containing ${label} => BLOCKED with a clear message, nothing sent`, x.sent.length === 0 && !x.alerts.some(y => y.btns === "YES_NO") && x.alerts.some(y => re.test(y.msg) && /template|link/i.test(y.msg)), JSON.stringify(x.alerts));
+  }
+  const g = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [{ ...RSVP_DRAFT, html: "<p>Hi {first} <a href=\"https://www.google.com/url?q=https://example.com/menu%3Fa%3D1%26b%3D2&amp;sa=D&amp;source=gmail&amp;ust=1&amp;usg=AOv\">the menu</a> {rsvp_button}</p>", plain: "Hi {first} https://www.google.com/url?q=https://example.com/menu&sa=D {rsvp}" }] });
+  run(g, "sendInvites");
+  const ga = g.sent.find(x => x.to === "alice@example.com");
+  check("M3e: google.com/url?q= redirect wrappers in the copied draft are unwrapped back to the real URL (decoded q), in HTML and plain",
+    !!ga && ga.html.includes('href="https://example.com/menu?a=1&amp;b=2"') && !/google\.com\/url/.test(ga.html + ga.body) && ga.body.includes("https://example.com/menu "), JSON.stringify(ga));
+  const nd = nudgeWorld({ drafts: [BTN, { subject: "[GFY NUDGE] Still in, {first}?", html: "<p>{first}: {rsvp_button}</p>", plain: "{first}: {rsvp_button}" }] });
+  run(nd, "sendNudges");
+  check("M3f: the nudge draft gets the same button treatment", nd.threadReplies.length >= 1 && nd.threadReplies.every(t => /<a href="[^"]+" style="[^"]*#0E2019/i.test(t.html)), JSON.stringify(nd.threadReplies));
+}
+
 // ---------- no-'@' leak test ----------
 {
   const bad = allPublicWrites.filter(e => /@/.test(String(e.v)));

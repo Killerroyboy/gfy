@@ -217,12 +217,41 @@ function mailPlan_(contacts, invites, logRows){
 const mailHtmlEsc_ = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const MAIL_TOKEN_RE = /\{[A-Za-z][A-Za-z0-9_ -]*\}/g;     // word-like {tokens} only, so CSS braces never trip it
 
+// Exact prefix match. For a "[BRACKETED]" prefix the subject's own leading [bracket] token must equal it, so
+// "[GFY STAGING TEMPLATE]" or "[GFY TEMPLATE] extra"-style longer prefixes are never mistaken for "[GFY TEMPLATE]".
+function mailPrefixMatches_(subject, prefix){
+  const subj = mailNorm_(subject), want = mailNorm_(prefix);
+  if (!want) return false;
+  if (/^\[[^\]]*\]$/.test(want)){
+    const lead = subj.match(/^\[[^\]]*\]/);
+    return !!lead && lead[0] === want;
+  }
+  return subj.indexOf(want) === 0;
+}
+// Script properties TEMPLATE_PREFIX / NUDGE_PREFIX let a staging project share a Gmail account with live.
+function mailTplPrefix_(props){ return String(props.getProperty("TEMPLATE_PREFIX") || "").trim() || MAIL_TPL_PREFIX; }
+function mailNudgePrefix_(props){ return String(props.getProperty("NUDGE_PREFIX") || "").trim() || MAIL_NUDGE_PREFIX; }
+
+const MAIL_BUTTON_STYLE = "display:inline-block;padding:12px 22px;background:#0E2019;color:#E9E3D3;text-decoration:none;font-weight:bold;border-radius:6px;";
+const MAIL_BUTTON_LABEL = "Tell me: IN, OUT or MAYBE";
+
+/** Gmail wraps links it saves in a draft as https://www.google.com/url?q=<real>&sa=...; put the real URL back.
+ *  `html` re-escapes & for use inside an HTML attribute. */
+function mailUnwrapGoogle_(text, html){
+  return String(text).replace(/https?:\/\/(?:www\.)?google\.com\/url\?([^\s"'<>]*)/gi, (m, qs) => {
+    const mm = qs.replace(/&amp;/g, "&").match(/(?:^|&)q=([^&]*)/);
+    if (!mm) return m;
+    let real;
+    try { real = decodeURIComponent(mm[1].replace(/\+/g, " ")); } catch (e){ return m; }
+    return html ? real.replace(/&/g, "&amp;") : real;
+  });
+}
+
 /** Find THE template draft (subject starts with `prefix`, case-insensitive, trimmed).
  *  Returns { ok:true, subject, html, plain, attachments } or { ok:false, kind, msg }.
  *  The draft is only ever READ - never sent, updated or deleted. */
 function mailLoadDraft_(prefix){
-  const want = mailNorm_(prefix);
-  const found = GmailApp.getDrafts().filter(d => mailNorm_(d.getMessage().getSubject()).indexOf(want) === 0);
+  const found = GmailApp.getDrafts().filter(d => mailPrefixMatches_(d.getMessage().getSubject(), prefix));
   if (found.length !== 1){
     return { ok: false, kind: found.length ? "many" : "none",
       msg: found.length ? `Found ${found.length} drafts whose subject starts with ${prefix} - there must be exactly ONE. Delete the extras.`
@@ -231,27 +260,40 @@ function mailLoadDraft_(prefix){
   const m = found[0].getMessage();
   const raw = String(m.getSubject() || "").trim();
   const subject = raw.slice(prefix.length).trim();
-  const html = String(m.getBody() || ""), plain = String(m.getPlainBody() || "");
+  const html = mailUnwrapGoogle_(String(m.getBody() || ""), true), plain = mailUnwrapGoogle_(String(m.getPlainBody() || ""), false);
   if (/\[fill/i.test(raw + "\n" + html + "\n" + plain)) return { ok: false, kind: "fill", msg: "the template draft still has [FILL] spots" };
   const all = m.getAttachments({ includeInlineImages: true }) || [];
   const files = m.getAttachments({ includeInlineImages: false }) || [];
   if (all.length > files.length) return { ok: false, kind: "inline", msg: "The template draft has inline images, which this sender cannot copy safely (it would send a broken email). Remove them or use a normal attachment / a hosted image link." };
+  // Gmail's draft editor rewrites a typed {rsvp} href to javascript:void(0) (and strips button styling) - the button
+  // must come from the {rsvp_button} token, which the mailer turns into a real styled link.
+  if (/href\s*=\s*["']?\s*javascript:/i.test(html)) return { ok: false, kind: "badlink", msg: "The template draft has a link whose address Gmail replaced with javascript:void(0) (it does that to a typed {rsvp} link). Remove the link and put {rsvp_button} (or plain {rsvp}) in the text instead. Nothing sent." };
+  if (/%7B[^"'<>\s]*?%7D/i.test(html + "\n" + plain)) return { ok: false, kind: "badlink", msg: "The template draft has a link containing %7B...%7D (an encoded {token}, so it can never be filled in). Remove the link and put {rsvp_button} or {rsvp} in the text instead. Nothing sent." };
   const left = [];
-  [raw, html, plain].forEach(t => (String(t).replace(/\{(first|rsvp)\}/g, "").match(MAIL_TOKEN_RE) || []).forEach(x => { if (left.indexOf(x) < 0) left.push(x); }));
-  if (left.length) return { ok: false, kind: "token", msg: `The template draft has unreplaced ${left.join(" ")} - only {first} and {rsvp} are filled in. Nothing sent.` };
+  [raw, html, plain].forEach(t => (String(t).replace(/\{(first|rsvp|rsvp_button)\}/g, "").match(MAIL_TOKEN_RE) || []).forEach(x => { if (left.indexOf(x) < 0) left.push(x); }));
+  if (left.length) return { ok: false, kind: "token", msg: `The template draft has unreplaced ${left.join(" ")} - only {first}, {rsvp} and {rsvp_button} are filled in. Nothing sent.` };
   if (!subject || !(html.trim() || plain.trim())) return { ok: false, kind: "empty", msg: "The template draft needs a subject (after the prefix) and a body." };
-  return { ok: true, subject, html, plain, attachments: files, hasRsvp: /\{rsvp\}/.test(raw + html + plain) };
+  return { ok: true, subject, html, plain, attachments: files, hasRsvp: /\{rsvp(_button)?\}/.test(raw + html + plain) };
 }
 
-/** Per-recipient copy of the draft. Names are HTML-escaped inside the HTML body only. */
+/** Per-recipient copy of the draft. Names are HTML-escaped inside the HTML body only.
+ *  {rsvp_button} -> a full inline-styled <a> (HTML) / the bare URL (plain, subject); {rsvp} -> the URL
+ *  (a linked URL in HTML text, the plain URL inside an href="{rsvp}" attribute). {first} is filled LAST so a
+ *  name can never inject a token. */
 function mailBuild_(tpl, player, address, test, rsvpUrl){
   const first = String(player).trim().split(/\s+/)[0];
-  const fill = (t, esc) => String(t).replace(/\{first\}/g, () => (esc ? mailHtmlEsc_(first) : first)).replace(/\{rsvp\}/g, () => (esc ? mailHtmlEsc_(rsvpUrl || "") : (rsvpUrl || "")));
-  const subject = fill(tpl.subject, false);
+  const url = rsvpUrl || "", urlH = mailHtmlEsc_(url);
+  const plainFill = t => String(t).replace(/\{rsvp_button\}/g, () => url).replace(/\{rsvp\}/g, () => url).replace(/\{first\}/g, () => first);
+  const htmlFill = t => String(t)
+    .replace(/href\s*=\s*(["'])\{rsvp\}\1/g, (m, q) => `href=${q}${urlH}${q}`)
+    .replace(/\{rsvp_button\}/g, () => url ? `<a href="${urlH}" style="${MAIL_BUTTON_STYLE}">${MAIL_BUTTON_LABEL}</a>` : "")
+    .replace(/\{rsvp\}/g, () => url ? `<a href="${urlH}">${urlH}</a>` : "")
+    .replace(/\{first\}/g, () => mailHtmlEsc_(first));
+  const subject = plainFill(tpl.subject);
   return {
     to: test ? MAIL_TEST_ADDR : address,
     subject: test ? `[TEST \u2192 ${address}] ${subject}` : subject,
-    body: fill(tpl.plain, false), htmlBody: fill(tpl.html, true), attachments: tpl.attachments || [],
+    body: plainFill(tpl.plain), htmlBody: htmlFill(tpl.html), attachments: tpl.attachments || [],
   };
 }
 
@@ -285,7 +327,7 @@ function sendInvites(){
   if (!plan.recipients.length){ say("GFY Mail", `Nobody to invite for ${plan.year}.` + (plan.noAddress.length ? `\nNo address on file: ${plan.noAddress.join(", ")}` : "") + dupNote); return; }
 
   let tpl;
-  try { tpl = mailLoadDraft_(MAIL_TPL_PREFIX); } catch (e){ say("GFY Mail", "Could not read Gmail drafts (" + (e && e.message || e) + "). Nothing sent."); return; }
+  try { tpl = mailLoadDraft_(mailTplPrefix_(props)); } catch (e){ say("GFY Mail", "Could not read Gmail drafts (" + (e && e.message || e) + "). Nothing sent."); return; }
   if (!tpl.ok){ say("Send BLOCKED - template draft (nothing was sent)", tpl.msg); return; }
 
   const rs = mailRsvpPrereq_(props, admin, tpl);
@@ -409,7 +451,7 @@ function sendNudges(){
   if (!invSheet || !conSheet || !logSheet){ say("GFY Mail", "Missing tab (public Invites, or Admin Contacts / SendLog). Nothing sent."); return; }
 
   let tpl;
-  try { tpl = mailLoadDraft_(MAIL_NUDGE_PREFIX); } catch (e){ say("GFY Mail", "Could not read Gmail drafts (" + (e && e.message || e) + "). Nothing sent."); return; }
+  try { tpl = mailLoadDraft_(mailNudgePrefix_(props)); } catch (e){ say("GFY Mail", "Could not read Gmail drafts (" + (e && e.message || e) + "). Nothing sent."); return; }
   if (!tpl.ok){ say("Nudge BLOCKED - template draft (nothing was sent)", tpl.msg); return; }
   const rs = mailRsvpPrereq_(props, admin, tpl);
   if (rs){ say("Nudge BLOCKED - RSVP links (nothing was sent)", rs); return; }
@@ -1049,7 +1091,7 @@ function mailDashboard_(admin, props){
     ["", ""],
     [L.scan, stamp],
     [L.status, status],
-    ["template draft", draftStatus(MAIL_TPL_PREFIX)],
+    ["template draft", draftStatus(mailTplPrefix_(props))],
     ...notes.map(n => ["note", n]),
   ];
   const height = Math.max(left.length, 2 + Math.max(...MAIL_DASH_LISTS.map(k => lists[k].length)));
