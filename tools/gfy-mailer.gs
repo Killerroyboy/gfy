@@ -658,7 +658,7 @@ function mailNoteBounce_(conSheet, player, date){
 
 /** Installed by installMailTriggers. Ticking Replies.confirm ticks `committed`
  *  for that player / current year on the PUBLIC Invites tab (only ever TRUE, via
- *  mailPublicWrite_, under the lock). UNticking never unticks committed - it
+ *  mailPublicWrite_, under the lock; NOT in test mode - the Dashboard says "would commit X"). UNticking never unticks committed - it
  *  logs a note on SendLog instead. Script edits (scanReplies) do not fire onEdit. */
 function mailOnEdit(e){
   if (!e || !e.range) return;
@@ -678,6 +678,7 @@ function mailOnEdit(e){
   if (!invSheet){ Logger.log("mailOnEdit: PUBLIC_ID / Invites unavailable - nothing written"); return; }
   const year = mailCurrentYear_(mailTable_(invSheet).rows);
 
+  const test = mailIsTest_(PropertiesService.getScriptProperties());     // test mode never writes the public sheet
   const seen = new Set();
   t.rows.filter(r => r._row >= r0 && r._row <= r1 && mailNorm_(r.player)).forEach(r => {
     const key = mailNorm_(r.player);
@@ -685,6 +686,7 @@ function mailOnEdit(e){
     const ticked = r.confirm === true || /^true$/i.test(String(r.confirm == null ? "" : r.confirm).trim());
     const player = String(r.player).trim();
     if (ticked){
+      if (test) return;          // the Dashboard shows "test mode: would commit X"
       try { mailTickPublic_(invSheet, year, player, "committed"); }
       catch (err){ note(player, "confirm ticked but could NOT tick committed on the public sheet - tick by hand (" + (err && err.message || err) + ")"); }
     } else {
@@ -693,6 +695,7 @@ function mailOnEdit(e){
       if (row && "committed" in pt.idx && mailYes_(row.committed)) note(player, "confirm unticked - committed left ticked on the public sheet (untick it there by hand if wanted)");
     }
   });
+  try { mailDashboard_(SpreadsheetApp.getActiveSpreadsheet(), PropertiesService.getScriptProperties()); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
 }
 
 // ---- adminPolish (menu: GFY Mail -> Polish admin sheet) -----------------------
@@ -851,6 +854,17 @@ function mailDashboard_(admin, props){
       out: cur.filter(isOut).length,
     };
     mailNudgeRows_(cur, conSheet ? mailTable_(conSheet).rows : [], logSheet ? mailTable_(logSheet).rows : [], nudge).forEach(c => lists["Needs nudge"].push(c.player));
+    if (mailIsTest_(props) && repSheet){       // test mode: confirm ticks are NOT committed - say what would be
+      const would = [], seenW = new Set();
+      mailTable_(repSheet).rows.forEach(r => {
+        const k = mailNorm_(r.player);
+        if (!k || seenW.has(k) || !(r.confirm === true || /^true$/i.test(String(r.confirm == null ? "" : r.confirm).trim()))) return;
+        seenW.add(k);
+        const pr = cur.find(x => mailNorm_(x.player) === k);
+        if (pr && !mailYes_(pr.committed)) would.push(String(r.player).trim());
+      });
+      if (would.length) notes.push("test mode: would commit " + would.join(", "));
+    }
     const rsvpSh = admin.getSheetByName(MAIL_TAB.rsvp);
     if (rsvpSh) mailTable_(rsvpSh).rows.forEach(r => {
       if ((parseInt(r.year, 10) || 0) !== year || !mailNorm_(r.player)) return;
@@ -859,7 +873,7 @@ function mailDashboard_(admin, props){
       const pr = cur.find(x => mailNorm_(x.player) === mailNorm_(r.player));
       if (pr && mailYes_(pr.committed)) lists["Changed answer \u2014 fix by hand"].push(String(r.player).trim());
     });
-    const names = new Set(cur.map(r => mailNorm_(r.player)));
+    const names = new Set(inv.filter(r => mailNorm_(r.player)).map(r => mailNorm_(r.player)));   // ANY year: a veteran not invited this year is not a mismatch
     if (conSheet) mailTable_(conSheet).rows.forEach(c => { if (mailNorm_(c.player) && !names.has(mailNorm_(c.player))) lists["Name mismatches"].push(String(c.player)); });
   }
 

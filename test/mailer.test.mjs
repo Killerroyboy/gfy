@@ -568,7 +568,7 @@ function bareAdmin(log) {
   run(w, "adminPolish");
   const list = dashList(w, "Name mismatches") || [];
   const con = w.sheet("Contacts");
-  check("AP10: Contacts.player with no mailNorm_ match on the CURRENT-season public Invites is listed on the Dashboard (matches by trim/space/case are not) and highlighted via a rule that points at that list",
+  check("AP10: Contacts.player with no mailNorm_ match on ANY-year public Invites is listed on the Dashboard (matches by trim/space/case are not) and highlighted via a rule that points at that list",
     list.length === 1 && list[0] === "Zed Nomatch" && con.rules.some(r => /Dashboard/.test(r.f || "")), JSON.stringify([list, con.rules.map(r => r.f)]));
 }
 {
@@ -703,6 +703,7 @@ function dashWorld(extra = {}) {
 function editEvent(w, r, c, nr = 1) { return { range: w.sheet("Replies").getRange(r, c, nr, 1) }; }
 function repWorld(extra = {}) {
   return world({
+    props: { GFY_MAIL_TEST: "0" },
     invites: [[2026, "Alice Able", true, true, "", false, ""], [2027, "Alice Able", true, true, "", false, ""], [2027, "Bob Baker", true, true, "", false, ""], [2027, "Cy Dnì", true, false, "", true, ""]],
     replies: [["2027-01-02", "Alice Able", "A", "yes", true, true, "m1"], ["2027-01-02", "Bob Baker", "B", "yes", true, true, "m2"], ["2027-01-02", "Cy Dnì", "C", "yes", true, true, "m3"]],
     ...extra,
@@ -1020,6 +1021,33 @@ function failingScanWorld(props = {}) {
   w2.mails.length = 0;
   const r = run(w2, "scanReplies");
   check("HL9: the alert body carries no email addresses", w2.mails.length === 1 && !/@/.test(w2.mails[0].body.replace(ALERT, "")), JSON.stringify(w2.mails));
+}
+
+// ---------- polish-round review fixes (WO-PROGRAM-33 s6) ----------
+{
+  const w = repWorld({ props: {} });                       // TEST MODE (GFY_MAIL_TEST unset)
+  const cc = colOf(w.sheet("Replies").rows, "confirm");
+  const r = (() => { try { w.M.mailOnEdit(editEvent(w, 2, cc)); return { ok: true }; } catch (e) { return { ok: false, e: String(e && e.message || e) }; } })();
+  check("FX1: mailOnEdit in TEST MODE writes nothing to the public sheet", r.ok && pubWrites(w).length === 0 && w.invSheet.rows.slice(1).every(x => x[5] === false || x[1] === "Cy Dnì"), r.e || JSON.stringify(pubWrites(w)));
+  check("FX1b: ... and the Dashboard notes 'test mode: would commit Alice Able' (rebuilt by the edit)", /test mode: would commit [^"]*Alice Able/.test(dashText(w)), dashText(w));
+  const wl = repWorld();
+  wl.M.mailOnEdit(editEvent(wl, 2, cc));
+  check("FX1c: LIVE mode has no such note", !/would commit/.test(dashText(wl)));
+}
+{
+  const w = repWorld();
+  const cc = colOf(w.sheet("Replies").rows, "confirm");
+  run(w, "adminPolish");
+  const before = dashVals(w)[DASH.committed];
+  w.M.mailOnEdit(editEvent(w, 2, cc));
+  check("FX2: the Dashboard is rebuilt after a mailOnEdit commit (committed count moves)", before === 1 && dashVals(w)[DASH.committed] === 2, JSON.stringify([before, dashVals(w)]));
+}
+{
+  const w = world({ contacts: [["Alice Able", "a@example.com", "", "", "FALSE", "", ""], ["Old Timer", "o@example.com", "", "", "FALSE", "", ""], ["  zed   NOMATCH ", "z@example.com", "", "", "FALSE", "", ""], ["Ghost", "g@example.com", "", "", "FALSE", "", ""]],
+    invites: [[2026, "old   timer", true, true, "", false, ""], [2027, "Alice Able", false, false, "", false, ""]] });
+  run(w, "adminPolish");
+  const list = dashList(w, "Name mismatches") || [];
+  check("FX3: a Contacts name is a mismatch only if it matches NO Invites row in ANY year (veteran not invited this year is not one)", list.length === 2 && list.includes("Ghost") && list.some(n => /zed/i.test(n)) && !list.includes("Old Timer"), JSON.stringify(list));
 }
 
 // ---------- no-'@' leak test ----------
