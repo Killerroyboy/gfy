@@ -1882,7 +1882,11 @@ dom.window.close();
     ciBody.includes("COUNTIFS") && ciBody.includes('INDIRECT("Field!') && ciBody.includes("committed")
     && ciBody.includes('"out"') && ciBody.includes('"declined"')
     && promo.includes('"promoteCommitted"') && promo.includes('"seedInvites"')
-    && seedBody.includes(".sort") && seedBody.includes("since")
+    // BACKLOG #17c moved the sort into pcSeedPlan_ so the confirm prompt and the
+    // write share ONE candidate list; seedInvites must still reach it (twice: peek + under lock).
+    && (seedBody.match(/pcSeedPlan_\(/g) || []).length >= 2
+    && (promo.match(/function pcSeedPlan_[\s\S]*?\n\}/) || [""])[0].includes(".sort")
+    && (promo.match(/function pcSeedPlan_[\s\S]*?\n\}/) || [""])[0].includes("since")
     && gs.includes("GFY menu"),
     "ciBody.len=" + ciBody.length + " seedBody.len=" + seedBody.length);
   // P8 (BACKLOG #16 — confirmed live 2026-09-01): a CF formula is evaluated
@@ -1964,6 +1968,169 @@ dom.window.close();
     && /const dec = pcSinceFor_\(/.test(promo)
     && !/row\[fh\.since\]\s*=\s*prior\s*\?/.test(promo),
     JSON.stringify(legs));
+}
+
+/* ---------- W17: BACKLOG #17 invites-flow hardening — behavioural, via a fake SpreadsheetApp ---------- */
+{
+  const polishSrc17 = readFileSync(path.join(ROOT, "tools", "sheet-polish.gs"), "utf8");
+  const promoSrc17 = readFileSync(path.join(ROOT, "tools", "gfy-promote.gs"), "utf8");
+  // Minimal fake of the Apps Script surface polish touches. Sheets are 2-D arrays;
+  // every write is logged so "never touch data" is assertable.
+  const mkSheet = (name, rows, opts = {}) => {
+    const sh = { name, rows: rows.map(r => r.slice()), writes: [], inserted: 0, maxCols: opts.maxCols || 0, rules: null, validations: [] };
+    sh.getName = () => name;
+    sh.getLastColumn = () => sh.rows.reduce((m, r) => Math.max(m, r.length), 0);
+    sh.getLastRow = () => sh.rows.length;
+    sh.getMaxColumns = () => Math.max(sh.maxCols, sh.getLastColumn());
+    sh.getMaxRows = () => Math.max(1000, sh.rows.length);
+    sh.insertColumnsAfter = (c, n) => { sh.maxCols = sh.getMaxColumns() + n; };
+    sh.getSheetId = () => 1;
+    sh.setFrozenRows = () => {}; sh.getProtections = () => []; sh.clear = () => {}; sh.setColumnWidth = () => {};
+    const lenient = o => new Proxy(o, { get: (t, k) => (k in t ? t[k] : () => lenient({})) }); // polish calls many cosmetic setters; only the ones we assert on are real
+    sh.getRange = (r, c, nr = 1, nc = 1) => typeof r === "string" ? lenient({}) : lenient({
+      getValues: () => { const out = []; for (let i = 0; i < nr; i++){ const row = []; for (let j = 0; j < nc; j++) row.push((sh.rows[r - 1 + i] || [])[c - 1 + j] ?? ""); out.push(row); } return out; },
+      setValue: v => { sh.writes.push({ r, c, v }); while (sh.rows.length < r) sh.rows.push([]); const row = sh.rows[r - 1]; while (row.length < c) row.push(""); row[c - 1] = v; },
+      setDataValidation: dv => { sh.validations.push({ r, c, dv }); },
+      setValues: v => { sh.writes.push({ r, c, v }); },
+    });
+    sh.getDataRange = () => ({ getValues: () => sh.rows.map(r => r.slice()) });
+    sh.setConditionalFormatRules = r => { sh.rules = r; };
+    sh.getConditionalFormatRules = () => sh.rules || [];
+    return sh;
+  };
+  const mkRule = () => { const o = { _f: null, _bg: null }; const b = { whenFormulaSatisfied: f => { o._f = f; return b; }, setBackground: c => { o._bg = c; return b; }, setRanges: () => b, build: () => o }; return b; };
+  const mkDV = () => { const o = { help: null, kind: null }; const b = { requireCheckbox: () => { o.kind = "checkbox"; return b; }, requireValueInList: () => { o.kind = "list"; return b; }, setAllowInvalid: () => b, setHelpText: t => { o.help = t; return b; }, build: () => o }; return b; };
+  const mkSS = (sheets, url = "https://x/") => {
+    const ss = { sheets, active: null, order: [] };
+    ss.getSheetByName = n => ss.sheets.find(s => s.name === n) || null;
+    ss.getSheets = () => ss.sheets;
+    ss.getUrl = () => url;
+    ss.setActiveSheet = s => { ss.active = s; };
+    ss.moveActiveSheet = i => { ss.sheets = ss.sheets.filter(s => s !== ss.active); ss.sheets.splice(i - 1, 0, ss.active); };
+    ss.insertSheet = (n, i) => { const s = mkSheet(n, []); ss.sheets.splice(i, 0, s); return s; };
+    return ss;
+  };
+  const fakeApp = ss => ({ getActiveSpreadsheet: () => ss, newConditionalFormatRule: mkRule, newDataValidation: mkDV, ProtectionType: { RANGE: "RANGE" } });
+  const load = (ss, names) => { try { return new Function("SpreadsheetApp", "Logger", polishSrc17 + "\nreturn {" + names.join(",") + "};")(fakeApp(ss), { log(){} }); } catch (e) { return { _err: String(e) }; } };
+  const loadP = names => { try { return new Function(promoSrc17.replace(/^\/\*\* @OnlyCurrentDoc \*\//, "") + "\nreturn {" + names.join(",") + "};")(); } catch (e) { return { _err: String(e) }; } };
+  const safe = (fn, d) => { try { return fn(); } catch (e) { return d; } };
+
+  // (g) polish() appends the missing committed / invited_by headers
+  {
+    const inv = mkSheet("Invites", [["year", "player", "invited", "responded", "status"], [2027, "Duck", true, false, ""]]);
+    const ss = mkSS([inv]);
+    const L = load(ss, ["ensureInviteHeaders_"]);
+    const before = JSON.stringify(inv.rows.slice(1));
+    safe(() => L.ensureInviteHeaders_(inv));
+    const heads = inv.rows[0];
+    const first = JSON.stringify(inv.rows);
+    safe(() => L.ensureInviteHeaders_(inv));
+    const dataOnlyRow1 = inv.writes.every(w => w.r === 1);
+    check("W17-g1: polish appends missing `committed` and `invited_by` to the END of Invites row 1 (never inserts/moves, never touches data rows), and a second run changes nothing (idempotent)",
+      heads.join(",") === "year,player,invited,responded,status,committed,invited_by"
+      && JSON.stringify(inv.rows.slice(1)) === before && dataOnlyRow1 && inv.writes.length === 2
+      && JSON.stringify(inv.rows) === first, JSON.stringify(L._err || inv.rows[0]));
+    const inv2 = mkSheet("Invites", [["Year", "player", " Committed ", "status"], [2027, "Duck", false, ""]]);
+    const L2 = load(mkSS([inv2]), ["ensureInviteHeaders_"]);
+    safe(() => L2.ensureInviteHeaders_(inv2));
+    check("W17-g2: an existing header is matched case/space-insensitively and left in place — only the genuinely absent one is appended",
+      inv2.rows[0].join(",") === "Year,player, Committed ,status,invited_by", JSON.stringify(inv2.rows[0]));
+    // checkbox-sweep trap: data rows wider than the header row must not shift the append column
+    const inv3 = mkSheet("Invites", [["year", "player", "status"], [2027, "Duck", "", false, false, false]]);
+    const L3 = load(mkSS([inv3]), ["ensureInviteHeaders_"]);
+    safe(() => L3.ensureInviteHeaders_(inv3));
+    check("W17-g3: append lands at the end of the HEADER row (first free header cell), not past stray data-row width",
+      inv3.rows[0].join(",") === "year,player,status,committed,invited_by", JSON.stringify(inv3.rows[0]));
+    // wired into polish(): the committed checkbox validation must land on the freshly added column
+    const inv4 = mkSheet("Invites", [["year", "player", "invited", "responded", "status"]]);
+    const ss4 = mkSS([inv4]);
+    const L4 = load(ss4, ["polish"]);
+    let e4 = ""; try { L4.polish(); } catch (e) { e4 = String(e); }
+    const cbCols = inv4.validations.filter(v => v.dv.kind === "checkbox").map(v => v.c);
+    check("W17-g4: polish() on a 5-col Invites adds both headers AND applies the committed checkbox validation (col 6) in the same run",
+      inv4.rows[0].join(",") === "year,player,invited,responded,status,committed,invited_by" && cbCols.includes(6), JSON.stringify(L4._err || [e4, inv4.rows[0], cbCols]));
+  }
+
+  // (a) status yes/y is committed; help text on the status column
+  {
+    const P = loadP(["pcCommitted_"]);
+    const c = P.pcCommitted_;
+    check("W17-a1: promote treats committed checkbox OR status yes/y (case/space-insensitive) as committed; out/declined/blank/maybe are not",
+      !!c && c(true, "") === true && c(false, "Yes") === true && c(false, " y ") === true && c("", "YES") === true
+      && c(false, "") === false && c(false, "maybe") === false && c(false, "out") === false && c(false, "declined") === false
+      && c("TRUE", "") === true, P._err);
+    check("W17-a2: promoteCommitted routes through pcCommitted_ with the status cell",
+      /pcCommitted_\(r\[ih\.committed\],\s*"status" in ih \? r\[ih\.status\] : ""\)/.test(promoSrc17));
+    const inv = mkSheet("Invites", [["year", "player", "invited", "responded", "status", "committed", "invited_by"]]);
+    const L = load(mkSS([inv]), ["applyDropdowns_", "DROPDOWNS"]);
+    safe(() => L.applyDropdowns_(inv, L.DROPDOWNS.Invites));
+    const help = (inv.validations[0] || { dv: {} }).dv.help || "";
+    check("W17-a3: Invites status dropdown carries help text saying committed is the checkbox column",
+      /committed is the checkbox/i.test(help), help);
+  }
+
+  // (b) year written as a number
+  check("W17-b: promote writes `year` as parseInt'd number, not the raw cell",
+    /row\[fh\.year\]\s*=\s*parseInt\(yearKey,\s*10\)/.test(promoSrc17) && !/row\[fh\.year\]\s*=\s*year\b/.test(promoSrc17));
+
+  // (c) seed names its candidates before confirm
+  {
+    const P = loadP(["pcSeedPlan_", "pcNorm_"]);
+    const fh = { year: 0, player: 1, since: 2, status: 3 }, ih = { year: 0, player: 1, status: 2 };
+    const fld = [[2026, "Duck", 2019, "In"], [2026, "Rook", 2026, "In"], [2025, "Vet", 2015, "In"], [2026, "Gone", 2020, "out"], [2020, "TooOld", 2010, "In"]];
+    const inv = [[2027, "Duck", ""]];
+    const plan = safe(() => P.pcSeedPlan_(fld, fh, inv, ih, 2027), null);
+    check("W17-c1: pcSeedPlan_ names who a seed would add, veterans first, skipping existing/out/out-of-window",
+      !!plan && plan.names.join(",") === "Vet,Rook" && plan.skippedOut.join(",") === "Gone" && plan.existing.size === 1, JSON.stringify(plan && plan.names) + P._err);
+    const seed = (promoSrc17.match(/function seedInvites[\s\S]*$/) || [""])[0];
+    const iConfirm = seed.search(/ButtonSet\.YES_NO/), iLock = seed.search(/tryLock/);
+    check("W17-c2: seedInvites shows the candidate names in a YES/NO confirm BEFORE taking the lock/writing, and cancel writes nothing",
+      iConfirm > 0 && iLock > iConfirm && /\.names\.join\(/.test(seed.slice(0, iLock)) && /!==\s*ui\.Button\.YES\)\s*return/.test(seed.slice(iConfirm, iLock)));
+  }
+
+  // (d) off-season START HERE: no sample-team captain links / dropdown
+  {
+    const sampleField = mkSheet("Field", [["year", "player", "team"], [2026, "A", "Sample Team"], [2026, "B", "Other Sample"]]);
+    const noTee = mkSS([sampleField, mkSheet("Info", [["key", "value"]])]);
+    const L = load(noTee, ["startHereRoster_"]);
+    check("W17-d1: no first_tee year => roster is EMPTY (no captain links / form dropdown from every-year sample teams)",
+      safe(() => L.startHereRoster_(noTee).length, -1) === 0, L._err);
+    const tee = mkSS([sampleField, mkSheet("Info", [["first_tee", "2027-09-10"]])]);
+    const L2 = load(tee, ["startHereRoster_"]);
+    check("W17-d2: first_tee year with NO Field rows for that year => roster empty (the existing '(no teams yet' placeholder shows); with rows => real teams",
+      safe(() => L2.startHereRoster_(tee).length, -1) === 0
+      && safe(() => load(mkSS([sampleField, mkSheet("Info", [["first_tee", "2026-09-10"]])]), ["startHereRoster_"]).startHereRoster_(
+           mkSS([sampleField, mkSheet("Info", [["first_tee", "2026-09-10"]])])).join("|"), "") === "Sample Team|Other Sample");
+  }
+
+  // (e) end on START HERE
+  {
+    const mk = n => mkSheet(n, []);
+    const ss = mkSS([mk("Scores"), mk("Field"), mk("Invites"), mk("Rooms"), mk("START HERE")]);
+    const L = load(ss, ["orderTabs_"]);
+    safe(() => L.orderTabs_(ss, false));
+    check("W17-e: orderTabs_ ends with START HERE the ACTIVE sheet (not Rooms), order START HERE, Field, Invites, Rooms",
+      !!ss.active && ss.active.name === "START HERE" && ss.sheets.slice(0, 4).map(s => s.name).join(",") === "START HERE,Field,Invites,Rooms",
+      (ss.active && ss.active.name) + " " + ss.sheets.map(s => s.name) + (L._err || ""));
+  }
+
+  // (f) red unpaid tint is year-scoped
+  {
+    const fld = mkSheet("Field", [["year", "player", "team", "deposit", "since"], [2026, "A", "", false, 2019], [2025, "B", "", false, 2019]]);
+    const ss = mkSS([fld, mkSheet("Info", [["first_tee", "2026-09-10"]])]);
+    const L = load(ss, ["colorField_"]);
+    safe(() => L.colorField_(fld));
+    const red = (fld.rules || []).find(r => r._bg === "#f4cccc");
+    check("W17-f1: Field red unpaid tint is scoped to the current season (first_tee year) — archive years are not red",
+      !!red && /2026/.test(red._f) && /\$D2=FALSE/.test(red._f), red ? red._f : "no red rule " + (L._err || ""));
+    const fld2 = mkSheet("Field", [["year", "player", "team", "deposit", "since"]]);
+    const ss2 = mkSS([fld2, mkSheet("Info", [["key", "value"]])]);
+    const L2 = load(ss2, ["colorField_"]);
+    safe(() => L2.colorField_(fld2));
+    const red2 = (fld2.rules || []).find(r => r._bg === "#f4cccc");
+    check("W17-f2: with no first_tee, the red tint falls back to the NEWEST year on Field (still never every archive year)",
+      !!red2 && /MAX\(/.test(red2._f), red2 ? red2._f : "none");
+  }
 }
 
 /* ---------- SC-DRILL sweep: the pass condition is the ROW, never the 200 ---------- */

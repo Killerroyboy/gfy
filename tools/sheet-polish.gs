@@ -10,6 +10,7 @@ const FIELD_STATUS = ["In","wd","out","declined"];   // E-VOCAB — mirrors the 
 const INVITES_STATUS = ["declined","out"];           // F-DECLINED
 const CHECKBOX_COLS = { "Field": ["deposit"], "Calcutta": ["collected"], "Invites": ["invited","responded","committed"], "Ledger": ["settled"] }; // CLOSED list
 const DROPDOWNS = { "Field": { "status": FIELD_STATUS }, "Invites": { "status": INVITES_STATUS } };
+const HELP = { "Invites.status": "committed is the checkbox column - tick it there on a yes. status is only for out / declined (a typed yes/y is still honoured by Promote)." };
 const COURSE_DATA = [ [1,4,319],[2,5,469],[3,4,407],[4,3,124],[5,4,357],[6,4,348],[7,4,391],[8,3,180],[9,5,499],
   [10,4,286],[11,4,354],[12,4,344],[13,3,148],[14,4,406],[15,5,433],[16,4,352],[17,3,151],[18,5,533] ];
 const SAMPLE_COURSE = [ [1,4,385],[2,4,410],[3,3,175] ];
@@ -19,6 +20,7 @@ function polish(){
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ss.getSheets().forEach(sh => {
     const name = sh.getName();
+    if (name === "Invites") ensureInviteHeaders_(sh);   // before checkboxes: the new `committed` column gets its validation this run
     protectHeader_(sh);
     applyCheckboxes_(sh, CHECKBOX_COLS[name] || []);
     applyDropdowns_(sh, DROPDOWNS[name] || {});
@@ -34,6 +36,24 @@ function polish(){
 function headerIndex_(sh, header){
   const heads = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0];
   return heads.findIndex(h => String(h).trim().toLowerCase() === header) + 1; // 0 = not found
+}
+// BACKLOG #17g: append any missing Invites header (committed, invited_by) at
+// the first free cell of the HEADER row. Never inserts or moves a column,
+// never writes below row 1. headerIndex_ matches case/space-insensitively, so
+// re-running is a no-op (E-IDEM). The end of the header row is the last
+// NON-EMPTY header cell, not getLastColumn() - stray checkbox-sweep width in
+// the data rows must not push the append past the header.
+const INVITE_HEADERS = ["committed", "invited_by"];
+function ensureInviteHeaders_(sh){
+  INVITE_HEADERS.forEach(h => {
+    if (headerIndex_(sh, h)) return;
+    const heads = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0];
+    let last = 0; heads.forEach((v, i) => { if (String(v).trim() !== "") last = i + 1; });
+    const col = last + 1;
+    if (col > sh.getMaxColumns()) sh.insertColumnsAfter(sh.getMaxColumns(), col - sh.getMaxColumns());
+    sh.getRange(1, col).setValue(h);
+    Logger.log(sh.getName() + ": added missing header \"" + h + "\" at column " + col);
+  });
 }
 function dataRange_(sh, col){ return sh.getRange(2, col, Math.max(1, sh.getMaxRows() - 1), 1); }
 
@@ -57,7 +77,8 @@ function applyDropdowns_(sh, spec){
   Object.keys(spec).forEach(c => {
     const i = headerIndex_(sh, c); if (!i) return;
     dataRange_(sh, i).setDataValidation(SpreadsheetApp.newDataValidation()
-      .requireValueInList(spec[c], true).setAllowInvalid(true).build()); // E-VOCAB: warn-mode, never reject
+      .requireValueInList(spec[c], true).setAllowInvalid(true)
+      .setHelpText(HELP[sh.getName() + "." + c] || "").build()); // E-VOCAB: warn-mode, never reject
   });
 }
 function repairHandicap_(sh){
@@ -76,8 +97,12 @@ function repairHandicap_(sh){
 function colorField_(sh){
   const dep = headerIndex_(sh, "deposit"), since = headerIndex_(sh, "since");
   const rules = [];
+  // BACKLOG #17f: unpaid is red for the CURRENT season only (first_tee year),
+  // else the newest year on Field - archive years never stay red forever.
+  const yr = startHereYear_(SpreadsheetApp.getActiveSpreadsheet());
+  const seasonTest = yr != null ? `$A2&""="${yr}"` : `$A2=MAX($A$2:$A)`;
   if (dep) rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=AND($A2<>"",$${colLetter_(dep)}2=FALSE)`)
+    .whenFormulaSatisfied(`=AND($A2<>"",${seasonTest},$${colLetter_(dep)}2=FALSE)`)
     .setBackground("#f4cccc")
     .setRanges([sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(1, sh.getLastColumn()))]).build());
   if (since) rules.push(SpreadsheetApp.newConditionalFormatRule()
@@ -122,7 +147,12 @@ function colorInvites_(sh){
     // &""-coerce then compare text: matches BOTH a real checkbox boolean and
     // a typed/imported "TRUE" string — pcYes_/event-ready accept the string
     // form, so the tint must too (review F3: $C2=TRUE alone misses it).
-    const committedTrue = `UPPER(TRIM($${C}2&""))="TRUE"`;
+    // BACKLOG #17a: a typed Yes/y in status is absorbed by Promote, so the
+    // tint must call it committed too (else Promote acts on a row the sheet shows as quiet).
+    const S0 = st ? colLetter_(st) : null;
+    const committedTrue = S0
+      ? `OR(UPPER(TRIM($${C}2&""))="TRUE",LOWER(TRIM($${S0}2&""))="yes",LOWER(TRIM($${S0}2&""))="y")`
+      : `UPPER(TRIM($${C}2&""))="TRUE"`;
     if (st){
       const S = colLetter_(st);
       rules.push(SpreadsheetApp.newConditionalFormatRule()
@@ -197,7 +227,7 @@ function buildStartHere_(ss){
     ["", keep],
     ["", ""],
     ["COLOR LEGEND", ""],
-    ["Red row = deposit unpaid (Field) · committed but status out/declined (Invites — fix one)", ""],
+    ["Red row = deposit unpaid, this season only (Field) · committed but status out/declined (Invites — fix one)", ""],
     ["Gold tint = rookie (since == this season)", ""],
     ["Orange tint = name not on Field (Rooms · committed Invites awaiting Promote)", ""],
     ["Names: FIRST + LAST on Field / Invites / Rooms (and the vault), spelled identically everywhere.", ""],
@@ -252,6 +282,10 @@ function startHereRoster_(ss){
   // and nkey in index.html), scoped to the current first_tee year when Field
   // has a year column.
   const sh = ss.getSheetByName("Field"); if (!sh) return [];
+  // BACKLOG #17d: no known season => no roster. Without this the fallback
+  // listed EVERY year's teams (sample teams included), disagreeing with the
+  // canonical rosterTeams_, which matches nothing when the year is null.
+  if (startHereYear_(ss) == null) return [];
   const tCol = headerIndex_(sh, "team"); if (!tCol) return [];
   const yCol = headerIndex_(sh, "year");
   const year = startHereYear_(ss);
@@ -278,4 +312,5 @@ function inEventWindow_(ss){
 function orderTabs_(ss, eventWindow){
   const want = eventWindow ? ["START HERE","Scores","Field","Pairings"] : ["START HERE","Field","Invites","Rooms"];
   want.forEach((n, i) => { const s = ss.getSheetByName(n); if (s){ ss.setActiveSheet(s); ss.moveActiveSheet(i + 1); } });
+  const home = ss.getSheetByName("START HERE"); if (home) ss.setActiveSheet(home);   // BACKLOG #17e: land on START HERE, not the last tab moved
 }

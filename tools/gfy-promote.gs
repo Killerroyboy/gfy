@@ -34,6 +34,14 @@
 const pcNorm_ = s => String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
 const pcYes_ = v => v === true || /^(y|yes|true|paid|in|1)$/i.test(String(v || "").trim()); // mirrors index.html yes()
 
+// BACKLOG #17a: `committed` is the checkbox, but Riley's own gesture is typing
+// Yes into `status`. ABSORB it rather than silently eat it: either counts.
+// out/declined in status never count (the contradiction check still fires on
+// a ticked box).
+function pcCommitted_(committedCell, statusCell){
+  return pcYes_(committedCell) || /^(y|yes)$/i.test(String(statusCell == null ? "" : statusCell).trim());
+}
+
 function onOpen(){
   const menu = SpreadsheetApp.getUi().createMenu("GFY")
     .addItem("Promote committed → Field", "promoteCommitted")
@@ -95,7 +103,7 @@ function promoteCommitted(){
 
   const ih = pcHeaderMap_(inv), fh = pcHeaderMap_(fld);
   if (!("committed" in ih)){
-    ui.alert("GFY promote", 'Invites has no "committed" column. Add the header in row 1 (after "status"), re-run polish() for the checkbox, then retry.', ui.ButtonSet.OK);
+    ui.alert("GFY promote", 'Invites has no "committed" column. Run GFY → Polish / repair sheet (it adds the header and the checkbox), then retry.', ui.ButtonSet.OK);
     return;
   }
   const needInv = ["year", "player"].filter(c => !(c in ih));
@@ -134,7 +142,7 @@ function promoteCommitted(){
     const newRows = [], promoted = [], contradicted = [], malformed = [];
     let already = 0;
     invVals.forEach((r, i) => {
-      if (!pcYes_(r[ih.committed])) return;
+      if (!pcCommitted_(r[ih.committed], "status" in ih ? r[ih.status] : "")) return;
       const player = String(r[ih.player] || "").trim();
       if (!player){ malformed.push("row " + (i + 2) + " (blank player)"); return; }
       const year = r[ih.year], yearKey = String(year).trim();
@@ -145,7 +153,7 @@ function promoteCommitted(){
       if (existing.has(key)){ already++; return; }
 
       const row = new Array(width).fill("");
-      row[fh.year] = year;                                  // raw cell value — number stays a number
+      row[fh.year] = parseInt(yearKey, 10);                 // always a number (a text "2027" cell must not land as text)
       row[fh.player] = player;
       row[fh.status] = "In";                                // FIELD_STATUS vocab (E-VOCAB)
       row[fh.team] = "";                                    // E-TEAM: blank until the Friday draft
@@ -187,6 +195,49 @@ function promoteCommitted(){
   ui.alert("GFY promote", lines.join("\n\n"), ui.ButtonSet.OK);
 }
 
+// The seed decision as PURE logic (BACKLOG #17c): who WOULD be added for
+// seedYear. seedInvites runs it twice - once before the confirm so the
+// prompt can NAME the people, once again under the lock for the authoritative
+// write - so the confirm can never show a different list than the write uses.
+function pcSeedPlan_(fldVals, fh, invVals, ih, seedYear){
+  // Candidates: distinct players from the trailing-3 window (mirrors the
+  // site's F-UNIV union); canonical casing from each player's most recent
+  // windowed row, but `since` from the most recent row that HAS one —
+  // a blank since on the newest row must not turn a 2019 veteran into
+  // Infinity and sort him after the rookies (review F5; same rule as
+  // promoteCommitted's latestSince).
+  const win = new Set([seedYear - 1, seedYear - 2, seedYear - 3].map(String));
+  const latest = {};                                      // pcNorm(player) -> {name, y}
+  const sinceBest = {};                                   // pcNorm(player) -> {y, since}
+  fldVals.forEach(r => {
+    const p = String(r[fh.player] || "").trim(); if (!p) return;
+    const yk = String(r[fh.year]).trim(); if (!win.has(yk)) return;
+    const k = pcNorm_(p), y = parseInt(yk, 10);
+    if (!latest[k] || y > latest[k].y) latest[k] = { name: p, y: y };
+    const sv = ("since" in fh) ? String(r[fh.since] == null ? "" : r[fh.since]).trim() : "";
+    if (sv !== "" && (!sinceBest[k] || y > sinceBest[k].y)) sinceBest[k] = { y: y, since: sv };
+  });
+  // `out` is for good (F-DECLINED): any past out row — Field status or
+  // Invites status, any year — keeps them off the seed. Declined comes
+  // back into consideration on its own, so it seeds normally.
+  const outSet = new Set();
+  if ("status" in fh) fldVals.forEach(r => { if (/^out$/i.test(String(r[fh.status] || "").trim())) outSet.add(pcNorm_(String(r[fh.player] || ""))); });
+  if ("status" in ih) invVals.forEach(r => { if (/^out$/i.test(String(r[ih.status] || "").trim())) outSet.add(pcNorm_(String(r[ih.player] || ""))); });
+  const existing = new Set(invVals
+    .filter(r => String(r[ih.year]).trim() === String(seedYear) && String(r[ih.player] || "").trim())
+    .map(r => pcNorm_(r[ih.player])));
+
+  const sinceNum = k => { const n = parseInt(sinceBest[k] ? sinceBest[k].since : "", 10); return isNaN(n) ? Infinity : n; };
+  const picks = Object.keys(latest).filter(k => !outSet.has(k) && !existing.has(k));
+  const skippedOut = Object.keys(latest).filter(k => outSet.has(k) && !existing.has(k)).map(k => latest[k].name);
+  // Veterans first: earliest since, junk/blank since last (Infinity), name
+  // ties alphabetical. || relies on NaN (Infinity-Infinity) being falsy.
+  picks.sort((a, b) => (sinceNum(a) - sinceNum(b)) || (a < b ? -1 : a > b ? 1 : 0));
+
+  return { picks: picks, latest: latest, existing: existing, skippedOut: skippedOut,
+           names: picks.map(function(k){ return latest[k].name; }) };
+}
+
 function seedInvites(){
   const ui = SpreadsheetApp.getUi();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -225,6 +276,15 @@ function seedInvites(){
   const seedYear = typed === "" ? def : parseInt(typed, 10);
   if (!(seedYear > 2000 && seedYear < 2100)){ ui.alert("GFY seed", 'Season "' + typed + '" is not a year — nothing written.', ui.ButtonSet.OK); return; }
 
+  // BACKLOG #17c: name the candidates BEFORE anything is written. Peek reads
+  // only - the authoritative plan is recomputed under the lock below.
+  const peek = pcSeedPlan_(fldValsPeek, fh, invValsPeek, ih, seedYear);
+  const confirmMsg = peek.names.length
+    ? "Add " + peek.names.length + " player" + (peek.names.length === 1 ? "" : "s") + " to Invites for " + seedYear + " (veterans first)?\n\n" + peek.names.join(", ")
+      + (peek.skippedOut.length ? "\n\nSkipped (marked out): " + peek.skippedOut.join(", ") : "")
+    : "Nobody to add for " + seedYear + " - everyone in the window is already on Invites (or out). Continue anyway?";
+  if (ui.alert("GFY seed", confirmMsg, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(10000)){ ui.alert("GFY seed", "Sheet is busy — try again in a moment.", ui.ButtonSet.OK); return; }
   let lines;
@@ -233,39 +293,8 @@ function seedInvites(){
     const invVals = inv.getLastRow() > 1 ? inv.getRange(2, 1, inv.getLastRow() - 1, inv.getLastColumn()).getValues() : [];
     const fldVals = fld.getLastRow() > 1 ? fld.getRange(2, 1, fld.getLastRow() - 1, fld.getLastColumn()).getValues() : [];
 
-    // Candidates: distinct players from the trailing-3 window (mirrors the
-    // site's F-UNIV union); canonical casing from each player's most recent
-    // windowed row, but `since` from the most recent row that HAS one —
-    // a blank since on the newest row must not turn a 2019 veteran into
-    // Infinity and sort him after the rookies (review F5; same rule as
-    // promoteCommitted's latestSince).
-    const win = new Set([seedYear - 1, seedYear - 2, seedYear - 3].map(String));
-    const latest = {};                                      // pcNorm(player) -> {name, y}
-    const sinceBest = {};                                   // pcNorm(player) -> {y, since}
-    fldVals.forEach(r => {
-      const p = String(r[fh.player] || "").trim(); if (!p) return;
-      const yk = String(r[fh.year]).trim(); if (!win.has(yk)) return;
-      const k = pcNorm_(p), y = parseInt(yk, 10);
-      if (!latest[k] || y > latest[k].y) latest[k] = { name: p, y: y };
-      const sv = ("since" in fh) ? String(r[fh.since] == null ? "" : r[fh.since]).trim() : "";
-      if (sv !== "" && (!sinceBest[k] || y > sinceBest[k].y)) sinceBest[k] = { y: y, since: sv };
-    });
-    // `out` is for good (F-DECLINED): any past out row — Field status or
-    // Invites status, any year — keeps them off the seed. Declined comes
-    // back into consideration on its own, so it seeds normally.
-    const outSet = new Set();
-    if ("status" in fh) fldVals.forEach(r => { if (/^out$/i.test(String(r[fh.status] || "").trim())) outSet.add(pcNorm_(String(r[fh.player] || ""))); });
-    if ("status" in ih) invVals.forEach(r => { if (/^out$/i.test(String(r[ih.status] || "").trim())) outSet.add(pcNorm_(String(r[ih.player] || ""))); });
-    const existing = new Set(invVals
-      .filter(r => String(r[ih.year]).trim() === String(seedYear) && String(r[ih.player] || "").trim())
-      .map(r => pcNorm_(r[ih.player])));
-
-    const sinceNum = k => { const n = parseInt(sinceBest[k] ? sinceBest[k].since : "", 10); return isNaN(n) ? Infinity : n; };
-    const picks = Object.keys(latest).filter(k => !outSet.has(k) && !existing.has(k));
-    const skippedOut = Object.keys(latest).filter(k => outSet.has(k) && !existing.has(k)).map(k => latest[k].name);
-    // Veterans first: earliest since, junk/blank since last (Infinity), name
-    // ties alphabetical. || relies on NaN (Infinity-Infinity) being falsy.
-    picks.sort((a, b) => (sinceNum(a) - sinceNum(b)) || (a < b ? -1 : a > b ? 1 : 0));
+    const plan = pcSeedPlan_(fldVals, fh, invVals, ih, seedYear);
+    const picks = plan.picks, latest = plan.latest, existing = plan.existing, skippedOut = plan.skippedOut;
 
     const width = inv.getLastColumn();
     const rows = picks.map(k => {

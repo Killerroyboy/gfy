@@ -796,6 +796,11 @@ After a `polish()` run the Invites tab also shows the state at a glance:
 tint** = committed *and* `out`/`declined` on the same row — contradictory,
 fix one before promoting.
 
+A typed `Yes` / `y` in `status` is honoured by Promote as committed
+(absorbed, not eaten), but the real gesture is the `committed` checkbox —
+the status column's help text says so. Seeding next season's Invites now
+lists the exact names it will add and waits for a YES before writing.
+
 ### Who invited who (`invited_by`)
 
 `invited_by` holds the sponsor's name — recorded once, when a new invitee
@@ -818,7 +823,9 @@ add the 12th tab yourself — no need to rebuild from the template:
 1. In the Google Sheet, click **+** at the bottom to add a sheet, and name
    it exactly **Invites**.
 2. Paste the header row into row 1: `year, player, invited, responded,
-   status, committed, invited_by`.
+   status, committed, invited_by` — or just the first five: `polish()`
+   appends any missing `committed` / `invited_by` header at the end of row 1
+   (it never inserts, moves or edits anything else).
 3. Select the `invited`, `responded`, and `committed` columns, one at a
    time: **Insert > Checkbox** (same one-time step as Field.deposit) — or
    just re-run `polish()`, which applies all three. `invited_by` is plain
