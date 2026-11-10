@@ -259,6 +259,38 @@ stamp). The only thing ever written to the public sheet is a TRUE tick in
 `invited`/`responded`; the code refuses any public write containing `@`.
 TODO: publishing the last-scan time on START HERE is a separate piece of work.
 
+**Polish the admin sheet** (menu **GFY Mail → Polish admin sheet**, `adminPolish()`).
+Safe to re-run; the second run changes nothing. It creates any missing tab with the
+template headers (the schema in `gfy-mailer.gs` is checked against
+`make_admin_template.py` by a test), appends missing headers at the end of row 1
+(never moves or clears data), freezes row 1 and adds a warning-only header
+protection, puts real checkboxes on `Contacts.do_not_invite`, `Replies.looks_yes`
+and `Replies.confirm` (existing `TRUE`/`FALSE` *text* in those columns becomes a
+real boolean, nothing else is touched; validation covers last data row + 50), highlights
+malformed `email`/`email_alt` (highlight only, never rejects), colours the tabs and
+orders them Dashboard, Contacts, Replies, SendLog, InviteTemplate, READ ME (ending on
+Dashboard). `Contacts.player` names with no exact match (trim / spaces / case) on the
+current-season public Invites are highlighted and listed on the Dashboard. Contacts
+conditional formatting is owned by this script (replaced each run). It never writes to
+the public sheet.
+
+**confirm → committed.** `installMailTriggers` also installs one installable `onEdit`
+trigger (`mailOnEdit`; works from the phone). Ticking `Replies.confirm` ticks
+`committed` for that player / current year on the public Invites tab (TRUE only, under
+the lock, through the same no-`@` guard). **Unticking does not untick `committed`**:
+if the player is currently committed, a `note` row goes to SendLog instead. Run
+`installMailTriggers` again after pasting this version to add the new trigger. It acts
+on a real human tick even in test mode (test mode only governs sends).
+
+**Dashboard** (private admin tab, names are fine here — never copy it to a published
+tab). Rebuilt by `adminPolish()` and at the end of every `scanReplies` (also after a
+failed scan, so STALE can show). Shows current-season counts (invited / responded /
+committed / out) and four lists: **Needs nudge** (invited, not responded / committed /
+out, last real `invite` SendLog row at least N days ago; N is the editable
+`nudge after (days)` cell, default 7, kept across rebuilds), **Bounced**, **Unconfirmed
+looks_yes**, **Name mismatches**; plus the last scan time with **STALE** when it is
+over an hour old (or never). Test-mode (`invite-test`) rows are not invites for nudging.
+
 Tests: `npm run check-mailer` (also part of `npm run test:all`).
 
 ### Replies (Gmail loop)
@@ -304,6 +336,17 @@ START HERE's rebuild includes:
 Pairings also has an optional `start` column — the hole a group starts on
 for a shotgun round; leave it blank for tee-time rounds and the site
 renders exactly as it always has.
+
+**Checkbox window (BACKLOG #33 item 5).** Checkbox validation on the closed
+checkbox-column list (Field.deposit, Calcutta.collected, Invites
+invited/responded/committed, Ledger.settled) now covers only the last row with a
+`year`/`player` value plus 50 spare rows, not the whole sheet. Blank rows below that
+window have their validation removed and literal `FALSE` junk cleared (a `TRUE`, or
+any row with a year/player, is never touched), so the published CSV no longer carries
+~1000 `FALSE` rows. Adding more than 50 rows at once: re-run `polish()` to extend the
+window. START HERE column A is now wide and wrapped, and the legacy "Scoring config
+moved → Info tab" row disappears once Info has both `score_endpoint` and `form_url`
+(kept, with any pasted old value, until then). Tests: `npm run check-polish`.
 
 The polish script also OWNS conditional formatting on Field and Rooms — it
 replaces all conditional-format rules on those two tabs each run. Don't
