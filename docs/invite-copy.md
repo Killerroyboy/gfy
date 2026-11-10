@@ -71,8 +71,9 @@ Answering IN holds your spot. The deposit is what locks it.
 
 ## 2. Nudge draft
 
-Sent as a reply inside the person's invite thread, so only the **body** matters (Gmail
-keeps the thread's subject). The subject still needs the prefix for the sender to find it.
+Sent as a FRESH email to the person's invite address with the subject `Re: <their original invite subject>`
+(Gmail usually threads it), so only the **body** matters - the draft's own subject is only the `[GFY NUDGE]`
+marker the sender finds it by.
 
 **Subject (exact):**
 
