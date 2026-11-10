@@ -354,27 +354,35 @@ function mailSendNew_(m){
 /** Who needs a nudge. cur = current-season Invites rows; logRows = SendLog rows.
  *  invited, not responded / committed / out / declined, not do-not-invite, and the last
  *  REAL send (invite or nudge - test rows never count) is >= `days` ago.
- *  threadId / address come from that person's latest real invite row. */
-function mailNudgeRows_(cur, contacts, logRows, days){
+ *  threadId / address come from that person's latest invite row. `bounced` = Contacts notes say BOUNCED.
+ *  `test` (TEST-MODE rehearsal only): invite-test rows also make someone a candidate (and count as the
+ *  invite send), since test mode never ticks `invited`; nudge-test rows still never count. */
+function mailNudgeRows_(cur, contacts, logRows, days, test){
   const dni = new Set(contacts.filter(c => mailYes_(c.do_not_invite)).map(c => mailNorm_(c.player)));
+  const bounced = new Set(contacts.filter(c => /BOUNCED/.test(String(c.notes == null ? "" : c.notes))).map(c => mailNorm_(c.player)));
   const isOut = r => mailIsOutStatus_(r.status);
   const last = new Map(), inv = new Map();
   logRows.forEach(r => {
-    const what = mailNorm_(r.what); if (what !== "invite" && what !== "nudge") return;
+    const what = mailNorm_(r.what);
+    const isInv = what === "invite" || (test && what === "invite-test");
+    if (!isInv && what !== "nudge") return;
     const d = mailDateOf_(r.date); if (!d) return;
     const k = mailNorm_(r.player);
     if (!last.has(k) || d >= last.get(k)) last.set(k, d);
-    if (what === "invite" && (!inv.has(k) || d >= inv.get(k).d)) inv.set(k, { d, row: r });
+    if (isInv && (!inv.has(k) || d >= inv.get(k).d)) inv.set(k, { d, row: r });
   });
   const today = mailDateOf_(mailToday_());
   const out = [];
   cur.forEach(r => {
     const k = mailNorm_(r.player);
-    if (!mailYes_(r.invited) || mailYes_(r.responded) || mailYes_(r.committed) || isOut(r) || dni.has(k)) return;
+    const ir = inv.get(k) && inv.get(k).row;
+    if (!(mailYes_(r.invited) || (test && ir)) || mailYes_(r.responded) || mailYes_(r.committed) || isOut(r) || dni.has(k)) return;
     const d = last.get(k); if (!d) return;
     if (Math.round((today - d) / 864e5) < days) return;
-    const ir = inv.get(k) && inv.get(k).row;
-    out.push({ player: String(r.player).trim(), address: ir ? String(ir.address_used || "").trim() : "", threadId: ir ? String(ir.thread_id || "").trim() : "" });
+    let address = ir ? String(ir.address_used || "").trim() : "";
+    const real = ir ? String(ir.note || "").match(/real address ([^\s)]+)/) : null;     // test rows log the TEST address; the real one is in the note
+    if (real) address = real[1];
+    out.push({ player: String(r.player).trim(), address, threadId: ir ? String(ir.thread_id || "").trim() : "", bounced: bounced.has(k) });
   });
   return out;
 }
@@ -406,45 +414,83 @@ function sendNudges(){
   const rs = mailRsvpPrereq_(props, admin, tpl);
   if (rs){ say("Nudge BLOCKED - RSVP links (nothing was sent)", rs); return; }
 
+  const test = mailIsTest_(props);
   const inv = mailTable_(invSheet).rows, year = mailCurrentYear_(inv);
   const days = mailReadNudgeDays_(admin.getSheetByName(MAIL_TAB.dash));
   const cur = inv.filter(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player));
-  const all = mailNudgeRows_(cur, mailTable_(conSheet).rows, mailTable_(logSheet).rows, days);
-  const cands = all.filter(c => c.threadId), noThread = all.filter(c => !c.threadId).map(c => c.player);
-  if (!cands.length){ say("GFY Mail", `Nobody to nudge (invited, not answered, last send ${days}+ days ago).` + (noThread.length ? `\nNo invite thread on file (cannot reply): ${noThread.join(", ")}` : "")); return; }
+  const all = mailNudgeRows_(cur, mailTable_(conSheet).rows, mailTable_(logSheet).rows, days, test);
+  const bouncedNames = all.filter(c => c.bounced).map(c => c.player);
+  const cands = all.filter(c => c.threadId && !c.bounced), noThread = all.filter(c => !c.threadId && !c.bounced).map(c => c.player);
+  const skipNote = (bouncedNames.length ? `\n\nBounced, not nudged (fix their address first): ${bouncedNames.join(", ")}` : "")
+    + (noThread.length ? `\n\nNo invite thread on file (cannot reply): ${noThread.join(", ")}` : "");
+  if (!cands.length){ say("GFY Mail", `Nobody to nudge (invited, not answered, last send ${days}+ days ago).` + skipNote); return; }
 
   const quota = MailApp.getRemainingDailyQuota();
   if (quota < cands.length){ say("GFY Mail", `Daily send quota too low: ${quota} left, ${cands.length} needed. Nothing sent.`); return; }
-  const test = mailIsTest_(props);
-  const msg = (test ? `TEST MODE: fresh messages go to ${MAIL_TEST_ADDR} only; nobody real is contacted.\n\n` : "LIVE: each person gets a reply in their existing invite thread.\n\n")
-    + `Nudge ${cands.length} ${year} player(s) (last send ${days}+ days ago)?\n\n${cands.map(c => c.player).join("\n")}`
-    + (noThread.length ? `\n\nSkipped (no invite thread on file): ${noThread.join(", ")}` : "");
+  const msg = (test ? `TEST MODE: fresh messages go to ${MAIL_TEST_ADDR} only; nobody real is contacted.\n\n` : "LIVE: each person gets a reply in their invite thread when it is safe to, otherwise a fresh email to the address we invited.\n\n")
+    + `Nudge ${cands.length} ${year} player(s) (last send ${days}+ days ago)?\n\n${cands.map(c => c.player).join("\n")}` + skipNote;
   if (ui.alert("Send nudges", msg, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
 
-  const failed = [];
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)){ say("GFY Mail", "Another send is already running (the script lock is held). Wait a minute and run Send nudges again. Nothing sent."); return; }
+  const failed = [], skipped = [];
   let sent = 0;
-  cands.forEach(c => {
-    try {
-      const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpToken_(admin.getSheetByName(MAIL_TAB.rsvp), year, c.player, test)) : "";
-      const m = mailBuild_(tpl, c.player, c.address, test, url);
-      let threadId = c.threadId;
-      if (test){
-        threadId = GmailApp.createDraft(m.to, m.subject, m.body, mailSendOpts_(m)).send().getThread().getId();
-      } else {
-        const thread = GmailApp.getThreadById(c.threadId);
-        if (!thread) throw new Error("invite thread not found");
-        const first = thread.getMessages()[0];
-        if (!first || String(first.getTo() || "").toLowerCase().indexOf(c.address.toLowerCase()) < 0 || !c.address) throw new Error("logged thread was not sent to this person's address - not replying into it");
-        thread.replyAll(m.body, mailSendOpts_(m));
-      }
-      sent++;
-      mailAppend_(logSheet, { date: mailToday_(), player: c.player, address_used: test ? MAIL_TEST_ADDR : c.address, what: test ? "nudge-test" : "nudge", note: test ? `TEST MODE (real address ${c.address})` : "", thread_id: threadId });
-    } catch (e){ failed.push(`${c.player} (${e && e.message || e})`); }
-  });
+  try {
+    const me = String(Session.getEffectiveUser().getEmail() || "").toLowerCase();
+    cands.forEach(c0 => {
+      try {
+        // Re-read under the lock right before this send (a concurrent run may have nudged / the person may have answered).
+        const freshInv = mailTable_(invSheet).rows;
+        const freshCur = freshInv.filter(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player));
+        const c = mailNudgeRows_(freshCur, mailTable_(conSheet).rows, mailTable_(logSheet).rows, days, test).find(x => mailNorm_(x.player) === mailNorm_(c0.player));
+        if (!c || c.bounced || !c.threadId){ skipped.push(c0.player); return; }
+        const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpTokenNL_(admin.getSheetByName(MAIL_TAB.rsvp), year, c.player, test)) : "";
+        const m = mailBuild_(tpl, c.player, c.address, test, url);
+        let threadId = c.threadId, note = test ? `TEST MODE (real address ${c.address})` : "";
+        if (test){
+          threadId = mailSendNew_(m);
+        } else {
+          if (!c.address) throw new Error("no address on file");
+          const r = mailNudgeLive_(c, m, me);
+          threadId = r.threadId; note = r.note;
+        }
+        sent++;
+        mailAppend_(logSheet, { date: mailToday_(), player: c.player, address_used: test ? MAIL_TEST_ADDR : c.address, what: test ? "nudge-test" : "nudge", note, thread_id: threadId });
+      } catch (e){ failed.push(`${c0.player} (${e && e.message || e})`); }
+    });
+  } finally { lock.releaseLock(); }
   try { mailDashboard_(admin, props); } catch (e){ Logger.log("dashboard rebuild failed: " + (e && e.message || e)); }
   say("GFY Mail", `${test ? "TEST " : ""}Nudged ${sent} of ${cands.length}.`
     + (failed.length ? `\n\nNUDGE FAILED (not logged - safe to re-run): ${failed.join("; ")}` : "")
-    + (noThread.length ? `\n\nNo invite thread on file, not nudged: ${noThread.join(", ")}` : ""));
+    + (skipped.length ? `\n\nSKIPPED (changed while sending): ${skipped.join(", ")}` : "")
+    + skipNote);
+}
+
+// "a@x.com, B <b@x.com>" -> ["a@x.com", "b@x.com"] (parsed, lowercased - never a substring test)
+function mailAddrList_(s){
+  return String(s == null ? "" : s).split(",").map(x => mailAddrOf_(x)).filter(Boolean);
+}
+
+/** LIVE nudge. thread.reply ONLY when the thread's last message is ours AND went to exactly the logged
+ *  address (a reply goes to the last message's sender/recipients - a bounce or a stray cc would receive it).
+ *  Otherwise a fresh email to the logged address, subject "Re: <invite subject>"; its NEW thread id is returned
+ *  and logged, and the scanner watches every logged thread of a player. */
+function mailNudgeLive_(c, m, me){
+  const thread = GmailApp.getThreadById(c.threadId);          // a missing/deleted thread (null) falls through to a fresh email
+  const addr = String(c.address).toLowerCase();
+  let subject = "";
+  if (thread){
+    const msgs = thread.getMessages(), last = msgs[msgs.length - 1];
+    try { subject = String(thread.getFirstMessageSubject() || "").trim(); } catch (e){ subject = ""; }
+    const to = last ? mailAddrList_(last.getTo()) : [];
+    if (last && mailAddrOf_(last.getFrom()) === me && to.length === 1 && to[0] === addr){
+      thread.reply(m.body, mailSendOpts_(m));
+      return { threadId: c.threadId, note: "" };
+    }
+  }
+  const subj = subject ? (/^re:/i.test(subject) ? subject : "Re: " + subject) : m.subject;
+  const threadId = mailSendNew_({ to: c.address, subject: subj, body: m.body, htmlBody: m.htmlBody, attachments: m.attachments });
+  return { threadId, note: "fresh email (the invite thread was not safe to reply into)" };
 }
 
 // ---- B: RSVP links (Web App in this same project) ---------------------------------
@@ -679,7 +725,11 @@ function mailScan_(){
   const seen = new Set(mailTable_(repSheet).rows.map(r => String(r.msg_id)));
   const errors = [];
 
-  mailTable_(logSheet).rows.filter(r => mailNorm_(r.what) === "invite" && String(r.thread_id || "").trim()).forEach(entry => {
+  // every logged LIVE thread (invites AND fresh nudge threads), once each; test-mode rows are never watched
+  const watched = new Set();
+  mailTable_(logSheet).rows.filter(r => { const w = mailNorm_(r.what); return (w === "invite" || w === "nudge") && String(r.thread_id || "").trim(); }).filter(r => {
+    const id = String(r.thread_id).trim(); if (watched.has(id)) return false; watched.add(id); return true;
+  }).forEach(entry => {
     const player = String(entry.player).trim();
     try {
       const thread = GmailApp.getThreadById(String(entry.thread_id).trim());

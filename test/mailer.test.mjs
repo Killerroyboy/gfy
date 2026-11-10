@@ -158,7 +158,7 @@ function world(o = {}) {
     getThreadById: id => { if (o.threadError && o.threadError === id) throw new Error("gmail down"); const t = threads[id]; if (!t) return null;
       // Gmail addresses a reply to the LAST message's sender (or, for our own message, its recipients).
       const rep = all => (body, opts) => { if (o.replyFails && o.replyFails === id) throw new Error("reply boom"); const last = t.msgs[t.msgs.length - 1]; const toWho = /me@gmail\.com/.test(last.from) ? last.to : last.from;
-        threadReplies.push({ id, body, html: opts && opts.htmlBody, attachments: opts && opts.attachments, subject: opts && opts.subject, all, to: toWho }); t.msgs.push({ id: id + "m" + t.msgs.length, from: "Riley <me@gmail.com>", to: toWho, subject: "Re: x", body }); log.push({ ev: "send", to: "(thread " + id + ")" }); };
+        threadReplies.push({ id, body, html: opts && opts.htmlBody, attachments: opts && opts.attachments, subject: opts && opts.subject, all, to: toWho }); if (hooks.afterReply) hooks.afterReply(threadReplies.length); t.msgs.push({ id: id + "m" + t.msgs.length, from: "Riley <me@gmail.com>", to: toWho, subject: "Re: x", body }); log.push({ ev: "send", to: "(thread " + id + ")" }); };
       return { getId: () => id, getFirstMessageSubject: () => t.msgs[0].subject, getMessages: () => t.msgs.map(mkMsg), reply: rep(false), replyAll: rep(true) }; },
   };
   // The script lock is NOT reentrant: a second wait inside a held lock times out, like production.
@@ -991,7 +991,8 @@ function nudgeWorld(extra = {}, ageFor = {}) {
   Object.values(w.threads).find(t => t.to === "alice@example.com").msgs[0].to = "someone.else@example.com";
   w.alerts.length = 0;
   run(w, "sendNudges");
-  check("NU14: if the logged thread was not sent to that person's address, that nudge is skipped and reported (never reply into the wrong thread)", w.threadReplies.length === 1 && w.alerts.some(a => /Alice Able/.test(a.msg) && /thread/i.test(a.msg)), JSON.stringify(w.alerts));
+  check("NU14: if the logged thread's last message did not go to EXACTLY that person's address, no reply is posted into it - a fresh email goes to the logged address instead (M2)",
+    w.threadReplies.length === 1 && w.sent.length === 1 && w.sent[0].to === "alice@example.com", JSON.stringify([w.threadReplies, w.sent]));
   const x = nudgeWorld();
   x.sheet("SendLog").rows.slice(1).filter(r => r[1] === "Bob Baker").forEach(r => { r[5] = ""; });
   x.alerts.length = 0;
@@ -1241,6 +1242,72 @@ for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
   const pre = await import("../tools/presend-check.mjs");
   const vio = st => pre.diffVault([{ player: "Cy Dni", email: "c@example.com", do_not_invite: "TRUE" }], [{ year: "2027", player: "Cy Dni", invited: "", responded: "", status: st }]).dniViolations.length;
   check("L7b: presend-check treats no / not coming / nope / n like out for a do-not-invite name (no violation), maybe still is one", vio("no") === 0 && vio("Not Coming") === 0 && vio("nope") === 0 && vio("n") === 0 && vio("out") === 0 && vio("maybe") === 1, [vio("no"), vio("n"), vio("maybe")].join());
+}
+
+// M2: nudge delivery - never replyAll into a bounce / the wrong thread; skip bounced players; fresh mail is logged + watched
+{
+  const w = nudgeWorld();
+  const tidA = Object.values(w.threads).find(t => t.to === "alice@example.com").id;
+  w.addIncoming(tidA, { from: "Mail Delivery Subsystem <mailer-daemon@googlemail.com>", to: "me@gmail.com", subject: "Delivery Status Notification (Failure)", body: "not found" });
+  w.alerts.length = 0;
+  const r = run(w, "sendNudges");
+  const fresh = w.sent.find(x => x.to === "alice@example.com");
+  check("M2a: the thread's LAST message is a bounce => nothing is replied into that thread (never replyAll to mailer-daemon); a fresh email goes to the logged address with 'Re: <invite subject>'",
+    r.ok && !w.threadReplies.some(t => t.id === tidA) && !w.threadReplies.some(t => /mailer-daemon/i.test(t.to)) && !!fresh && fresh.subject === "Re: Are you in, Alice?" && fresh.threadId !== tidA, r.e || JSON.stringify([w.threadReplies, w.sent]));
+  const nl = w.sheet("SendLog").rows.slice(1).filter(x => x[3] === "nudge" && x[1] === "Alice Able");
+  check("M2b: the fresh nudge is logged with its NEW thread_id", nl.length === 1 && !!fresh && nl[0][5] === fresh.threadId && nl[0][2] === "alice@example.com", JSON.stringify(nl));
+  w.addIncoming((fresh || { threadId: tidA }).threadId, { from: "Alice Able <alice@example.com>", subject: "Re: Are you in, Alice?", body: "yes in" });
+  run(w, "scanReplies");
+  check("M2c: the scanner watches EVERY logged thread of a player: a reply in the fresh nudge thread ticks responded", w.invSheet.rows.find(x => x[1] === "Alice Able" && x[0] === 2027)[3] === true && w.sheet("Replies").rows.some(x => x[1] === "Alice Able"), JSON.stringify(w.invSheet.rows));
+  noteWrites(w);
+}
+{
+  const w = nudgeWorld();
+  const tidA = Object.values(w.threads).find(t => t.to === "alice@example.com").id;
+  run(w, "sendNudges");
+  const ra = w.threadReplies.find(t => t.id === tidA);
+  check("M2d: when the last message is ours and went to exactly the logged address, the nudge uses thread.reply (not replyAll), addressed to that person", !!ra && ra.all === false && ra.to === "alice@example.com", JSON.stringify(w.threadReplies));
+  const x = nudgeWorld();
+  Object.values(x.threads).find(t => t.to === "alice@example.com").msgs[0].to = "notalice@example.com";     // a SUBSTRING of the logged address would have passed the old check
+  run(x, "sendNudges");
+  check("M2e: recipient matching is on the parsed address, not a substring: 'notalice@' does not count as alice@", x.sent.some(m => m.to === "alice@example.com") && !x.threadReplies.some(t => t.to === "notalice@example.com"), JSON.stringify([x.sent.map(m => m.to), x.threadReplies]));
+  const y = nudgeWorld();
+  Object.values(y.threads).find(t => t.to === "alice@example.com").msgs[0].to = "Alice <alice@example.com>, cc@example.com";
+  run(y, "sendNudges");
+  check("M2f: a thread whose last message also went to somebody else is not replied into", y.sent.some(m => m.to === "alice@example.com") && !y.threadReplies.some(t => /cc@/.test(t.to)), JSON.stringify([y.sent.map(m => m.to), y.threadReplies]));
+  const z = nudgeWorld();
+  const tid = Object.values(z.threads).find(t => t.to === "alice@example.com").id;
+  delete z.threads[tid];                                       // the invite thread was deleted in Gmail
+  const rz = run(z, "sendNudges");
+  check("M2g: a deleted invite thread does not fail the nudge: a fresh email goes to the logged address", rz.ok && z.sent.some(m => m.to === "alice@example.com"), rz.e || JSON.stringify(z.sent.map(m => m.to)));
+}
+{
+  const w = nudgeWorld({ contacts: NU_CONTACTS.map(c => c[0] === "Alice Able" ? [...c.slice(0, 6), "BOUNCED 2027-01-07"] : c) });
+  const r = run(w, "sendNudges");
+  const conf = w.alerts.find(a => a.btns === "YES_NO");
+  check("M2h: a BOUNCED player is skipped (not in the confirm list, nothing sent to them) and named as bounced", r.ok && !!conf && !/Alice Able/.test(conf.msg.split("Bounced")[0]) && w.alerts.some(a => /Alice Able/.test(a.msg) && /bounce/i.test(a.msg)) && !w.threadReplies.some(t => t.to === "alice@example.com") && !w.sent.some(m => m.to === "alice@example.com"), r.e || JSON.stringify(w.alerts));
+}
+// H1 for nudges: the same lock + re-read
+{
+  const w = nudgeWorld();
+  w.lockState.held = true;
+  run(w, "sendNudges");
+  check("M2i: nudges also need the script lock: held elsewhere => nothing sent", w.threadReplies.length === 0 && w.sent.length === 0 && w.alerts.some(a => /another|already|running|lock/i.test(a.msg)), JSON.stringify(w.alerts));
+  const x = nudgeWorld();
+  x.hooks.afterReply = n => { if (n === 1) x.sheet("SendLog").rows.push([todayStr, "Bob Baker", "bob@example.com", "nudge", "", "thrOther"]); };
+  run(x, "sendNudges");
+  check("M2j: SendLog is re-read under the lock before each nudge: a nudge logged meanwhile by another run is not repeated", x.threadReplies.length === 1 && x.lockState.held === false, JSON.stringify(x.threadReplies));
+}
+// L4: test-mode rehearsal sees invite-test rows
+{
+  const w = world({ props: { WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT, NUDGE_DRAFT], contacts: NU_CONTACTS, invites: NU_INVITES, answers: ["YES", "YES"] });
+  run(w, "sendInvites");
+  w.sheet("SendLog").rows.slice(1).forEach(r => { r[0] = daysAgo(10); });
+  w.sent.length = 0; w.alerts.length = 0; w.log.length = 0;
+  const r = run(w, "sendNudges");
+  const conf = w.alerts.find(a => a.btns === "YES_NO");
+  check("L4: TEST MODE rehearsal: players who only have invite-test rows are nudge candidates, mail goes ONLY to the test address, SendLog nudge-test, nothing public",
+    r.ok && !!conf && /Alice Able/.test(conf.msg) && /Bob Baker/.test(conf.msg) && w.sent.length >= 2 && w.sent.every(m => m.to === TEST_ADDR) && w.sheet("SendLog").rows.slice(1).filter(x => x[3] === "nudge-test").length === w.sent.length && pubWrites(w).length === 0, r.e || JSON.stringify([w.alerts, w.sent.map(m => m.to)]));
 }
 
 // ---------- no-'@' leak test ----------
