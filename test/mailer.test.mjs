@@ -864,6 +864,112 @@ function rsvpGo(w, who, choice) { const tk = tokenOf(w, who); try { return { ok:
   check("RS20: Dashboard is rebuilt after recordRsvp (responded/committed counts current)", dashVals(w)[DASH.committed] === 1 && dashVals(w)[DASH.responded] === 1, JSON.stringify(dashVals(w)));
 }
 
+// ---------- D: nudges (WO-PROGRAM-33 s3) ----------
+{
+  const w = world(); run(w, "onOpen");
+  const m = w.menus.find(m => m.title === "GFY Mail");
+  check("NU1: menu gains 'Send nudges…' -> sendNudges", !!m && m.items.some(([l, f]) => l === "Send nudges…" && f === "sendNudges"), JSON.stringify(w.menus));
+}
+const NU_CONTACTS = [["Alice Able", "alice@example.com", "", "", "FALSE", "", ""], ["Bob Baker", "bob@example.com", "", "", "FALSE", "", ""], ["Gil Gone", "gil@example.com", "", "", "FALSE", "", ""], ["Hal Replied", "hal@example.com", "", "", "FALSE", "", ""], ["Ivy Recent", "ivy@example.com", "", "", "FALSE", "", ""], ["Dee Out", "dee@example.com", "", "", "FALSE", "", ""]];
+const NU_INVITES = [[2027, "Alice Able", false, false, "", false, ""], [2027, "Bob Baker", false, false, "", false, ""], [2027, "Gil Gone", false, false, "", false, ""], [2027, "Hal Replied", false, false, "", false, ""], [2027, "Ivy Recent", false, false, "", false, ""], [2027, "Dee Out", false, false, "out", false, ""]];
+// everyone invited live, then back-date the SendLog and mark some outcomes
+function nudgeWorld(extra = {}, ageFor = {}) {
+  const w = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT, NUDGE_DRAFT], contacts: NU_CONTACTS, invites: NU_INVITES, ...extra, answers: ["YES", ...(extra.answers || ["YES", "YES", "YES"])] });
+  run(w, "sendInvites"); w.alerts.length = 0;
+  const sl = w.sheet("SendLog");
+  sl.rows.slice(1).forEach(r => { r[0] = daysAgo(ageFor[r[1]] ?? (r[1] === "Ivy Recent" ? 3 : 10)); });
+  const inv = n => w.invSheet.rows.find(x => x[0] === 2027 && x[1] === n);
+  inv("Gil Gone")[5] = true; inv("Hal Replied")[3] = true;
+  w.log.length = 0; w.sent.length = 0;
+  return w;
+}
+{
+  const w = nudgeWorld({}, { "Ivy Recent": 3 });
+  const nThreads = Object.keys(w.threads).length;
+  const r = run(w, "sendNudges");
+  const conf = w.alerts.find(a => a.btns === "YES_NO");
+  const replied = w.threadReplies.map(t => t.id).sort();
+  const tidA = Object.values(w.threads).find(t => t.to === "alice@example.com").id, tidB = Object.values(w.threads).find(t => t.to === "bob@example.com").id;
+  check("NU2: candidates = current season, invited, not responded/committed/out/DNI, last send >= 7 days (Ivy at 3 days, Gil committed, Hal responded, Dee out are NOT nudged); confirm lists the names",
+    r.ok && !!conf && /Alice Able/.test(conf.msg) && /Bob Baker/.test(conf.msg) && !/Gil|Hal|Ivy|Dee/.test(conf.msg) && JSON.stringify(replied) === JSON.stringify([tidA, tidB].sort()), r.e || JSON.stringify([conf && conf.msg, replied]));
+  const ra = w.threadReplies.find(t => t.id === tidA);
+  const ta = tokenOf(w, "Alice Able");
+  check("NU3: nudge = a REPLY in the person's existing invite thread (no new thread, no createDraft), body+HTML from the [GFY NUDGE] draft with {first} and {rsvp} filled; the draft's own subject is not forced on the thread",
+    Object.keys(w.threads).length === nThreads && w.sent.length === 0 && ra.body === `Alice, nudge: ${WEBAPP}?t=${ta}` && ra.html.includes(`href="${WEBAPP}?t=${ta}"`) && ra.subject === undefined, JSON.stringify(ra));
+  const log = w.sheet("SendLog").rows.slice(1).filter(x => x[3] === "nudge");
+  check("NU4: SendLog what=nudge, one row each, with the thread_id of the invite thread", log.length === 2 && log.some(x => x[1] === "Alice Able" && x[5] === tidA && x[2] === "alice@example.com") && log.every(x => /^\d{4}-/.test(String(x[0]))), JSON.stringify(log));
+  check("NU4b: tokens reused from the invite (RSVP tab unchanged: one row per player)", rsvpRows(w).length === 5 && tokenOf(w, "Alice Able") === ta);
+  check("NU5: nudging writes nothing to the public sheet", pubWrites(w).length === 0);
+  w.alerts.length = 0; w.threadReplies.length = 0;
+  run(w, "sendNudges");
+  check("NU6: running again does not re-nudge anyone (last send is now today)", w.threadReplies.length === 0 && w.alerts.some(a => /nobody/i.test(a.msg)), JSON.stringify(w.alerts));
+  // reply watcher keeps matching on the same thread
+  w.addIncoming(tidA, { from: "Alice Able <alice@example.com>", subject: "Re: Are you in", body: "Yes, count me in!" });
+  const sc = run(w, "scanReplies");
+  check("NU7: after a nudge the reply watcher still matches the thread (our nudge is 'own', Alice's reply ticks responded)", sc.ok && w.invSheet.rows.find(x => x[1] === "Alice Able" && x[0] === 2027)[3] === true && w.sheet("Replies").rows.length === 2, sc.e || JSON.stringify(w.sheet("Replies").rows));
+  noteWrites(w);
+}
+{
+  const w = nudgeWorld({}, { "Ivy Recent": 3 });
+  run(w, "adminPolish");
+  const dash = w.sheet("Dashboard");
+  const nr = dash.rows.findIndex(row => String(row[0]).toLowerCase() === DASH.nudge);
+  dash.rows[nr][1] = 2;
+  w.alerts.length = 0; w.threadReplies.length = 0;
+  run(w, "sendNudges");
+  const conf = w.alerts.find(a => a.btns === "YES_NO");
+  check("NU8: N is the Dashboard cell: N=2 also nudges Ivy", !!conf && /Ivy Recent/.test(conf.msg) && w.threadReplies.length === 3, JSON.stringify(conf && conf.msg));
+  const nl = dashList(w, "Needs nudge") || [];
+  check("NU8b: after nudging, the Dashboard 'Needs nudge' no longer lists them (nudge sends count as a send)", !nl.includes("Alice Able") && !nl.includes("Bob Baker"), JSON.stringify(nl));
+}
+{
+  const w = nudgeWorld({ answers: ["NO"] });
+  run(w, "sendNudges");
+  check("NU9: Cancel sends nothing and logs nothing", w.threadReplies.length === 0 && w.log.filter(e => e.ev === "write" || e.ev === "append").length === 0);
+  for (const [label, drafts, re] of [["no nudge draft", [RSVP_DRAFT], /GFY NUDGE/], ["two nudge drafts", [RSVP_DRAFT, NUDGE_DRAFT, { ...NUDGE_DRAFT }], /\b2\b/], ["FILL spots", [RSVP_DRAFT, { ...NUDGE_DRAFT, plain: "[FILL] {first}" }], /\[FILL\] spots/], ["unreplaced token", [RSVP_DRAFT, { ...NUDGE_DRAFT, plain: "{first} {when}" }], /\{when\}/]]) {
+    const x = nudgeWorld({ drafts });
+    run(x, "sendNudges");
+    check(`NU10: ${label} => BLOCKED, nothing sent`, x.threadReplies.length === 0 && !x.alerts.some(a => a.btns === "YES_NO") && x.alerts.some(a => re.test(a.msg)), JSON.stringify(x.alerts));
+  }
+  const nr = nudgeWorld({ props: { GFY_MAIL_TEST: "0" }, drafts: [RSVP_DRAFT, NUDGE_DRAFT] });
+  delete nr.props.WEBAPP_URL; nr.alerts.length = 0;
+  run(nr, "sendNudges");
+  check("NU11: {rsvp} in the nudge but no WEBAPP_URL => BLOCK", nr.threadReplies.length === 0 && nr.alerts.some(a => /WEBAPP_URL/.test(a.msg)), JSON.stringify(nr.alerts));
+}
+{
+  const w = nudgeWorld();
+  w.props.GFY_MAIL_TEST = "";                     // back to test mode
+  const real = Object.values(w.threads).map(t => t.id);
+  const n0 = Object.keys(w.threads).length;
+  w.alerts.length = 0; w.log.length = 0;
+  const r = run(w, "sendNudges");
+  const fresh = w.sent;
+  check("NU12: TEST MODE: nothing is posted into the real invite threads; fresh messages go only to the test address with '[TEST → real address]'; SendLog nudge-test; no public writes",
+    r.ok && w.threadReplies.length === 0 && fresh.length === 2 && fresh.every(m => m.to === TEST_ADDR && /^\[TEST → (alice|bob)@example\.com\]/.test(m.subject)) && w.sheet("SendLog").rows.slice(1).filter(x => x[3] === "nudge-test").length === 2 && pubWrites(w).length === 0, r.e || JSON.stringify([fresh, w.alerts]));
+  w.alerts.length = 0; w.sent.length = 0;
+  run(w, "sendNudges");
+  check("NU12b: nudge-test sends do not count as a send (test-mode rehearsal is repeatable)", w.sent.length === 2);
+}
+{
+  const w = nudgeWorld({ replyFails: "thr1" });
+  w.alerts.length = 0;
+  const r = run(w, "sendNudges");
+  const logn = w.sheet("SendLog").rows.slice(1).filter(x => x[3] === "nudge");
+  check("NU13: a failed nudge is reported, NOT logged, and does not stop the others", r.ok && logn.length === 1 && logn[0][1] === "Bob Baker" && w.alerts.some(a => /Alice Able/.test(a.msg) && /fail/i.test(a.msg)), r.e || JSON.stringify([logn, w.alerts]));
+}
+{
+  const w = nudgeWorld();
+  Object.values(w.threads).find(t => t.to === "alice@example.com").msgs[0].to = "someone.else@example.com";
+  w.alerts.length = 0;
+  run(w, "sendNudges");
+  check("NU14: if the logged thread was not sent to that person's address, that nudge is skipped and reported (never reply into the wrong thread)", w.threadReplies.length === 1 && w.alerts.some(a => /Alice Able/.test(a.msg) && /thread/i.test(a.msg)), JSON.stringify(w.alerts));
+  const x = nudgeWorld();
+  x.sheet("SendLog").rows.slice(1).filter(r => r[1] === "Bob Baker").forEach(r => { r[5] = ""; });
+  x.alerts.length = 0;
+  run(x, "sendNudges");
+  check("NU15: an invite row with no thread_id cannot be replied to => skipped and reported by name", x.threadReplies.length === 1 && x.alerts.some(a => /Bob Baker/.test(a.msg)), JSON.stringify(x.alerts));
+}
+
 // ---------- no-'@' leak test ----------
 {
   const bad = allPublicWrites.filter(e => /@/.test(String(e.v)));
