@@ -12,3 +12,4 @@ render-close-preflight/
 # clasp arming workspace — copies of tools/*.gs (one owner) + pulled manifest; see docs/2027-DATA-PACKAGE.md
 tools/clasp/
 tools/clasp-admin/
+tools/clasp-staging/
