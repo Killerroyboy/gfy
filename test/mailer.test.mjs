@@ -970,6 +970,58 @@ function nudgeWorld(extra = {}, ageFor = {}) {
   check("NU15: an invite row with no thread_id cannot be replied to => skipped and reported by name", x.threadReplies.length === 1 && x.alerts.some(a => /Bob Baker/.test(a.msg)), JSON.stringify(x.alerts));
 }
 
+// ---------- E: health alerts (WO-PROGRAM-33 s4) ----------
+const ALERT = "ops@example.org";
+function failingScanWorld(props = {}) {
+  const w = world({ props: { GFY_MAIL_TEST: "0", ...props }, threadError: "thr2" });
+  run(w, "sendInvites"); w.alerts.length = 0; w.mails.length = 0;
+  return w;
+}
+{
+  const w = failingScanWorld();
+  const r = run(w, "scanReplies");
+  check("HL1: ALERT_TO unset => a failing scan still throws but sends no alert mail", !r.ok && w.mails.length === 0, r.e);
+  const ok = world({ props: { ALERT_TO: ALERT } });
+  const r2 = run(ok, "scanReplies");
+  check("HL2: a healthy scan with ALERT_TO set sends nothing", r2.ok && ok.mails.length === 0, r2.e || JSON.stringify(ok.mails));
+}
+{
+  const w = failingScanWorld({ ALERT_TO: ALERT });
+  const r = run(w, "scanReplies");
+  check("HL3: a scan that throws sends ONE MailApp alert to ALERT_TO (and still throws)", !r.ok && w.mails.length === 1 && w.mails[0].to === ALERT && /scan/i.test(w.mails[0].subj), r.e || JSON.stringify(w.mails));
+  run(w, "scanReplies"); run(w, "scanReplies");
+  check("HL4: never alerts in a loop: repeated failures within 24 h send no more mail", w.mails.length === 1, JSON.stringify(w.mails.length));
+  w.props.ALERT_LAST = String(Date.now() - 25 * 3600 * 1000);
+  run(w, "scanReplies");
+  check("HL5: after 24 h the next failure alerts again (once)", w.mails.length === 2, String(w.mails.length));
+}
+{
+  const w = world({ props: { ALERT_TO: ALERT } });
+  w.sheet("READ ME").rows[1][1] = "2020-01-01 00:00";
+  const r = run(w, "scanReplies");
+  check("HL6: last good scan older than 3 h when a scan starts => one alert, even though this scan succeeds", r.ok && w.mails.length === 1 && w.mails[0].to === ALERT && /stale|old|3 h/i.test(w.mails[0].subj + w.mails[0].body), r.e || JSON.stringify(w.mails));
+  const f = world({ props: { ALERT_TO: ALERT } });
+  f.sheet("READ ME").rows[1][1] = new Date(Date.now() - 2 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
+  run(f, "scanReplies");
+  const n = world({ props: { ALERT_TO: ALERT } });          // never scanned: first scan, no alert
+  run(n, "scanReplies");
+  check("HL7: 2 h old (under 3 h) and never-scanned both stay quiet", f.mails.length === 0 && n.mails.length === 0, JSON.stringify([f.mails, n.mails]));
+}
+{
+  const w = world({ props: { ALERT_TO: ALERT }, noPublicId: true });
+  const r = run(w, "scanReplies");
+  check("HL8: a scan that dies before starting (no PUBLIC_ID) alerts once and still throws", !r.ok && w.mails.length === 1, r.e || JSON.stringify(w.mails));
+}
+{
+  const w = failingScanWorld({ ALERT_TO: ALERT });
+  w.M.__mailFail = true;
+  const w2 = world({ props: { GFY_MAIL_TEST: "0", ALERT_TO: ALERT }, threadError: "thr2" });
+  run(w2, "sendInvites");
+  w2.mails.length = 0;
+  const r = run(w2, "scanReplies");
+  check("HL9: the alert body carries no email addresses", w2.mails.length === 1 && !/@/.test(w2.mails[0].body.replace(ALERT, "")), JSON.stringify(w2.mails));
+}
+
 // ---------- no-'@' leak test ----------
 {
   const bad = allPublicWrites.filter(e => /@/.test(String(e.v)));

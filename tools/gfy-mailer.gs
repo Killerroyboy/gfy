@@ -558,7 +558,43 @@ function mailLooksYes_(text){
   return /\b(yes|yep|yeah|i'?m in|count me in|sign me up|i'?ll be there|absolutely|definitely)\b/.test(t);
 }
 
+// ---- E: health alerts -------------------------------------------------------------
+
+const MAIL_ALERT_STALE_MS = 3 * 60 * 60 * 1000;
+const MAIL_ALERT_EVERY_MS = 24 * 60 * 60 * 1000;
+
+/** One alert mail per 24 h to the ALERT_TO script property (empty = off). Never throws. */
+function mailAlert_(props, subject, body){
+  try {
+    const to = String(props.getProperty("ALERT_TO") || "").trim();
+    if (!to) return;
+    const last = Number(props.getProperty("ALERT_LAST")) || 0;
+    if (Date.now() - last < MAIL_ALERT_EVERY_MS) return;
+    MailApp.sendEmail(to, subject, body);
+    props.setProperty("ALERT_LAST", String(Date.now()));
+  } catch (e){ Logger.log("alert failed: " + (e && e.message || e)); }
+}
+
 function scanReplies(){
+  const props = PropertiesService.getScriptProperties();
+  try {                       // stale check at scan start (never-scanned stays quiet)
+    const admin = SpreadsheetApp.getActiveSpreadsheet();
+    const readme = admin && admin.getSheetByName(MAIL_TAB.readme);
+    const stamp = readme ? String(readme.getRange(2, 2).getValue() == null ? "" : readme.getRange(2, 2).getValue()).trim() : "";
+    if (stamp){
+      const t = Utilities.parseDate(stamp, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
+      if (t && !isNaN(t.getTime()) && Date.now() - t.getTime() > MAIL_ALERT_STALE_MS)
+        mailAlert_(props, "GFY Mail: reply scan is stale", `The last good reply scan was ${stamp}, over 3 hours ago. Check the Apps Script trigger / Executions.`);
+    }
+  } catch (e){ Logger.log("stale check failed: " + (e && e.message || e)); }
+  try { mailScan_(); }
+  catch (e){
+    mailAlert_(props, "GFY Mail: reply scan FAILED", String(e && e.message || e).replace(/\S+@\S+/g, "(address)").slice(0, 500));
+    throw e;
+  }
+}
+
+function mailScan_(){
   const admin = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
   const pid = props.getProperty("PUBLIC_ID");
