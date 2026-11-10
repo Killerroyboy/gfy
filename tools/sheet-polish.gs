@@ -66,11 +66,39 @@ function protectHeader_(sh){
     p.setDescription(TAG).setWarningOnly(true);        // warn, never block
   }
 }
+// BACKLOG #33 item 5: the checkbox window is (last data row + CHECKBOX_SLACK),
+// not the whole sheet. A whole-column sweep made every blank row below the data
+// a FALSE cell, and the published CSV then carried ~1000 junk rows. A row is
+// "data" if it has a value in year/player (or, on a tab with neither header,
+// anywhere outside the checkbox columns).
+const CHECKBOX_SLACK = 50;
+function lastDataRow_(sh, cols){
+  const vals = sh.getDataRange().getValues();
+  const heads = (vals[0] || []).map(h => String(h).trim().toLowerCase());
+  let key = [];
+  heads.forEach((h, i) => { if (h === "year" || h === "player") key.push(i); });
+  if (!key.length) heads.forEach((h, i) => { if (cols.indexOf(h) < 0) key.push(i); });
+  let last = 1;
+  for (let r = 1; r < vals.length; r++)
+    if (key.some(i => String(vals[r][i] == null ? "" : vals[r][i]).trim() !== "")) last = r + 1;
+  return last;
+}
 function applyCheckboxes_(sh, cols){
+  const end = Math.min(sh.getMaxRows(), lastDataRow_(sh, cols) + CHECKBOX_SLACK);
   cols.forEach(c => {
     const i = headerIndex_(sh, c); if (!i) return;
     // Values untouched (E-IDEM): checkbox validation maps existing TRUE/FALSE in place.
-    dataRange_(sh, i).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+    sh.getRange(2, i, Math.max(1, end - 1), 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+    // Excess rows hold no year/player value by construction: drop the validation
+    // and ONLY literal FALSE junk there (a TRUE or any other value stays).
+    const rest = sh.getMaxRows() - end;
+    if (rest > 0){
+      const r = sh.getRange(end + 1, i, rest, 1);
+      r.clearDataValidations();
+      const vals = r.getValues(); let changed = false;
+      vals.forEach(row => { if (row[0] === false || String(row[0]).trim().toUpperCase() === "FALSE"){ row[0] = ""; changed = true; } });
+      if (changed) r.setValues(vals);
+    }
   });
 }
 function applyDropdowns_(sh, spec){
@@ -206,6 +234,10 @@ function buildStartHere_(ss){
   const movedLabelIdx = existing.findIndex(r => String(r[0]).indexOf("Scoring config moved") === 0);
   const movedValueRow = movedLabelIdx >= 0 ? existing[movedLabelIdx + 1] : null;
   const keep = oldStyleRow ? oldStyleRow[1] : (movedValueRow ? movedValueRow[1] : "");
+  // BACKLOG #33 item 5: once Info carries BOTH score_endpoint and form_url the
+  // legacy pointer row is noise - drop it. While Info lacks either, keep it
+  // (and any pasted value) so the only copy is never lost.
+  const infoHasScoring = infoHasScoring_(ss);
   sh.clear();
   const url = ss.getUrl();                                    // runtime — no ids in source (F-START-LINKS)
   const link = tab => { const s = ss.getSheetByName(tab); return s ? `=HYPERLINK("${url}#gid=${s.getSheetId()}","${tab}")` : tab; };
@@ -223,9 +255,11 @@ function buildStartHere_(ss){
          ["  new invitee? record the sponsor in invited_by · season start: GFY menu → Seed next season's Invites", ""],
          ["Rooms:", link("Rooms")]]),
     ["", ""],
-    ["Scoring config moved → Info tab (score_endpoint + form_url)" + (keep ? " — old value preserved below, copy it to Info!" : ""), ""],
-    ["", keep],
-    ["", ""],
+    ...(infoHasScoring ? [] : [
+      ["Scoring config moved → Info tab (score_endpoint + form_url)" + (keep ? " — old value preserved below, copy it to Info!" : ""), ""],
+      ["", keep],
+      ["", ""],
+    ]),
     ["COLOR LEGEND", ""],
     ["Red row = deposit unpaid, this season only (Field) · committed but status out/declined (Invites — fix one)", ""],
     ["Gold tint = rookie (since == this season)", ""],
@@ -246,7 +280,9 @@ function buildStartHere_(ss){
     ["Polish/repair the sheet: Extensions → Apps Script → run polish()", ""],
   ];
   sh.getRange(1, 1, rows.length, 2).setValues(rows);
-  sh.setColumnWidth(1, 340); sh.getRange("A1").setFontSize(14).setFontWeight("bold");
+  sh.setColumnWidth(1, 520);                                  // wide + wrapped: long lines no longer run off the screen
+  sh.getRange(1, 1, rows.length, 1).setWrap(true);
+  sh.getRange("A1").setFontSize(14).setFontWeight("bold");
   orderTabs_(ss, eventWindow);
 }
 // Review round 1: both helpers below check ONE combined condition and
@@ -313,4 +349,10 @@ function orderTabs_(ss, eventWindow){
   const want = eventWindow ? ["START HERE","Scores","Field","Pairings"] : ["START HERE","Field","Invites","Rooms"];
   want.forEach((n, i) => { const s = ss.getSheetByName(n); if (s){ ss.setActiveSheet(s); ss.moveActiveSheet(i + 1); } });
   const home = ss.getSheetByName("START HERE"); if (home) ss.setActiveSheet(home);   // BACKLOG #17e: land on START HERE, not the last tab moved
+}
+function infoHasScoring_(ss){
+  const info = ss.getSheetByName("Info"); if (!info || info.getLastRow() < 1) return false;
+  const have = {};
+  info.getDataRange().getValues().forEach(r => { const k = String(r[0]).trim().toLowerCase(); if (k) have[k] = String(r[1] == null ? "" : r[1]).trim() !== ""; });
+  return !!(have.score_endpoint && have.form_url);
 }
