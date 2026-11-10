@@ -3,6 +3,7 @@
 // Run:  npm run check-mailer
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { JSDOM } from "jsdom";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -27,7 +28,7 @@ function mkSheet(name, rows, log, ss) {
     return v;
   };
   const ensure = (r, c) => { while (sh.rows.length < r) sh.rows.push([]); const row = sh.rows[r - 1]; while (row.length < c) row.push(""); };
-  const logW = (r, c, v, op) => { sh.writes.push({ r, c, v, op }); log.push({ ev: "write", sheet: name, r, c, v }); delete sh.formulas[r + "," + c]; };
+  const logW = (r, c, v, op) => { sh.writes.push({ r, c, v, op }); log.push({ ev: "write", sheet: name, r, c, v, op, locked: log.isLocked ? log.isLocked() : null }); delete sh.formulas[r + "," + c]; };
   sh.getName = () => name;
   sh.getSheetId = () => 1;
   sh.getDataRange = () => ({ getValues: () => { const w = Math.max(0, ...sh.rows.map(r => r.length)); return sh.rows.map(r => { const o = r.slice(); while (o.length < w) o.push(""); return o; }); } });
@@ -112,13 +113,15 @@ function world(o = {}) {
   const admin = mkSS("ADMIN_ID", o.adminSheets ? o.adminSheets(log) : adminSheets, log);
   const pub = mkSS(PUB, [mkSheet("Invites", [HDR_INV, ...invites], log)], log);
   const props = { ...(o.props || {}) }; if (!("PUBLIC_ID" in props) && !o.noPublicId) props.PUBLIC_ID = PUB;
+  const prompts = [];
   const alerts = []; const answers = o.answers || ["YES"];
   const opened = [];
   const menus = [];
   const ui = {
     alert: (title, msg, btns) => { alerts.push({ title, msg, btns }); return btns === "YES_NO" ? (answers.shift() ?? "NO") : "OK"; },
     createMenu: t => { const m = { title: t, items: [] }; const b = { addItem: (l, f) => { m.items.push([l, f]); return b; }, addSeparator: () => b, addToUi: () => { menus.push(m); } }; return b; },
-    Button: { YES: "YES", NO: "NO", OK: "OK" }, ButtonSet: { YES_NO: "YES_NO", OK: "OK" },
+    prompt: (title, msg) => { prompts.push({ title, msg }); const txt = (o.promptAnswers || []).shift(); return { getSelectedButton: () => (txt === undefined ? "CANCEL" : "OK"), getResponseText: () => String(txt) }; },
+    Button: { YES: "YES", NO: "NO", OK: "OK", CANCEL: "CANCEL" }, ButtonSet: { YES_NO: "YES_NO", OK: "OK", OK_CANCEL: "OK_CANCEL" },
   };
   const SpreadsheetApp = {
     getActiveSpreadsheet: () => admin, getActive: () => admin,
@@ -130,7 +133,7 @@ function world(o = {}) {
   const sent = []; const threads = {}; let tn = 0;
   const hooks = {};
   const flags = {};
-  const counters = { raw: 0, fetched: [] };
+  const counters = { raw: 0, fetched: [], drafts: 0 };
   const pendingDrafts = new Set();
   const mkMsg = m => ({ getId: () => m.id, getFrom: () => m.from, getSubject: () => m.subject, getDate: () => new Date(m.date || "2027-01-05T12:00:00Z"), getPlainBody: () => m.body || "", getTo: () => m.to || "", getRawContent: () => { counters.raw++; return (m.raw || "") + "\r\n\r\n" + (m.body || ""); } });
   const draftOps = [];
@@ -146,10 +149,12 @@ function world(o = {}) {
   const drafts = (o.drafts || [TPL_DRAFT]).map(mkDraft);
   const threadReplies = [];
   const GmailApp = {
-    getDrafts: () => { if (o.draftsError) throw new Error("gmail down"); return drafts; },
+    getDrafts: () => { counters.drafts++; if (o.draftsError) throw new Error("gmail down"); return drafts; },
     createDraft: (to, subject, body, opts) => { const dk = {}; pendingDrafts.add(dk); return {
       deleteDraft: () => { pendingDrafts.delete(dk); },
       send: () => {
+      if (lockState.held) lockState.sendsWhileHeld++;
+      if (hooks.beforeSend) hooks.beforeSend(to);
       if (o.failTo && o.failTo === to) throw new Error("smtp boom");
       pendingDrafts.delete(dk);
       const id = (o.numericIds ? "0189300" : "thr") + (++tn); const t = { id, to, msgs: [{ id: id + "m0", from: "Riley <me@gmail.com>", to, subject, body, date: "2027-01-05T10:00:00Z" }] };
@@ -164,7 +169,8 @@ function world(o = {}) {
       return { getId: () => id, getFirstMessageSubject: () => t.msgs[0].subject, getMessages: () => t.msgs.map(mkMsg), reply: rep(false), replyAll: rep(true) }; },
   };
   // The script lock is NOT reentrant: a second wait inside a held lock times out, like production.
-  const lockState = { held: false };
+  const lockState = { held: false, sendsWhileHeld: 0 };
+  log.isLocked = () => lockState.held;
   const LockService = { getScriptLock: () => ({
     waitLock: () => { if (lockState.held) throw new Error("Lock timeout: another process was holding the lock for too long."); lockState.held = true; log.push({ ev: "lock" }); },
     tryLock: () => { if (lockState.held) return false; lockState.held = true; log.push({ ev: "lock" }); return true; },
@@ -175,7 +181,7 @@ function world(o = {}) {
     newTrigger: fn => { const t = { fn, every: null, onEdit: false, uid: "uid-" + fn }; const b = { timeBased: () => b, everyMinutes: n => { t.every = n; return b; }, forSpreadsheet: x => { t.ss = x; return b; }, onEdit: () => { t.onEdit = true; return b; }, create: () => { triggers.push(t); return t; } }; return b; },
     deleteTrigger: () => {},
   };
-  const PropertiesService = { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); } }) };
+  const PropertiesService = { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; } }) };
   const mails = [];
   const MailApp = { getRemainingDailyQuota: () => (o.quota ?? 100), sendEmail: (to, subj, body) => { mails.push({ to, subj, body }); } };
   const Session = { getEffectiveUser: () => ({ getEmail: () => "me@gmail.com" }), getScriptTimeZone: () => "UTC" };
@@ -189,14 +195,14 @@ function world(o = {}) {
   const htmlPages = [];
   const HtmlService = { createHtmlOutput: h => { const out = { html: h, title: "", getContent: () => h, setTitle: t => { out.title = t; return out; }, addMetaTag: () => out, setXFrameOptionsMode: () => out }; htmlPages.push(out); return out; }, XFrameOptionsMode: { ALLOWALL: "ALLOWALL" } };
   const env = { SpreadsheetApp, GmailApp, MailApp, PropertiesService, LockService, ScriptApp, Session, Utilities, Logger, HtmlService };
-  const names = ["onOpen", "sendInvites", "scanReplies", "installMailTriggers", "mailPublicWrite_", "adminPolish", "mailOnEdit", "mailDashboard_", "MAIL_SCHEMA", "sendNudges", "doGet", "recordRsvp"];
+  const names = ["onOpen", "sendInvites", "scanReplies", "installMailTriggers", "mailPublicWrite_", "adminPolish", "mailOnEdit", "mailDashboard_", "MAIL_SCHEMA", "sendNudges", "doGet", "recordRsvp", "mailAppend_", "mailWithLock_", "setNudgeDays", "clearRehearsalAnswers"];
   let M;
   try { M = new Function(...Object.keys(env), SRC + "\nreturn {" + names.map(n => `${n}: typeof ${n}!=='undefined'?${n}:undefined`).join(",") + "};")(...Object.values(env)); }
   catch (e) { M = { _err: String(e) }; }
   const sheet = n => admin.getSheetByName(n);
   const invSheet = pub.getSheetByName("Invites");
   const addIncoming = (threadId, m) => { threads[threadId].msgs.push({ id: threadId + "m" + threads[threadId].msgs.length, ...m }); };
-  return { M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages, hooks, lockState, pendingDrafts, flags, counters };
+  return { M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages, hooks, lockState, pendingDrafts, flags, counters, prompts };
 }
 const run = (w, fn) => { try { return { ok: true, v: w.M[fn]() }; } catch (e) { return { ok: false, e: String(e && e.message || e) }; } };
 const pubWrites = w => w.log.filter(e => e.ev !== "lock" && e.ev !== "unlock" && e.ev !== "send" && e.sheet === "Invites");
@@ -1463,6 +1469,226 @@ for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
   check("L3b: the text-TRUE next to it is still converted to a real checkbox boolean", con.rows[1][4] === true, JSON.stringify(con.rows[1]));
   check("L3c: a user's own conditional-format rule on Contacts survives (twice), and our 3 tagged rules appear exactly once each after two runs",
     others.length === 1 && others[0] === userRule && mine.length === 3, JSON.stringify(con.rules.map(r => r.f)));
+}
+
+
+// ---------- WO-FIX-33-REREVIEW (N1-N8 + probe d) ----------
+const R_TODAY = new Date().toISOString().slice(0, 10);
+const lease = ms => JSON.stringify({ id: "other", expires: Date.now() + ms });
+const slRows = w => w.sheet("SendLog").rows.slice(1);
+{ // N1a: nothing waits on a long send
+  const names = Array.from({ length: 30 }, (_, i) => `Player${i} Zed`);
+  const w = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT],
+    contacts: names.map((n, i) => [n, `p${i}@example.com`, "", "", "FALSE", "", ""]), invites: names.map(n => [2027, n, false, false, "", false, ""]) });
+  let rsvpOk = null, rsvpErr = "";
+  w.hooks.afterSend = n => { if (n === 10) { try { w.M.recordRsvp(tokenOf(w, "Player0 Zed"), "IN"); rsvpOk = true; } catch (e) { rsvpOk = false; rsvpErr = String(e && e.message || e); } } };
+  const r = run(w, "sendInvites");
+  const p0 = w.invSheet.rows.find(x => x[1] === "Player0 Zed");
+  check("N1a: 30-recipient send: NO email is ever sent while the script lock is held, and an RSVP landing mid-send completes at once (the fake lock throws on any wait, so any contention fails this)",
+    r.ok && w.sent.length === 30 && w.lockState.sendsWhileHeld === 0 && rsvpOk === true && p0[5] === true && w.lockState.held === false, r.e || rsvpErr || String(w.lockState.sendsWhileHeld));
+}
+{ // N1b: run-exclusivity lease
+  const w1 = world({ props: { GFY_MAIL_TEST: "0", SEND_RUN: lease(60000) } });
+  const l0 = w1.props.SEND_RUN;
+  run(w1, "sendInvites");
+  check("N1b: a live SEND_RUN lease => the second send refuses 'another send is running', sends/writes nothing, leaves the other run's lease alone",
+    w1.sent.length === 0 && slRows(w1).length === 0 && w1.alerts.some(a => /another send is running/i.test(a.msg)) && w1.props.SEND_RUN === l0, JSON.stringify(w1.alerts));
+  const w2 = world({ props: { GFY_MAIL_TEST: "0", SEND_RUN: lease(-1000) } });
+  run(w2, "sendInvites");
+  check("N1b2: an EXPIRED lease is taken over, and the lease is released when the run ends", w2.sent.length === 2 && !("SEND_RUN" in w2.props), JSON.stringify(w2.props));
+  const w3 = world({ props: { GFY_MAIL_TEST: "0" }, failTo: "alice@example.com" });
+  run(w3, "sendInvites");
+  check("N1b3: the lease is released after a run with a failed send too", !("SEND_RUN" in w3.props));
+  const w4 = world({ props: { GFY_MAIL_TEST: "0" }, answers: ["YES", "YES"] });
+  let nested = [];
+  w4.hooks.afterSend = n => { if (n === 1) { const a0 = w4.alerts.length; try { w4.M.sendInvites(); } catch (e) { /* */ } nested = w4.alerts.slice(a0); } };
+  run(w4, "sendInvites");
+  check("N1b4: a second Send invites fired WHILE the first is mid-send (lock free between emails) refuses, and nobody is emailed twice",
+    w4.sent.length === 2 && new Set(w4.sent.map(x => x.to)).size === 2 && nested.some(a => /another send is running/i.test(a.msg)), JSON.stringify(nested));
+  const w5 = nudgeWorld(); w5.props.SEND_RUN = lease(60000); w5.alerts.length = 0;
+  run(w5, "sendNudges");
+  check("N1b5: nudges share the same lease", w5.sent.length === 0 && w5.alerts.some(a => /another send is running/i.test(a.msg)), JSON.stringify(w5.alerts));
+}
+{ // N1c: reservation row before send(), settled after
+  const w = world({ props: { GFY_MAIL_TEST: "0" } });
+  const seen = [];
+  w.hooks.beforeSend = to => { const mine = slRows(w).find(r => r[2] === to); seen.push({ to, row: mine ? mine.slice() : null, locked: w.lockState.held }); };
+  run(w, "sendInvites");
+  const after = slRows(w);
+  check("N1c: BEFORE each send() a reservation row exists (what=invite, note 'season 2027 pending <runId>', no thread yet) and no lock is held",
+    seen.length === 2 && seen.every(x => x.row && x.row[3] === "invite" && /^season 2027 pending \S+$/.test(String(x.row[4])) && String(x.row[5]) === "" && x.locked === false), JSON.stringify(seen));
+  check("N1c2: after the send the SAME row carries the thread_id and note 'season 2027 sent' (one row per person)",
+    after.length === 2 && after.every(r => r[4] === "season 2027 sent" && /^thr\d+$/.test(String(r[5]))), JSON.stringify(after));
+}
+{ // N1d: a pending row counts as logged; Dashboard lists it
+  const w = world({ props: { GFY_MAIL_TEST: "0" }, sendlog: [[R_TODAY, "Alice Able", "alice@example.com", "invite", "season 2027 pending abc123", ""]] });
+  run(w, "sendInvites");
+  run(w, "adminPolish");
+  const pend = dashList(w, "Pending / unconfirmed sends") || [];
+  check("N1d: a pending reservation counts as already sent (never re-sent) and the Dashboard lists it under 'Pending / unconfirmed sends'",
+    w.sent.length === 1 && w.sent[0].to === "bob@example.com" && pend.some(x => /Alice Able/.test(x)) && !pend.some(x => /Bob Baker/.test(x)), JSON.stringify([w.sent.map(x => x.to), pend]));
+}
+{ // N1e: the RSVP page retries once after ~5 s
+  const w = rsvpWorld({ noSend: true, rsvp: [[2027, "Alice Able", "A".repeat(24), "", "", ""]] });
+  const html = pageOf(w, "A".repeat(24)).html;
+  const drive = failures => {
+    const dom = new JSDOM(html, { runScripts: "dangerously" }); const win = dom.window;
+    const timers = []; win.setTimeout = (f, ms) => { timers.push({ f, ms }); return timers.length; };
+    let attempts = 0;
+    win.google = { script: { run: { withSuccessHandler: ok => ({ withFailureHandler: bad => ({ recordRsvp: () => { attempts++; if (attempts <= failures) bad(new Error("boom")); else ok({}); } }) }) } } };
+    win.document.getElementById("b-IN").click();
+    const afterClick = { attempts, timers: timers.length, ms: timers[0] && timers[0].ms };
+    while (timers.length && attempts < 5) timers.shift().f();
+    return { afterClick, attempts, msg: win.document.getElementById("msg").textContent, err: win.document.getElementById("msg").className, left: timers.length };
+  };
+  const one = drive(1), two = drive(2);
+  check("N1e: one failure => retried automatically after ~5 s and then 'Saved.'", one.afterClick.attempts === 1 && one.afterClick.timers === 1 && one.afterClick.ms >= 4000 && one.afterClick.ms <= 6000 && one.attempts === 2 && one.msg === "Saved.", JSON.stringify(one));
+  check("N1e2: two failures => only ONE retry, then the honest 'Could not save' error", two.attempts === 2 && /Could not save/.test(two.msg) && two.err === "err" && two.left === 0, JSON.stringify(two));
+}
+{ // N2: mailAppend_ only under the lock
+  const w = world();
+  let threw = false, msg = ""; try { w.M.mailAppend_(w.sheet("SendLog"), { date: "2027-01-01", player: "X", what: "note" }); } catch (e) { threw = true; msg = String(e.message); }
+  check("N2a: mailAppend_ called without the script lock throws (and writes nothing)", threw && /lock/i.test(msg) && slRows(w).length === 0, msg);
+  let inside = false; try { w.M.mailWithLock_(() => w.M.mailAppend_(w.sheet("SendLog"), { date: "2027-01-01", player: "X", what: "note" })); inside = true; } catch (e) { /* */ }
+  check("N2a2: ... and works inside mailWithLock_ (flag is released afterwards)", inside && slRows(w).length === 1 && (() => { try { w.M.mailAppend_(w.sheet("SendLog"), {}); return false; } catch (e) { return true; } })());
+  const worlds = [];
+  { const x = rsvpWorld(); worlds.push(x); x.invSheet.getRange = () => { throw new Error("public sheet down"); }; rsvpGo(x, "Alice Able", "IN"); }          // recordRsvp failure note
+  { const x = repWorld({ replies: [["2027-01-02", "Alice Able", "A", "yes", true, false, "m1"]], invites: [[2027, "Alice Able", true, true, "", true, ""]] }); worlds.push(x); x.M.mailOnEdit(editEvent(x, 2, colOf(x.sheet("Replies").rows, "confirm"))); }   // unticked note
+  { const x = afterSend(); worlds.push(x.w); x.w.addIncoming(x.tid("alice@example.com"), { from: "Alice <alice@example.com>", subject: "Re:", body: "yes" }); run(x.w, "scanReplies"); }   // Replies row
+  { const x = nudgeWorld(); worlds.push(x); run(x, "sendNudges"); }
+  const bad = [];
+  worlds.forEach((x, i) => x.log.filter(e => e.ev === "write" && ["SendLog", "Replies", "RSVP", "Dashboard"].includes(e.sheet) && e.locked !== true).forEach(e => bad.push(i + ":" + e.sheet + "@" + e.r + "," + e.c)));
+  const sawNote = worlds[0].sheet("SendLog").rows.some(r => r[3] === "note") && worlds[1].sheet("SendLog").rows.some(r => r[3] === "note") && worlds[2].sheet("Replies").rows.length === 2;
+  check("N2b: every write to SendLog / Replies / RSVP / Dashboard in the RSVP-failure-note, onEdit-note, scan-reply and nudge paths happens under the script lock", sawNote && bad.length === 0, bad.slice(0, 6).join(" ") + (sawNote ? "" : " (scenario did not reach the append)"));
+}
+{ // N3: menu
+  const w = world(); run(w, "onOpen");
+  const m = w.menus.find(m => m.title === "GFY Mail");
+  const items = Object.fromEntries((m ? m.items : []));
+  check("N3: menu has 'Install / repair triggers', 'Set nudge days…', 'Clear rehearsal answers'", items["Install / repair triggers"] === "installMailTriggers" && items["Set nudge days…"] === "setNudgeDays" && items["Clear rehearsal answers"] === "clearRehearsalAnswers", JSON.stringify(m && m.items));
+  const readme = readFileSync(path.join(ROOT, "README.md"), "utf8");
+  check("N3b: README installs the triggers from the menu, never 'run installMailTriggers' from the editor", /Install \/ repair triggers/.test(readme) && !/\bRun `installMailTriggers`/i.test(readme) && !/Run `installMailTriggers` again/.test(readme));
+}
+{ // N4: a nudge is always a fresh email
+  const w = nudgeWorld();
+  const tidA = Object.values(w.threads).find(t => t.to === "alice@example.com").id;
+  const r = run(w, "sendNudges");
+  const fa = w.sent.find(x => x.to === "alice@example.com");
+  const nl = slRows(w).filter(x => x[3] === "nudge" && x[1] === "Alice Able");
+  const ta = tokenOf(w, "Alice Able");
+  check("N4: LIVE nudge = a fresh email to the exact logged address, subject 'Re: <original invite subject>', body from the NUDGE draft; thread.reply is never used",
+    r.ok && w.threadReplies.length === 0 && !!fa && fa.subject === "Re: Are you in, Alice?" && fa.body === `Alice, nudge: ${WEBAPP}?t=${ta}` && fa.threadId !== tidA, r.e || JSON.stringify([w.threadReplies, w.sent]));
+  check("N4b: ... its NEW thread_id is logged on the nudge row and the scanner watches it", nl.length === 1 && !!fa && nl[0][5] === fa.threadId && nl[0][4] === "season 2027 sent", JSON.stringify(nl));
+  if (fa) w.addIncoming(fa.threadId, { from: "Alice Able <alice@example.com>", subject: "Re: Are you in, Alice?", body: "yes in" });
+  run(w, "scanReplies");
+  check("N4c: a reply in the nudge thread ticks responded", w.invSheet.rows.find(x => x[1] === "Alice Able" && x[0] === 2027)[3] === true);
+  const code = SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  check("N4d: the source has no GmailThread.reply / replyAll / mailNudgeLive_ left", !/\.reply\(|\.replyAll\(|mailNudgeLive_/.test(code));
+}
+{ // N5: a throwing send keeps its reservation
+  const opts = { props: { GFY_MAIL_TEST: "0" }, failTo: "alice@example.com" };
+  const w = world(opts);
+  run(w, "sendInvites");
+  const al = slRows(w).filter(r => r[1] === "Alice Able");
+  check("N5: if send() throws the reservation row is KEPT, marked 'send error — check Sent before re-running'; the message never says safe to re-run",
+    al.length === 1 && al[0][3] === "invite" && /send error — check Sent before re-running/.test(al[0][4]) && !w.alerts.some(a => /safe to re-run/i.test(a.msg)) && w.alerts.some(a => /Alice Able/.test(a.msg) && /check/i.test(a.msg)), JSON.stringify([al, w.alerts]));
+  delete opts.failTo; w.alerts.length = 0; w.answers && 0;
+  run(w, "sendInvites");
+  run(w, "adminPolish");
+  check("N5b: a re-run does not email Alice (the error row counts as logged) and the Dashboard lists her under 'Pending / unconfirmed sends'",
+    w.sent.length === 1 && w.sent[0].to === "bob@example.com" && (dashList(w, "Pending / unconfirmed sends") || []).some(x => /Alice Able/.test(x)), JSON.stringify([w.sent.map(x => x.to), dashList(w, "Pending / unconfirmed sends")]));
+}
+{ // N6: rehearsal answers from an older version
+  const mk = (extra = {}) => world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT, NUDGE_DRAFT], answers: ["YES", "YES", "YES"],
+    sendlog: [[R_TODAY, "Alice Able", "alice@example.com", "invite", "season 2027 sent", "thrA"]],
+    rsvp: [[2027, "Alice Able", "A".repeat(24), "IN", "2027-01-01 10:00", "2027-01-01 10:00 IN", ""], [2027, "Bob Baker", "B".repeat(24), "MAYBE", "2027-01-01 10:00", "2027-01-01 10:00 MAYBE", ""], [2027, "Zed Test", "Z".repeat(24), "OUT", "2027-01-01 10:00", "2027-01-01 10:00 OUT", true]], ...extra });
+  const w = mk();
+  run(w, "sendInvites");
+  check("N6: LIVE send is BLOCKED while an unflagged RSVP row has an answer but the player has no live invite SendLog row; names the player and the menu item; nothing sent",
+    w.sent.length === 0 && !w.alerts.some(a => a.btns === "YES_NO") && w.alerts.some(a => /rehearsal answers from an older version/.test(a.msg) && /Bob Baker/.test(a.msg) && !/Alice Able/.test(a.msg) && /Clear rehearsal answers/.test(a.msg)), JSON.stringify(w.alerts));
+  const r = run(w, "clearRehearsalAnswers");
+  const rr = w.sheet("RSVP").rows.slice(1), by = n => rr.find(x => x[1] === n);
+  check("N6b: 'Clear rehearsal answers' clears answer/answered_at/history on test-flagged rows and on unflagged rows with no live invite; keeps tokens; leaves Alice's real answer alone",
+    r.ok && by("Bob Baker")[3] === "" && by("Bob Baker")[4] === "" && by("Bob Baker")[5] === "" && by("Zed Test")[3] === "" && by("Zed Test")[5] === "" && by("Bob Baker")[2] === "B".repeat(24) && by("Alice Able")[3] === "IN" && by("Alice Able")[5] !== "", r.e || JSON.stringify(rr));
+  w.alerts.length = 0;
+  run(w, "sendInvites");
+  check("N6c: ... after clearing, the live send goes ahead (Bob only; Alice is already logged)", w.sent.length === 1 && w.sent[0].to === "bob@example.com", JSON.stringify([w.sent.map(x => x.to), w.alerts]));
+  const t = mk({ props: { WEBAPP_URL: WEBAPP } });
+  run(t, "sendInvites");
+  check("N6d: TEST MODE is never blocked by this", t.sent.length >= 1 && !t.alerts.some(a => /rehearsal answers/.test(a.msg)), JSON.stringify(t.alerts));
+  const n = nudgeWorld(); n.sheet("RSVP").rows.push([2027, "Ghost Guy", "G".repeat(24), "IN", "2027-01-01 10:00", "2027-01-01 10:00 IN", ""]); n.alerts.length = 0;
+  run(n, "sendNudges");
+  check("N6e: a LIVE nudge run is blocked the same way", n.sent.length === 0 && n.alerts.some(a => /rehearsal answers from an older version/.test(a.msg) && /Ghost Guy/.test(a.msg)), JSON.stringify(n.alerts));
+}
+{ // N7: nudge days in a Script Property; Dashboard rebuilds
+  const w = dashWorld({ props: { NUDGE_DAYS: "2" } });
+  run(w, "adminPolish");
+  check("N7: NUDGE_DAYS=2 drives the nudge list (Gina is nudged) and the Dashboard shows it", dashVals(w)[DASH.nudge] === 2 && (dashList(w, "Needs nudge") || []).includes("Gina Recent"), JSON.stringify([dashVals(w), dashList(w, "Needs nudge")]));
+  const x = dashWorld();
+  run(x, "adminPolish");
+  const nr = x.sheet("Dashboard").rows.findIndex(row => String(row[0]).toLowerCase() === DASH.nudge);
+  x.sheet("Dashboard").rows[nr][1] = 2;
+  run(x, "adminPolish");
+  check("N7b: editing the Dashboard cell no longer sets the value (only the property / menu does)", dashVals(x)[DASH.nudge] === 7 && !(dashList(x, "Needs nudge") || []).includes("Gina Recent"), JSON.stringify(dashVals(x)));
+  const m = dashWorld({ promptAnswers: ["3", "abc", "0", "400"] });
+  run(m, "setNudgeDays");
+  const ok3 = m.props.NUDGE_DAYS === "3" && dashVals(m)[DASH.nudge] === 3;
+  run(m, "setNudgeDays"); run(m, "setNudgeDays"); run(m, "setNudgeDays");
+  check("N7c: menu 'Set nudge days…' stores a whole number 1-365 in NUDGE_DAYS and refreshes the Dashboard; junk / 0 / 400 are refused", ok3 && m.props.NUDGE_DAYS === "3" && m.prompts.length === 4, JSON.stringify([m.props.NUDGE_DAYS, m.prompts.length]));
+  const d = rsvpWorld();
+  run(d, "adminPolish");
+  const tplLine = dashVals(d)["template draft"], n0 = d.counters.drafts;
+  rsvpGo(d, "Alice Able", "IN");
+  d.M.mailOnEdit(editEvent(d, 2, 1));
+  check("N7d: Dashboard rebuilds from RSVP / onEdit do NOT read Gmail drafts and keep the cached template-draft status; adminPolish and scans do read them",
+    d.counters.drafts === n0 && /^OK/.test(String(tplLine)) && dashVals(d)["template draft"] === tplLine && (() => { run(d, "scanReplies"); return d.counters.drafts > n0; })(), JSON.stringify([tplLine, dashVals(d)["template draft"], n0, d.counters.drafts]));
+}
+{ // N8: guard, nudge subject lookup, auto-reply ids, truthiness, CF rule ownership
+  const w = world({ props: { GFY_MAIL_TEST: "0" } });
+  w.M.installMailTriggers && w.M.installMailTriggers();
+  w.flags.noUi = true;
+  let threw = false; try { w.M.sendInvites({ triggerUid: "uid-scanReplies" }); } catch (e) { threw = true; }
+  let threw2 = false; try { w.M.mailOnEdit({ triggerUid: "uid-scanReplies", range: w.sheet("Replies").getRange(2, 6, 1, 1) }); } catch (e) { threw2 = true; }
+  let okScan = true; try { w.M.scanReplies({ triggerUid: "uid-scanReplies" }); } catch (e) { okScan = false; }
+  check("N8a: a real trigger uid only authorises ITS OWN handler: scanReplies's uid cannot run sendInvites or mailOnEdit, but still runs scanReplies", threw && threw2 && w.sent.length === 0 && okScan);
+  const n = nudgeWorld({ threadError: "thr1" }); n.alerts.length = 0;
+  const r = run(n, "sendNudges");
+  check("N8b: getThreadById throwing while looking up the invite subject is treated as a missing thread: the nudge still goes (fresh email), nothing fails",
+    r.ok && n.sent.some(x => x.to === "alice@example.com") && !n.alerts.some(a => /NUDGE FAILED|Alice Able \(/.test(a.msg)), r.e || JSON.stringify(n.alerts));
+  const { w: a, tid } = afterSend();
+  a.addIncoming(tid("alice@example.com"), { from: "Alice Able <alice@example.com>", subject: "Re: hi", body: "auto", raw: "Auto-Submitted: auto-replied" });
+  a.counters.raw = 0; run(a, "scanReplies"); const first = a.counters.raw;
+  a.counters.raw = 0; run(a, "scanReplies"); run(a, "scanReplies");
+  check("N8c: an auto-reply message id is remembered after its first classification: later scans never re-fetch its raw content (and it is still not a reply)", first === 1 && a.counters.raw === 0 && a.sheet("Replies").rows.length === 1 && a.invSheet.rows.find(x => x[1] === "Alice Able")[3] === false, JSON.stringify([first, a.counters.raw]));
+  const t = world({ props: { GFY_MAIL_TEST: "0" }, invites: [[2027, "Alice Able", true, true, "", false, ""]], replies: [["2027-01-02", "Alice Able", "A", "yes", true, "yes", "m1"]] });
+  t.M.mailOnEdit(editEvent(t, 2, 6));
+  run(t, "adminPolish");
+  check("N8d: onEdit and the Dashboard share ONE truthiness: confirm='yes' text neither commits nor hides the player from 'Unconfirmed looks_yes'", t.invSheet.rows[1][5] === false && (dashList(t, "Unconfirmed looks_yes") || []).includes("Alice Able"), JSON.stringify([t.invSheet.rows[1], dashList(t, "Unconfirmed looks_yes")]));
+  const c = world();
+  const mk1 = f => { const b = mkRuleB(); return b.whenFormulaSatisfied(f).build(); };
+  const u1 = mk1('=AND($B2<>"",REGEXMATCH($B2&"","^x"))'), u2 = mk1('=COUNTIF(INDIRECT("Dashboard!A:A"),$A2)>0');
+  c.sheet("Contacts").rules = [u1, u2];
+  run(c, "adminPolish"); run(c, "adminPolish");
+  const rules = c.sheet("Contacts").rules;
+  check("N8e: only an exact tag marks a rule as ours: a user's rule that merely uses REGEXMATCH / INDIRECT('Dashboard!') survives", rules.includes(u1) && rules.includes(u2) && rules.filter(x => /gfy-admin-polish/.test(x.f || "")).length === 3, JSON.stringify(rules.map(x => x.f)));
+}
+{ // probe d follow-up
+  const cases = [
+    ["a {token} split by inline markup in the HTML", { ...RSVP_DRAFT, html: "<p>Hi {first} {da<b>te</b>}</p><a href=\"{rsvp}\">go</a>" }, /\{/],
+    ["an allowed {first} split by markup (it would never be filled)", { ...RSVP_DRAFT, html: "<p>Hi {fi<b>rst</b>}</p><a href=\"{rsvp}\">go</a>" }, /\{|split|formatting/i],
+    ["a [FILL split by markup", { ...RSVP_DRAFT, html: "<p>Hi {first} [FI<b>LL</b>: x]</p><a href=\"{rsvp}\">go</a>" }, /\[FILL\]/],
+  ];
+  for (const [label, draft, re] of cases) {
+    const w = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [draft] });
+    run(w, "sendInvites");
+    check(`PD1: ${label} => BLOCK, nothing sent`, w.sent.length === 0 && w.alerts.some(a => re.test(a.msg)), JSON.stringify(w.alerts));
+  }
+  const w = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [{ subject: "[GFY TEMPLATE] In, {first}?", html: "<p>Hi {first}</p>", plain: "Hi {first}, answer: {rsvp}" }] });
+  run(w, "sendInvites");
+  check("PD2: the RSVP token is only in the plain body, so the filled HTML would carry no link => BLOCK, nothing sent", w.sent.length === 0 && w.alerts.some(a => /HTML/.test(a.msg) && /link|URL/i.test(a.msg)), JSON.stringify(w.alerts));
+  const ok = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT] });
+  run(ok, "sendInvites");
+  check("PD3: a normal draft is unaffected", ok.sent.length === 2);
 }
 
 // ---------- no-'@' leak test ----------
