@@ -318,7 +318,10 @@ writes to the public sheet.
 trigger (`mailOnEdit`; works from the phone). Ticking `Replies.confirm` ticks
 `committed` for that player / current year on the public Invites tab (TRUE only, under
 the lock, through the same no-`@` guard). **Unticking does not untick `committed`**:
-if the player is currently committed, a `note` row goes to SendLog instead. Run
+if the player is currently committed, a `note` row goes to SendLog instead. **Backstop:** Google can
+drop an onEdit event when edits come fast (seen on staging 11-10), so every 15-min reply scan
+also commits any ticked confirm whose current-season row is not committed yet (same rule, TRUE
+only, live mode only) — a missed tick lands within 15 minutes. Run
 **GFY Mail → Install / repair triggers** again after pasting this version to add the new trigger. It acts
 on a real human tick only in LIVE mode: in test mode it writes nothing public and the Dashboard
 notes "test mode: would commit X". The Dashboard is rebuilt after a commit (debounced to once per 60 s). The onEdit commit and every

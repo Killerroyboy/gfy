@@ -798,6 +798,24 @@ function repWorld(extra = {}) {
   let threw = false; try { w.M.mailOnEdit(editEvent(w, 2, cc)); } catch (e) { threw = true; }
   check("E7: no PUBLIC_ID -> no public sheet opened, no write", w.opened.length === 0 && pubWrites(w).length === 0 && !threw);
 }
+{
+  // E8: Google can DROP an installable onEdit event (rapid edits) -> the 15-min scan is the backstop:
+  // every ticked confirm whose current-season row is not committed gets committed (TRUE only, idempotent).
+  const w = repWorld();
+  w.log.length = 0;
+  let ok = true, err = ""; try { w.M.scanReplies({ triggerUid: "uid-scanReplies" }); } catch (e) { ok = false; err = String(e && e.message || e); }
+  const inv = w.invSheet.rows;
+  const a27 = inv.find(x => x[0] === 2027 && x[1] === "Alice Able"), a26 = inv.find(x => x[0] === 2026), bob = inv.find(x => x[1] === "Bob Baker");
+  const writes = pubWrites(w);
+  check("E8: scanReplies re-applies a ticked confirm the onEdit missed (current season only, TRUE only, no rewrite of already-committed)",
+    ok && a27[5] === true && bob[5] === true && a26[5] === false && writes.length === 2 && writes.every(x => x.v === true && x.c === 6), err || JSON.stringify(writes));
+  w.log.length = 0;
+  try { w.M.scanReplies({ triggerUid: "uid-scanReplies" }); } catch (e) {}
+  check("E8b: a second scan writes nothing (idempotent)", pubWrites(w).length === 0, JSON.stringify(pubWrites(w)));
+  const wt = repWorld({ props: { GFY_MAIL_TEST: "1" } });
+  try { wt.M.scanReplies({ triggerUid: "uid-scanReplies" }); } catch (e) {}
+  check("E8c: in TEST MODE the scan backstop writes nothing to the public sheet", pubWrites(wt).length === 0, JSON.stringify(pubWrites(wt)));
+}
 
 // ---------- B: RSVP web app (WO-PROGRAM-33 s2) ----------
 const WEBAPP = "https://script.google.com/macros/s/FAKE/exec";

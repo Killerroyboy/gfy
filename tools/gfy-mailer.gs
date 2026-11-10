@@ -1037,6 +1037,21 @@ function mailScan_(){
   props.setProperty("SCAN_THROWS", JSON.stringify(throwsN));
   props.setProperty("SCAN_AUTO", JSON.stringify(autoIds.slice(-250)));
 
+  // Backstop for confirm -> committed: Google can drop an installable onEdit event (rapid edits),
+  // which would leave a ticked confirm with committed still unticked and nobody told. Same rule as
+  // mailOnEdit: any ticked row of a player commits that player's CURRENT-season row; TRUE only,
+  // never rewrites an already-committed row; test mode writes nothing (the Dashboard says "would commit").
+  if (!test){
+    const done = new Set();
+    mailTable_(repSheet).rows.forEach(r => {
+      const k = mailNorm_(r.player);
+      if (!k || done.has(k) || !mailConfirmTicked_(r)) return;
+      done.add(k);
+      try { mailTickPublic_(invSheet, year, String(r.player).trim(), "committed"); }
+      catch (e){ errors.push(`${String(r.player).trim()}: confirm backstop - ${e && e.message || e}`); }
+    });
+  }
+
   if (!errors.length && !partial && readme){     // timestamp only - never names (START HERE publication is a TODO above)
     readme.getRange(1, 2).setValue("last_reply_scan");
     readme.getRange(2, 2).setNumberFormat("@").setValue(mailStamp_());
