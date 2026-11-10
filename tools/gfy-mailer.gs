@@ -19,6 +19,10 @@
  *                   "[GFY STAGING TEMPLATE]" / "[GFY STAGING NUDGE]"; the match is EXACT on the
  *                   leading [bracket] token, so live never sees staging drafts or vice versa.
  *    SCAN_BUDGET_MS  optional: reply-scan time budget (default 270000 = 4.5 min).
+ *    NUDGE_DAYS     optional: days between a send and its nudge (default 7). Set it from the menu
+ *                   (GFY Mail > Set nudge days...); the Dashboard only DISPLAYS it.
+ *    (managed by the code, do not edit: SEND_RUN = the send/nudge run lease, SCAN_CURSOR, SCAN_MISSING,
+ *     SCAN_AUTO, TPL_STATUS, ALERT_LAST)
  *    ADMIN_ID       optional fallback for the Web App if getActiveSpreadsheet() is
  *                   unavailable there: the Admin sheet's own id.
  *
@@ -29,6 +33,13 @@
  *
  *  Web surface: the deployed Web App is anonymous, so every global except doGet,
  *  recordRsvp, onOpen and the guarded menu/trigger entrypoints ends in "_" (see mailGuard_).
+ *
+ *  Locking (WO-FIX-33-REREVIEW N1/N2): the script lock is only ever held for SHORT steps, never across a
+ *  Gmail send. A send/nudge run takes a lease (Script Property SEND_RUN, 8 min) so two runs cannot overlap;
+ *  per recipient: short lock -> re-check + append a RESERVATION SendLog row ("season Y pending <runId>")
+ *  -> release -> send with NO lock -> short lock -> settle the row (thread_id, "season Y sent") + public tick.
+ *  A pending / "send error" row counts as already sent (never re-sent) and is listed on the Dashboard for
+ *  a human. mailAppend_ refuses to run unless the lock is held.
  *  The deployed web app is a SNAPSHOT: after changing this file, Deploy > Manage deployments >
  *  Edit > Version: New version (same URL) - saving the file alone does not update it.
  *
@@ -61,6 +72,9 @@ const MAIL_STALE_MS = 60 * 60 * 1000;
 const mailNorm_ = s => String(s == null ? "" : s).trim().replace(/\s+/g, " ").toLowerCase();
 // "Not coming" in any of the spellings people type into the status cell. Mirror: tools/presend-check.mjs.
 const mailIsOutStatus_ = v => /^(out|declined|no|not coming|nope|n)$/i.test(String(v == null ? "" : v).trim());
+// A Replies.confirm cell counts as ticked ONLY for a real checkbox TRUE (or the text "TRUE"). The ONE definition,
+// used by the onEdit commit and by every Dashboard list/note, so they can never disagree about who is confirmed.
+const mailConfirmTicked_ = r => r.confirm === true || /^true$/i.test(String(r.confirm == null ? "" : r.confirm).trim());
 const mailYes_ = v => v === true || /^(y|yes|true|1|x|✓)$/i.test(String(v == null ? "" : v).trim());
 
 // ---- web-surface guard --------------------------------------------------------------
@@ -68,10 +82,11 @@ const mailYes_ = v => v === true || /^(y|yes|true|1|x|✓)$/i.test(String(v == n
 // in "_". So the only such globals are: doGet, recordRsvp, onOpen and the thin menu/trigger entrypoints below,
 // which refuse unless they run from the sheet UI (getUi works) or from one of THIS project's own triggers
 // (the event's triggerUid must be the id of an installed trigger). Everything else ends in "_".
-function mailGuard_(e){
+// `handler` = the entrypoint's own name: a trigger's uid only authorises the function that trigger runs.
+function mailGuard_(e, handler){
   if (e && e.triggerUid){
     const uid = String(e.triggerUid);
-    if (ScriptApp.getProjectTriggers().some(t => String(t.getUniqueId()) === uid)) return;
+    if (ScriptApp.getProjectTriggers().some(t => String(t.getUniqueId()) === uid && t.getHandlerFunction() === handler)) return;
   }
   try { SpreadsheetApp.getUi(); }
   catch (err){ throw new Error("Not available here: run this from the GFY Mail menu or by its trigger."); }
@@ -82,7 +97,10 @@ function onOpen(){
     .addItem("Send invites…", "sendInvites")
     .addItem("Send nudges…", "sendNudges")
     .addItem("Scan replies now", "scanReplies")
+    .addItem("Set nudge days…", "setNudgeDays")
+    .addItem("Clear rehearsal answers", "clearRehearsalAnswers")
     .addItem("Polish admin sheet", "adminPolish")
+    .addItem("Install / repair triggers", "installMailTriggers")
     .addToUi();
 }
 
@@ -112,6 +130,7 @@ function mailEnsureHeader_(sheet, name){
 const MAIL_TEXT_COLS = ["date", "thread_id", "msg_id", "token", "answered_at", "history"];
 
 function mailAppend_(sheet, obj){
+  if (!MAIL_LOCK_HELD_) throw new Error("mailAppend_ needs the script lock (wrap the call in mailWithLock_)");
   const t = mailTable_(sheet);
   const row = new Array(t.heads.length).fill("");
   Object.keys(obj).forEach(k => { if (k in t.idx) row[t.idx[k]] = obj[k]; });
@@ -150,10 +169,53 @@ function mailPublicWrite_(sheet, r, c, v){
   sheet.getRange(r, c).setValue(v);
 }
 
-function mailWithLock_(fn){
+// True only while THIS execution holds the script lock (each execution has fresh globals).
+let MAIL_LOCK_HELD_ = false;
+function mailWithLock_(fn, waitMs){
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try { return fn(); } finally { lock.releaseLock(); }
+  lock.waitLock(waitMs || 30000);
+  MAIL_LOCK_HELD_ = true;
+  try { return fn(); } finally { MAIL_LOCK_HELD_ = false; lock.releaseLock(); }
+}
+
+// ---- run lease (WO-FIX-33-REREVIEW N1): one send/nudge run at a time, without holding the lock across sends ----
+const MAIL_LEASE_MS = 8 * 60 * 1000;
+function mailLeaseRead_(props){ try { const v = JSON.parse(props.getProperty("SEND_RUN") || "null"); return v && typeof v === "object" ? v : null; } catch (e){ return null; } }
+// Returns the new run id, or "" when another run holds a live lease. Throws if the lock cannot be had.
+function mailRunBegin_(props){
+  return mailWithLock_(() => {
+    const cur = mailLeaseRead_(props);
+    if (cur && Number(cur.expires) > Date.now()) return "";
+    const id = Date.now().toString(36) + Math.floor(Math.random() * 1679616).toString(36);
+    props.setProperty("SEND_RUN", JSON.stringify({ id, expires: Date.now() + MAIL_LEASE_MS }));
+    return id;
+  }, 10000);
+}
+function mailRunEnd_(props, id){
+  try { mailWithLock_(() => { const cur = mailLeaseRead_(props); if (cur && cur.id === id) props.deleteProperty("SEND_RUN"); }, 10000); }
+  catch (e){ Logger.log("could not release the send lease (it expires on its own): " + (e && e.message || e)); }
+}
+const MAIL_ANOTHER_RUN = "Another send is running (a send or nudge run holds the lease, or the script lock is busy). Wait a few minutes and run it again. Nothing sent.";
+
+// One log row for a send: reserved before the email goes out, settled after. Lock held by the caller.
+function mailLogSettle_(logSheet, runId, base, threadId, note){
+  const t = mailTable_(logSheet);
+  const tag = "pending " + runId;
+  const row = t.rows.find(r => mailNorm_(r.player) === mailNorm_(base.player) && mailNorm_(r.what) === base.what && String(r.note == null ? "" : r.note).indexOf(tag) >= 0);
+  if (!row){ mailAppend_(logSheet, Object.assign({}, base, { note, thread_id: threadId })); return; }     // the reservation row was removed by hand: never lose the thread id
+  logSheet.getRange(row._row, t.idx.note + 1).setValue(note);
+  if (threadId !== undefined && "thread_id" in t.idx){ const cell = logSheet.getRange(row._row, t.idx.thread_id + 1); cell.setNumberFormat("@"); cell.setValue(threadId); }
+}
+// SendLog rows a human must look at: reserved but never settled, or a send() that threw.
+function mailUnsettled_(logRows){
+  const out = [];
+  logRows.forEach(l => {
+    const w = mailNorm_(l.what); if (w !== "invite" && w !== "nudge" && w !== "invite-test" && w !== "nudge-test") return;
+    const note = String(l.note == null ? "" : l.note);
+    const err = /send error/.test(note), pend = /\bpending\b/.test(note) && !String(l.thread_id == null ? "" : l.thread_id).trim();
+    if (err || pend) out.push(`${String(l.player).trim()} (${w}, ${err ? "send error" : "pending"})`);
+  });
+  return out;
 }
 
 function mailCurrentYear_(invRows){
@@ -285,7 +347,9 @@ function mailLoadDraft_(prefix){
   const raw = String(m.getSubject() || "").trim();
   const subject = raw.slice(prefix.length).trim();
   const html = mailUnwrapGoogle_(String(m.getBody() || ""), true), plain = mailUnwrapGoogle_(String(m.getPlainBody() || ""), false);
-  if (/\[fill/i.test(raw + "\n" + html + "\n" + plain)) return { ok: false, kind: "fill", msg: "the template draft still has [FILL] spots" };
+  // Inline markup can split a token or a [FILL marker ("{da<b>te</b>}"): scan the TAG-STRIPPED text too.
+  const htmlText = String(html).replace(/<[^>]*>/g, "");
+  if (/\[\s*fill/i.test(raw + "\n" + html + "\n" + plain + "\n" + htmlText)) return { ok: false, kind: "fill", msg: "the template draft still has [FILL] spots" };
   const all = m.getAttachments({ includeInlineImages: true }) || [];
   const files = m.getAttachments({ includeInlineImages: false }) || [];
   if (all.length > files.length) return { ok: false, kind: "inline", msg: "The template draft has inline images, which this sender cannot copy safely (it would send a broken email). Remove them or use a normal attachment / a hosted image link." };
@@ -294,8 +358,11 @@ function mailLoadDraft_(prefix){
   if (/href\s*=\s*["']?\s*javascript:/i.test(html)) return { ok: false, kind: "badlink", msg: "The template draft has a link whose address Gmail replaced with javascript:void(0) (it does that to a typed {rsvp} link). Remove the link and put {rsvp_button} (or plain {rsvp}) in the text instead. Nothing sent." };
   if (/%7B[^"'<>\s]*?%7D/i.test(html + "\n" + plain)) return { ok: false, kind: "badlink", msg: "The template draft has a link containing %7B...%7D (an encoded {token}, so it can never be filled in). Remove the link and put {rsvp_button} or {rsvp} in the text instead. Nothing sent." };
   const left = [];
-  [raw, html, plain].forEach(t => (String(t).replace(/\{(first|rsvp|rsvp_button)\}/g, "").match(MAIL_TOKEN_RE) || []).forEach(x => { if (left.indexOf(x) < 0) left.push(x); }));
+  [raw, html, htmlText, plain].forEach(t => (String(t).replace(/\{(first|rsvp|rsvp_button)\}/g, "").match(MAIL_TOKEN_RE) || []).forEach(x => { if (left.indexOf(x) < 0) left.push(x); }));
   if (left.length) return { ok: false, kind: "token", msg: `The template draft has unreplaced ${left.join(" ")} - only {first}, {rsvp} and {rsvp_button} are filled in. Nothing sent.` };
+  // A token the mailer WOULD fill but that formatting split in the HTML ("{fi<b>rst</b>}") is never replaced.
+  const cnt = (t, tok) => String(t).split(tok).length - 1;
+  if (["{first}", "{rsvp}", "{rsvp_button}"].some(tok => cnt(htmlText, tok) > cnt(html, tok))) return { ok: false, kind: "token", msg: "The template draft has a {first} / {rsvp} / {rsvp_button} token split by formatting (bold, colour, a link...) so it can never be filled in. Retype the whole token in one go with no formatting inside the braces. Nothing sent." };
   if (!subject || !(html.trim() || plain.trim())) return { ok: false, kind: "empty", msg: "The template draft needs a subject (after the prefix) and a body." };
   return { ok: true, subject, html, plain, attachments: files, hasRsvp: /\{rsvp(_button)?\}/.test(raw + html + plain) };
 }
@@ -330,7 +397,7 @@ function mailSendOpts_(m){
 
 // ---- A: the button ---------------------------------------------------------
 
-function sendInvites(e){ mailGuard_(e); mailSendInvites_(); }
+function sendInvites(e){ mailGuard_(e, "sendInvites"); mailSendInvites_(); }
 function mailSendInvites_(){
   const ui = SpreadsheetApp.getUi();
   const say = (title, msg) => ui.alert(title, msg, ui.ButtonSet.OK);
@@ -347,6 +414,10 @@ function mailSendInvites_(){
   if (plan.blocks.length){
     say("Send BLOCKED — fix these first (nothing was sent)", plan.blocks.join("\n"));
     return;
+  }
+  if (!mailIsTest_(props)){
+    const stale = mailStaleRehearsal_(admin, plan.year, mailTable_(logSheet).rows);
+    if (stale.length){ say("Send BLOCKED — rehearsal answers (nothing was sent)", mailRehearsalMsg_(stale)); return; }
   }
   const dupNote = plan.alreadySent.length ? `\n\nAlready emailed according to SendLog, NOT sent again (tick invited on the public sheet by hand if it is missing): ${plan.alreadySent.join(", ")}` : "";
   if (!plan.recipients.length){ say("GFY Mail", `Nobody to invite for ${plan.year}.` + (plan.noAddress.length ? `\nNo address on file: ${plan.noAddress.join(", ")}` : "") + dupNote); return; }
@@ -369,40 +440,54 @@ function mailSendInvites_(){
     + (plan.noAddress.length ? `\n\nSkipped (no address): ${plan.noAddress.join(", ")}` : "") + dupNote;
   if (ui.alert("Send invites", msg, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
 
-  // The WHOLE send runs under the script lock; a second click (or a re-run after a crash) cannot overlap it.
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)){ say("GFY Mail", "Another send is already running (the script lock is held). Wait a minute and run Send invites again. Nothing sent."); return; }
-  const failed = [], tickFailed = [], skipped = [];
+  // No lock is held across the sends: a run lease keeps two runs apart, and each recipient is
+  // reserved in SendLog (short lock) BEFORE the email goes out and settled (short lock) after it.
+  let runId = "";
+  try { runId = mailRunBegin_(props); } catch (e){ runId = ""; }
+  if (!runId){ say("GFY Mail", MAIL_ANOTHER_RUN); return; }
+  const failed = [], tickFailed = [], skipped = [], unconfirmed = [];
   let sent = 0;
   try {
-    mailEnsureHeader_(logSheet, "thread_id");
+    mailWithLock_(() => mailEnsureHeader_(logSheet, "thread_id"), 10000);
     plan.recipients.forEach(r => {
-      // Re-read EVERYTHING under the lock right before this send: invited tick, SendLog, DNI, status.
-      const fresh = mailPlan_(mailTable_(conSheet).rows, mailTable_(invSheet).rows, mailTable_(logSheet).rows);
-      const still = fresh.recipients.find(x => mailNorm_(x.player) === mailNorm_(r.player));
-      if (fresh.blocks.length || fresh.year !== plan.year || !still || still.address !== r.address){ skipped.push(r.player); return; }
-      let m, threadId;
+      let res;
       try {
-        const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpTokenNL_(admin.getSheetByName(MAIL_TAB.rsvp), plan.year, r.player, test)) : "";
-        m = mailBuild_(tpl, r.player, r.address, test, url);
-        threadId = mailSendNew_(m);
-      } catch (e){ failed.push(`${r.player} (${e && e.message || e})`); return; }
-      sent++;
-      // Log BEFORE ticking: a crash after the send must never lead to a second email.
-      mailAppend_(logSheet, {
-        date: mailToday_(), player: r.player, address_used: m.to,
-        what: test ? "invite-test" : "invite",
-        note: test ? `TEST MODE (real address ${r.address})` : `season ${plan.year}`, thread_id: threadId,
-      });
-      if (!test){
-        try { mailTickPublicNL_(invSheet, plan.year, r.player, "invited"); }
-        catch (e){ tickFailed.push(r.player); }
+        res = mailWithLock_(() => {
+          // Re-read EVERYTHING under the lock right before this send: invited tick, SendLog, DNI, status.
+          const fresh = mailPlan_(mailTable_(conSheet).rows, mailTable_(invSheet).rows, mailTable_(logSheet).rows);
+          const still = fresh.recipients.find(x => mailNorm_(x.player) === mailNorm_(r.player));
+          if (fresh.blocks.length || fresh.year !== plan.year || !still || still.address !== r.address) return null;
+          const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpTokenNL_(admin.getSheetByName(MAIL_TAB.rsvp), plan.year, r.player, test)) : "";
+          const m = mailBuild_(tpl, r.player, r.address, test, url);
+          const base = { date: mailToday_(), player: r.player, address_used: m.to, what: test ? "invite-test" : "invite" };
+          mailAppend_(logSheet, Object.assign({}, base, { note: (test ? `TEST MODE (real address ${r.address}) ` : `season ${plan.year} `) + "pending " + runId, thread_id: "" }));
+          return { m, base };
+        }, 10000);
+      } catch (e){ failed.push(`${r.player} (${e && e.message || e}; nothing was sent to them)`); return; }
+      if (!res){ skipped.push(r.player); return; }
+      let threadId;
+      try { threadId = mailSendNew_(res.m); }
+      catch (e){
+        // Keep the reservation: the send may or may not have gone out. A human checks Gmail > Sent.
+        try { mailWithLock_(() => mailLogSettle_(logSheet, runId, res.base, "", (test ? `TEST MODE (real address ${r.address}) ` : `season ${plan.year} `) + "send error — check Sent before re-running"), 10000); } catch (x){ /* stays "pending": still listed on the Dashboard */ }
+        failed.push(`${r.player} (${e && e.message || e})`); return;
       }
+      sent++;
+      try {
+        mailWithLock_(() => {
+          mailLogSettle_(logSheet, runId, res.base, threadId, test ? `TEST MODE (real address ${r.address})` : `season ${plan.year} sent`);
+          if (!test){
+            try { mailTickPublicNL_(invSheet, plan.year, r.player, "invited"); }
+            catch (e){ tickFailed.push(r.player); }
+          }
+        }, 10000);
+      } catch (e){ unconfirmed.push(r.player); }
     });
-  } finally { lock.releaseLock(); }
+  } finally { mailRunEnd_(props, runId); }
   say("GFY Mail", `${test ? "TEST " : ""}Sent ${sent} of ${plan.recipients.length}.`
-    + (failed.length ? `\n\nSEND FAILED (not logged, not ticked — safe to re-run): ${failed.join("; ")}` : "")
+    + (failed.length ? `\n\nSEND FAILED (a SendLog row stays, marked 'send error' if the email may have gone out — check Gmail Sent BEFORE re-running; the person is not emailed again until that row is removed): ${failed.join("; ")}` : "")
     + (skipped.length ? `\n\nSKIPPED (changed while sending — already invited, or edited): ${skipped.join(", ")}` : "")
+    + (unconfirmed.length ? `\n\nSent, but the SendLog row could not be settled (it stays 'pending' - listed on the Dashboard; fill its thread_id by hand): ${unconfirmed.join(", ")}` : "")
     + (tickFailed.length ? `\n\nSent and logged, but could NOT tick invited on the public sheet — tick by hand: ${tickFailed.join(", ")}` : ""));
 }
 
@@ -454,17 +539,73 @@ function mailNudgeRows_(cur, contacts, logRows, days, test){
   return out;
 }
 
-function mailReadNudgeDays_(sh){
-  let nudge = MAIL_NUDGE_DEFAULT;
-  if (sh && sh.getLastRow() >= 1){
-    const old = sh.getDataRange().getValues().find(r => mailNorm_(r[0]) === MAIL_DASH_LABELS.nudge);
-    const n = old ? parseInt(old[1], 10) : NaN;
-    if (n > 0) nudge = n;
-  }
-  return nudge;
+// Nudge interval: Script Property NUDGE_DAYS (menu "Set nudge days…"); the Dashboard only displays it.
+function mailReadNudgeDays_(props){
+  const n = parseInt(String(props.getProperty("NUDGE_DAYS") == null ? "" : props.getProperty("NUDGE_DAYS")).trim(), 10);
+  return n > 0 ? n : MAIL_NUDGE_DEFAULT;
 }
 
-function sendNudges(e){ mailGuard_(e); mailSendNudges_(); }
+function setNudgeDays(e){ mailGuard_(e, "setNudgeDays"); mailSetNudgeDays_(); }
+function mailSetNudgeDays_(){
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+  const cur = mailReadNudgeDays_(props);
+  const r = ui.prompt("Set nudge days", `Nudge people who were last emailed at least this many days ago (a whole number, 1-365). Now: ${cur}.`, ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const txt = String(r.getResponseText() || "").trim();
+  if (!/^\d{1,3}$/.test(txt) || Number(txt) < 1 || Number(txt) > 365){ ui.alert("Set nudge days", `"${txt}" is not a whole number from 1 to 365. Nothing changed (still ${cur}).`, ui.ButtonSet.OK); return; }
+  props.setProperty("NUDGE_DAYS", String(Number(txt)));
+  try { mailDashboard_(SpreadsheetApp.getActiveSpreadsheet(), props, false); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
+  ui.alert("Set nudge days", `Nudges now go to people last emailed ${Number(txt)}+ days ago.`, ui.ButtonSet.OK);
+}
+
+// ---- N6: rehearsal answers left by an older version ------------------------------------------
+// An unflagged RSVP row (current season) that already has an answer although its player has no LIVE invite in the
+// SendLog can only be a test-mode answer from a version that did not flag them. Returns the player names.
+function mailStaleRehearsal_(admin, year, logRows){
+  const rs = admin.getSheetByName(MAIL_TAB.rsvp);
+  if (!rs) return [];
+  const out = [];
+  mailTable_(rs).rows.forEach(r => {
+    if ((parseInt(r.year, 10) || 0) !== year || !mailNorm_(r.player) || mailYes_(r.test)) return;
+    if (!String(r.answer == null ? "" : r.answer).trim()) return;
+    if (mailInviteLogged_(logRows, r.player, year)) return;
+    out.push(String(r.player).trim());
+  });
+  return out;
+}
+function mailRehearsalMsg_(names){
+  return `These RSVP rows hold answers but the player has no live invite in SendLog - rehearsal answers from an older version: ${names.join(", ")}.\n\nClear them first (menu: GFY Mail > Clear rehearsal answers), then send.`;
+}
+
+function clearRehearsalAnswers(e){ mailGuard_(e, "clearRehearsalAnswers"); mailClearRehearsal_(); }
+function mailClearRehearsal_(){
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+  const admin = SpreadsheetApp.getActiveSpreadsheet();
+  const rs = admin.getSheetByName(MAIL_TAB.rsvp), logSheet = admin.getSheetByName(MAIL_TAB.log);
+  if (!rs || !logSheet){ ui.alert("GFY Mail", "No RSVP / SendLog tab. Nothing cleared.", ui.ButtonSet.OK); return; }
+  const pid = props.getProperty("PUBLIC_ID");
+  const invSheet = pid ? SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites) : null;
+  if (!invSheet){ ui.alert("GFY Mail", "PUBLIC_ID / public Invites tab unavailable (the current season is needed). Nothing cleared.", ui.ButtonSet.OK); return; }
+  const year = mailCurrentYear_(mailTable_(invSheet).rows);
+  const pick = () => {
+    const stale = new Set(mailStaleRehearsal_(admin, year, mailTable_(logSheet).rows).map(mailNorm_));
+    return mailTable_(rs).rows.filter(r => String(r.answer == null ? "" : r.answer).trim() && (mailYes_(r.test) || ((parseInt(r.year, 10) || 0) === year && stale.has(mailNorm_(r.player)))));
+  };
+  const rows = pick();
+  if (!rows.length){ ui.alert("GFY Mail", "No rehearsal answers to clear.", ui.ButtonSet.OK); return; }
+  const names = Array.from(new Set(rows.map(r => String(r.player).trim())));
+  if (ui.alert("Clear rehearsal answers", `Clear the answer, answered_at and history of ${rows.length} RSVP row(s) (test-flagged rows, and unflagged rows whose player has no live invite)?\n\n${names.join("\n")}\n\nTokens are kept. Real answers (a player with a live invite) are never touched.`, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  mailWithLock_(() => {
+    const t = mailTable_(rs);
+    pick().forEach(r => ["answer", "answered_at", "history"].forEach(h => { if (h in t.idx) rs.getRange(r._row, t.idx[h] + 1).setValue(""); }));
+  });
+  try { mailDashboard_(admin, props, false); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
+  ui.alert("GFY Mail", `Cleared ${rows.length} rehearsal answer(s).`, ui.ButtonSet.OK);
+}
+
+function sendNudges(e){ mailGuard_(e, "sendNudges"); mailSendNudges_(); }
 function mailSendNudges_(){
   const ui = SpreadsheetApp.getUi();
   const say = (title, msg) => ui.alert(title, msg, ui.ButtonSet.OK);
@@ -484,81 +625,82 @@ function mailSendNudges_(){
 
   const test = mailIsTest_(props);
   const inv = mailTable_(invSheet).rows, year = mailCurrentYear_(inv);
-  const days = mailReadNudgeDays_(admin.getSheetByName(MAIL_TAB.dash));
+  if (!test){
+    const stale = mailStaleRehearsal_(admin, year, mailTable_(logSheet).rows);
+    if (stale.length){ say("Nudge BLOCKED — rehearsal answers (nothing was sent)", mailRehearsalMsg_(stale)); return; }
+  }
+  const days = mailReadNudgeDays_(props);
   const cur = inv.filter(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player));
   const all = mailNudgeRows_(cur, mailTable_(conSheet).rows, mailTable_(logSheet).rows, days, test);
   const bouncedNames = all.filter(c => c.bounced).map(c => c.player);
   const cands = all.filter(c => c.threadId && !c.bounced), noThread = all.filter(c => !c.threadId && !c.bounced).map(c => c.player);
   const skipNote = (bouncedNames.length ? `\n\nBounced, not nudged (fix their address first): ${bouncedNames.join(", ")}` : "")
-    + (noThread.length ? `\n\nNo invite thread on file (cannot reply): ${noThread.join(", ")}` : "");
+    + (noThread.length ? `\n\nNo confirmed invite thread on file (a pending / errored invite? see the Dashboard): ${noThread.join(", ")}` : "");
   if (!cands.length){ say("GFY Mail", `Nobody to nudge (invited, not answered, last send ${days}+ days ago).` + skipNote); return; }
 
   const quota = MailApp.getRemainingDailyQuota();
   if (quota < cands.length){ say("GFY Mail", `Daily send quota too low: ${quota} left, ${cands.length} needed. Nothing sent.`); return; }
-  const msg = (test ? `TEST MODE: fresh messages go to ${MAIL_TEST_ADDR} only; nobody real is contacted.\n\n` : "LIVE: each person gets a reply in their invite thread when it is safe to, otherwise a fresh email to the address we invited.\n\n")
+  const msg = (test ? `TEST MODE: fresh messages go to ${MAIL_TEST_ADDR} only; nobody real is contacted.\n\n` : "LIVE: each person gets a FRESH email to the address we invited, subject \"Re: <their invite subject>\".\n\n")
     + `Nudge ${cands.length} ${year} player(s) (last send ${days}+ days ago)?\n\n${cands.map(c => c.player).join("\n")}` + skipNote;
   if (ui.alert("Send nudges", msg, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
 
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)){ say("GFY Mail", "Another send is already running (the script lock is held). Wait a minute and run Send nudges again. Nothing sent."); return; }
-  const failed = [], skipped = [];
+  let runId = "";
+  try { runId = mailRunBegin_(props); } catch (e){ runId = ""; }
+  if (!runId){ say("GFY Mail", MAIL_ANOTHER_RUN); return; }
+  const failed = [], skipped = [], unconfirmed = [];
   let sent = 0;
   try {
-    const me = String(Session.getEffectiveUser().getEmail() || "").toLowerCase();
     cands.forEach(c0 => {
+      let res;
       try {
-        // Re-read under the lock right before this send (a concurrent run may have nudged / the person may have answered).
-        const freshInv = mailTable_(invSheet).rows;
-        const freshCur = freshInv.filter(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player));
-        const c = mailNudgeRows_(freshCur, mailTable_(conSheet).rows, mailTable_(logSheet).rows, days, test).find(x => mailNorm_(x.player) === mailNorm_(c0.player));
-        if (!c || c.bounced || !c.threadId){ skipped.push(c0.player); return; }
-        const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpTokenNL_(admin.getSheetByName(MAIL_TAB.rsvp), year, c.player, test)) : "";
-        const m = mailBuild_(tpl, c.player, c.address, test, url);
-        let threadId = c.threadId, note = test ? `TEST MODE (real address ${c.address})` : "";
-        if (test){
-          threadId = mailSendNew_(m);
-        } else {
-          if (!c.address) throw new Error("no address on file");
-          const r = mailNudgeLive_(c, m, me);
-          threadId = r.threadId; note = r.note;
-        }
-        sent++;
-        mailAppend_(logSheet, { date: mailToday_(), player: c.player, address_used: test ? MAIL_TEST_ADDR : c.address, what: test ? "nudge-test" : "nudge", note, thread_id: threadId });
-      } catch (e){ failed.push(`${c0.player} (${e && e.message || e})`); }
+        res = mailWithLock_(() => {
+          // Re-read under the lock right before this send (a concurrent run may have nudged / the person may have answered).
+          const freshInv = mailTable_(invSheet).rows;
+          const freshCur = freshInv.filter(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player));
+          const c = mailNudgeRows_(freshCur, mailTable_(conSheet).rows, mailTable_(logSheet).rows, days, test).find(x => mailNorm_(x.player) === mailNorm_(c0.player));
+          if (!c || c.bounced || !c.threadId) return null;
+          if (!test && !c.address) throw new Error("no address on file");
+          const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpTokenNL_(admin.getSheetByName(MAIL_TAB.rsvp), year, c.player, test)) : "";
+          const m = mailBuild_(tpl, c.player, c.address, test, url);
+          const base = { date: mailToday_(), player: c.player, address_used: test ? MAIL_TEST_ADDR : c.address, what: test ? "nudge-test" : "nudge" };
+          mailAppend_(logSheet, Object.assign({}, base, { note: (test ? `TEST MODE (real address ${c.address}) ` : `season ${year} `) + "pending " + runId, thread_id: "" }));
+          return { c, m, base };
+        }, 10000);
+      } catch (e){ failed.push(`${c0.player} (${e && e.message || e}; nothing was sent to them)`); return; }
+      if (!res){ skipped.push(c0.player); return; }
+      const { c, m, base } = res;
+      const realNote = test ? `TEST MODE (real address ${c.address})` : `season ${year} sent`;
+      let threadId;
+      try {
+        // ALWAYS a fresh email (never a thread reply): live goes to the exact logged address as "Re: <invite subject>";
+        // Gmail threads it for most recipients, and its own thread id is logged and watched.
+        const out = test ? m : { to: c.address, subject: mailNudgeSubject_(c.threadId, m.subject), body: m.body, htmlBody: m.htmlBody, attachments: m.attachments };
+        threadId = mailSendNew_(out);
+      } catch (e){
+        try { mailWithLock_(() => mailLogSettle_(logSheet, runId, base, "", (test ? `TEST MODE (real address ${c.address}) ` : `season ${year} `) + "send error — check Sent before re-running"), 10000); } catch (x){ /* stays pending */ }
+        failed.push(`${c.player} (${e && e.message || e})`); return;
+      }
+      sent++;
+      try { mailWithLock_(() => mailLogSettle_(logSheet, runId, base, threadId, realNote), 10000); } catch (e){ unconfirmed.push(c.player); }
     });
-  } finally { lock.releaseLock(); }
-  try { mailDashboard_(admin, props); } catch (e){ Logger.log("dashboard rebuild failed: " + (e && e.message || e)); }
+  } finally { mailRunEnd_(props, runId); }
+  try { mailDashboard_(admin, props, false); } catch (e){ Logger.log("dashboard rebuild failed: " + (e && e.message || e)); }
   say("GFY Mail", `${test ? "TEST " : ""}Nudged ${sent} of ${cands.length}.`
-    + (failed.length ? `\n\nNUDGE FAILED (not logged - safe to re-run): ${failed.join("; ")}` : "")
+    + (failed.length ? `\n\nNUDGE FAILED (a SendLog row stays, marked 'send error' if the email may have gone out — check Gmail Sent BEFORE re-running): ${failed.join("; ")}` : "")
     + (skipped.length ? `\n\nSKIPPED (changed while sending): ${skipped.join(", ")}` : "")
+    + (unconfirmed.length ? `\n\nSent, but the SendLog row could not be settled (it stays 'pending' - fill its thread_id by hand): ${unconfirmed.join(", ")}` : "")
     + skipNote);
 }
 
-// "a@x.com, B <b@x.com>" -> ["a@x.com", "b@x.com"] (parsed, lowercased - never a substring test)
-function mailAddrList_(s){
-  return String(s == null ? "" : s).split(",").map(x => mailAddrOf_(x)).filter(Boolean);
-}
-
-/** LIVE nudge. thread.reply ONLY when the thread's last message is ours AND went to exactly the logged
- *  address (a reply goes to the last message's sender/recipients - a bounce or a stray cc would receive it).
- *  Otherwise a fresh email to the logged address, subject "Re: <invite subject>"; its NEW thread id is returned
- *  and logged, and the scanner watches every logged thread of a player. */
-function mailNudgeLive_(c, m, me){
-  const thread = GmailApp.getThreadById(c.threadId);          // a missing/deleted thread (null) falls through to a fresh email
-  const addr = String(c.address).toLowerCase();
+// "Re: " + the subject of the person's original invite (read from the logged invite thread). A missing,
+// deleted or unreadable thread is not an error: fall back to the nudge draft's own subject.
+function mailNudgeSubject_(threadId, fallback){
   let subject = "";
-  if (thread){
-    const msgs = thread.getMessages(), last = msgs[msgs.length - 1];
-    try { subject = String(thread.getFirstMessageSubject() || "").trim(); } catch (e){ subject = ""; }
-    const to = last ? mailAddrList_(last.getTo()) : [];
-    if (last && mailAddrOf_(last.getFrom()) === me && to.length === 1 && to[0] === addr){
-      thread.reply(m.body, mailSendOpts_(m));
-      return { threadId: c.threadId, note: "" };
-    }
-  }
-  const subj = subject ? (/^re:/i.test(subject) ? subject : "Re: " + subject) : m.subject;
-  const threadId = mailSendNew_({ to: c.address, subject: subj, body: m.body, htmlBody: m.htmlBody, attachments: m.attachments });
-  return { threadId, note: "fresh email (the invite thread was not safe to reply into)" };
+  try {
+    const thread = GmailApp.getThreadById(threadId);
+    if (thread) subject = String(thread.getFirstMessageSubject() || "").trim();
+  } catch (e){ subject = ""; }
+  return subject ? (/^re:/i.test(subject) ? subject : "Re: " + subject) : fallback;
 }
 
 // ---- B: RSVP links (Web App in this same project) ---------------------------------
@@ -569,6 +711,12 @@ function mailRsvpPrereq_(props, admin, tpl){
   if (!tpl.hasRsvp) return "";
   if (!String(props.getProperty("WEBAPP_URL") || "").trim()) return "The template draft contains {rsvp} but the script property WEBAPP_URL is not set (deploy the Web App, then paste its /exec URL).";
   if (!admin.getSheetByName(MAIL_TAB.rsvp)) return "The template draft contains {rsvp} but the Admin sheet has no RSVP tab - run GFY Mail > Polish admin sheet first.";
+  // After the fill, the HTML body must carry the link (a token that is only in the plain body leaves the HTML with no button).
+  if (String(tpl.html || "").trim()){
+    const probe = mailRsvpUrl_(props, "PROBEPROBEPROBEPROBEPROBE00");
+    if (mailBuild_(tpl, "Probe Name", "probe@example.invalid", false, probe).htmlBody.indexOf(mailHtmlEsc_(probe)) < 0)
+      return "The template draft's HTML body ends up with NO RSVP link after the fill (the {rsvp} / {rsvp_button} token is only in the plain text, or sits somewhere the mailer cannot fill). Put {rsvp_button} in the HTML text of the draft. Nothing sent.";
+  }
   return "";
 }
 
@@ -631,12 +779,12 @@ button:active,button.sel{background:var(--brass);color:var(--pine)}button:disabl
 <button id="b-IN" onclick="go('IN')">IN</button><button id="b-OUT" onclick="go('OUT')">OUT</button><button id="b-MAYBE" onclick="go('MAYBE')">MAYBE</button>
 <div id="cur">${current ? "Your answer so far: " + mailHtmlEsc_(current) : ""}</div><div id="msg"></div></main>
 <script>var T=${tk};
-function go(c){var bs=document.getElementsByTagName("button");for(var i=0;i<bs.length;i++){bs[i].disabled=true;}
+function go(c,retried){var bs=document.getElementsByTagName("button");for(var i=0;i<bs.length;i++){bs[i].disabled=true;}
 document.getElementById("msg").className="";document.getElementById("msg").textContent="Saving...";
 google.script.run.withSuccessHandler(function(){for(var i=0;i<bs.length;i++){bs[i].disabled=false;bs[i].className="";}
 document.getElementById("b-"+c).className="sel";document.getElementById("q").textContent="Got it - you're "+c+".";
 document.getElementById("cur").textContent="Your answer: "+c+". Tap another to change it.";document.getElementById("msg").textContent="Saved.";})
-.withFailureHandler(function(){for(var i=0;i<bs.length;i++){bs[i].disabled=false;}document.getElementById("msg").className="err";document.getElementById("msg").textContent="Could not save - try again, or reply to the email.";}).recordRsvp(T,c);}
+.withFailureHandler(function(){if(!retried){document.getElementById("msg").textContent="Saving... (retrying)";setTimeout(function(){go(c,true);},5000);return;}for(var i=0;i<bs.length;i++){bs[i].disabled=false;}document.getElementById("msg").className="err";document.getElementById("msg").textContent="Could not save - try again, or reply to the email.";}).recordRsvp(T,c);}
 </script></body></html>`;
 }
 
@@ -665,7 +813,7 @@ function recordRsvp(token, choice){
   const ctx = mailRsvpCtx_(props);
   if (!ctx) throw new Error("RSVP is unavailable right now");
   const test = mailIsTest_(props);
-  const out = { player: "", publicFailed: false };
+  const out = { player: "" };
   mailWithLock_(() => {
     const f = mailRsvpFind_(ctx, token);                 // re-read under the lock
     if (!f) throw new Error("This link is not valid");
@@ -686,19 +834,19 @@ function recordRsvp(token, choice){
       mailTickPublicNL_(ctx.inv, ctx.year, out.player, "responded");
       if (c === "IN" && !isOut) mailTickPublicNL_(ctx.inv, ctx.year, out.player, "committed");
       if (c === "OUT") mailDeclinePublicNL_(ctx.inv, ctx.year, out.player);
-    } catch (err){ out.publicFailed = true; }
+    } catch (err){
+      const log = ctx.admin.getSheetByName(MAIL_TAB.log);
+      try { if (log) mailAppend_(log, { date: mailToday_(), player: out.player, what: "note", note: `RSVP ${c} recorded but the public sheet could not be updated - fix by hand` }); }
+      catch (e2){ Logger.log("could not log the public-write failure: " + (e2 && e2.message || e2)); }
+    }
   });
-  if (out.publicFailed){
-    const log = ctx.admin.getSheetByName(MAIL_TAB.log);
-    if (log) mailAppend_(log, { date: mailToday_(), player: out.player, what: "note", note: `RSVP ${c} recorded but the public sheet could not be updated - fix by hand` });
-  }
-  try { mailDashboard_(ctx.admin, props); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
+  try { mailDashboard_(ctx.admin, props, false); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
   return { answer: c, first: out.player.split(/\s+/)[0] };
 }
 
 // ---- C: reply watcher --------------------------------------------------------
 
-function installMailTriggers(e){ mailGuard_(e); mailInstallTriggers_(); }
+function installMailTriggers(e){ mailGuard_(e, "installMailTriggers"); mailInstallTriggers_(); }
 function mailInstallTriggers_(){
   const has = fn => ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === fn);
   if (!has("scanReplies")) ScriptApp.newTrigger("scanReplies").timeBased().everyMinutes(15).create();
@@ -761,7 +909,7 @@ function mailAlert_(props, subject, body){
   } catch (e){ Logger.log("alert failed: " + (e && e.message || e)); }
 }
 
-function scanReplies(e){ mailGuard_(e); mailScanRun_(); }
+function scanReplies(e){ mailGuard_(e, "scanReplies"); mailScanRun_(); }
 function mailScanRun_(){
   const props = PropertiesService.getScriptProperties();
   try {                       // stale check at scan start (never-scanned stays quiet)
@@ -789,13 +937,17 @@ function mailScan_(){
   const conSheet = admin.getSheetByName(MAIL_TAB.contacts), readme = admin.getSheetByName(MAIL_TAB.readme);
   if (!invSheet || !logSheet || !repSheet || !conSheet) throw new Error("missing tab (Invites / SendLog / Replies / Contacts)");
 
-  mailEnsureHeader_(repSheet, "msg_id");
+  mailWithLock_(() => mailEnsureHeader_(repSheet, "msg_id"));
   const me = Session.getEffectiveUser().getEmail();
   const invRows = mailTable_(invSheet).rows, year = mailCurrentYear_(invRows);
   const test = mailIsTest_(props);                  // TEST MODE: the public sheet is never written (the Dashboard says what would be)
   const seen = new Set(mailTable_(repSheet).rows.map(r => String(r.msg_id)));
   const responded = new Set(invRows.filter(r => (parseInt(r.year, 10) || 0) === year && mailYes_(r.responded)).map(r => mailNorm_(r.player)));
   const errors = [];
+  // Auto-reply / out-of-office message ids already classified: never fetched or classified again (capped, newest kept).
+  let autoIds;
+  try { autoIds = JSON.parse(props.getProperty("SCAN_AUTO") || "[]"); if (!Array.isArray(autoIds)) autoIds = []; } catch (e){ autoIds = []; }
+  const autoSeen = new Set(autoIds);
   let missing;
   try { missing = JSON.parse(props.getProperty("SCAN_MISSING") || "[]"); if (!Array.isArray(missing)) missing = []; } catch (e){ missing = []; }
 
@@ -827,29 +979,32 @@ function mailScan_(){
       thread.getMessages().forEach(msg => {
         const id = String(msg.getId());
         if (seen.has(id)){ replied = true; return; }     // already logged => it WAS a real reply: no classification, no raw fetch
+        if (autoSeen.has(id)) return;                    // an auto-reply seen before: no classification, no raw fetch
         const kind = mailClassify_(msg, me);
-        if (kind === "own" || kind === "auto") return;
+        if (kind === "auto"){ autoSeen.add(id); autoIds.push(id); return; }
+        if (kind === "own") return;
         if (kind === "bounce"){ mailNoteBounce_(conSheet, player, mailToday_(msg.getDate())); return; }
         replied = true;
         seen.add(id);
         const snippet = mailSnippet_(msg.getPlainBody());
-        mailAppend_(repSheet, {
+        mailWithLock_(() => mailAppend_(repSheet, {
           date: mailToday_(msg.getDate()), player, from: String(msg.getFrom()), snippet,
           looks_yes: mailLooksYes_(snippet), confirm: false, msg_id: id,
-        });
+        }));
       });
       if (replied && !test){ mailTickPublic_(invSheet, year, player, "responded"); responded.add(pk); }
     } catch (e){ errors.push(`${player}: ${e && e.message || e}`); }
   }
   props.setProperty("SCAN_CURSOR", partial ? String(at) : "0");
   props.setProperty("SCAN_MISSING", JSON.stringify(missing));
+  props.setProperty("SCAN_AUTO", JSON.stringify(autoIds.slice(-250)));
 
   if (!errors.length && !partial && readme){     // timestamp only - never names (START HERE publication is a TODO above)
     readme.getRange(1, 2).setValue("last_reply_scan");
     readme.getRange(2, 2).setNumberFormat("@").setValue(mailStamp_());
   }
   // Rebuild the private Dashboard even after a failed scan (so STALE can show).
-  try { mailDashboard_(admin, props); } catch (e){ Logger.log("dashboard rebuild failed: " + (e && e.message || e)); }
+  try { mailDashboard_(admin, props, true); } catch (e){ Logger.log("dashboard rebuild failed: " + (e && e.message || e)); }
   if (errors.length) throw new Error("reply scan incomplete — " + errors.join("; "));
 }
 
@@ -870,7 +1025,7 @@ function mailNoteBounce_(conSheet, player, date){
  *  for that player / current year on the PUBLIC Invites tab (only ever TRUE, via
  *  mailPublicWrite_, under the lock; NOT in test mode - the Dashboard says "would commit X"). UNticking never unticks committed - it
  *  logs a note on SendLog instead. Script edits (scanReplies) do not fire onEdit. */
-function mailOnEdit(e){ mailGuard_(e); mailOnEditRun_(e); }
+function mailOnEdit(e){ mailGuard_(e, "mailOnEdit"); mailOnEditRun_(e); }
 function mailOnEditRun_(e){
   if (!e || !e.range || typeof e.range.getSheet !== "function") return;
   const sh = e.range.getSheet();
@@ -882,7 +1037,7 @@ function mailOnEditRun_(e){
   if (cc < c0 || cc > c1) return;
   const r0 = Math.max(2, e.range.getRow()), r1 = e.range.getRow() + e.range.getNumRows() - 1;
   const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIL_TAB.log);
-  const note = (player, text) => { if (logSheet) mailAppend_(logSheet, { date: mailToday_(), player, what: "note", note: text }); else Logger.log(player + ": " + text); };
+  const note = (player, text) => { if (logSheet) mailWithLock_(() => mailAppend_(logSheet, { date: mailToday_(), player, what: "note", note: text })); else Logger.log(player + ": " + text); };
 
   const pid = PropertiesService.getScriptProperties().getProperty("PUBLIC_ID");
   const invSheet = pid ? SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites) : null;
@@ -891,8 +1046,7 @@ function mailOnEditRun_(e){
 
   const test = mailIsTest_(PropertiesService.getScriptProperties());     // test mode never writes the public sheet
   const seen = new Set();
-  const isTicked = r => r.confirm === true || /^true$/i.test(String(r.confirm == null ? "" : r.confirm).trim());
-  const tickedBy = new Set(t.rows.filter(r => mailNorm_(r.player) && isTicked(r)).map(r => mailNorm_(r.player)));     // fill-down: ANY row ticked counts
+  const tickedBy = new Set(t.rows.filter(r => mailNorm_(r.player) && mailConfirmTicked_(r)).map(r => mailNorm_(r.player)));     // fill-down: ANY row ticked counts
   t.rows.filter(r => r._row >= r0 && r._row <= r1 && mailNorm_(r.player)).forEach(r => {
     const key = mailNorm_(r.player);
     if (seen.has(key)) return; seen.add(key);
@@ -908,7 +1062,7 @@ function mailOnEditRun_(e){
       if (row && "committed" in pt.idx && mailYes_(row.committed)) note(player, "confirm unticked - committed left ticked on the public sheet (untick it there by hand if wanted)");
     }
   });
-  try { mailDashboard_(SpreadsheetApp.getActiveSpreadsheet(), PropertiesService.getScriptProperties()); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
+  try { mailDashboard_(SpreadsheetApp.getActiveSpreadsheet(), PropertiesService.getScriptProperties(), false); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
 }
 
 // ---- adminPolish (menu: GFY Mail -> Polish admin sheet) -----------------------
@@ -965,7 +1119,7 @@ const MAIL_CF_TAG = '"' + MAIL_POLISH_TAG + '"<>""';
 function mailIsOurRule_(r){
   try {
     const vals = r.getBooleanCondition().getCriteriaValues() || [];
-    return vals.some(v => { const f = String(v); return f.indexOf(MAIL_POLISH_TAG) >= 0 || /REGEXMATCH\(\$[A-Z]+2&""/.test(f) || /INDIRECT\("Dashboard!/.test(f); });   // tagged, or an untagged one from an earlier version
+    return vals.some(v => String(v).indexOf(MAIL_CF_TAG) >= 0);       // the exact tag clause ONLY - never guessed from what a formula does
   } catch (e){ return false; }
 }
 
@@ -998,7 +1152,7 @@ function mailOrderTabs_(admin){
   const home = admin.getSheetByName(MAIL_TAB.dash); if (home) admin.setActiveSheet(home);   // end on Dashboard
 }
 
-function adminPolish(e){ mailGuard_(e); mailAdminPolish_(); }
+function adminPolish(e){ mailGuard_(e, "adminPolish"); mailAdminPolish_(); }
 function mailAdminPolish_(){
   const admin = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
@@ -1011,7 +1165,7 @@ function mailAdminPolish_(){
   });
   const con = admin.getSheetByName(MAIL_TAB.contacts);
   mailContactsRules_(con);
-  mailDashboard_(admin, props);
+  mailDashboard_(admin, props, true);
   const dash = admin.getSheetByName(MAIL_TAB.dash);
   mailProtectHeader_(dash);
   dash.setTabColor(MAIL_TAB_COLORS.Dashboard);
@@ -1021,7 +1175,7 @@ function mailAdminPolish_(){
 
 // ---- Dashboard (PRIVATE admin tab - names are fine here, never on a published tab) ----
 
-const MAIL_DASH_LISTS = ["Needs nudge", "Bounced", "Unconfirmed looks_yes", "Name mismatches", "Changed answer \u2014 fix by hand", "RSVP from out / DNI"];
+const MAIL_DASH_LISTS = ["Needs nudge", "Bounced", "Unconfirmed looks_yes", "Name mismatches", "Changed answer \u2014 fix by hand", "RSVP from out / DNI", "Pending / unconfirmed sends"];
 const MAIL_DASH_COL0 = 4;                               // lists live in D..G, headers on row 2, entries from row 3
 const MAIL_DASH_LABELS = { nudge: "nudge after (days)", scan: "last reply scan", status: "scan status" };
 
@@ -1038,12 +1192,18 @@ function mailDateOf_(v){
   return m ? Utilities.parseDate(m[1], Session.getScriptTimeZone(), "yyyy-MM-dd") : null;
 }
 
-function mailDashboard_(admin, props){
+// The rebuild runs under the script lock (it rewrites the whole tab). `refreshDrafts` = read the Gmail drafts to
+// re-check the template (slow): only adminPolish / the menu / the scan do; RSVP / onEdit / nudge rebuilds reuse the
+// status cached in the TPL_STATUS Script Property.
+function mailDashboard_(admin, props, refreshDrafts){
+  mailWithLock_(() => mailDashboardNL_(admin, props, !!refreshDrafts));
+}
+function mailDashboardNL_(admin, props, refreshDrafts){
   let sh = admin.getSheetByName(MAIL_TAB.dash);
   if (!sh) sh = admin.insertSheet(MAIL_TAB.dash);
 
-  // N (nudge days) is an editable cell on this tab - read it back before rebuilding.
-  const nudge = mailReadNudgeDays_(sh);
+  // The nudge interval is the NUDGE_DAYS Script Property (menu: Set nudge days...); this tab only displays it.
+  const nudge = mailReadNudgeDays_(props);
 
   const notes = [];
   const lists = {}; MAIL_DASH_LISTS.forEach(k => { lists[k] = []; });
@@ -1054,9 +1214,10 @@ function mailDashboard_(admin, props){
   const conSheet = admin.getSheetByName(MAIL_TAB.contacts), logSheet = admin.getSheetByName(MAIL_TAB.log), repSheet = admin.getSheetByName(MAIL_TAB.replies);
 
   if (conSheet) mailTable_(conSheet).rows.forEach(c => { if (mailNorm_(c.player) && /BOUNCED/.test(String(c.notes == null ? "" : c.notes))) lists["Bounced"].push(String(c.player).trim()); });
+  if (logSheet) lists["Pending / unconfirmed sends"] = mailUnsettled_(mailTable_(logSheet).rows);
   if (repSheet){
     const seen = new Set(), repRows = mailTable_(repSheet).rows;
-    const confirmed = new Set(repRows.filter(r => mailYes_(r.confirm)).map(r => mailNorm_(r.player)));     // any row ticked = confirmed
+    const confirmed = new Set(repRows.filter(r => mailConfirmTicked_(r)).map(r => mailNorm_(r.player)));     // any row ticked = confirmed
     repRows.forEach(r => {
       const k = mailNorm_(r.player);
       if (k && mailYes_(r.looks_yes) && !confirmed.has(k) && !seen.has(k)){ seen.add(k); lists["Unconfirmed looks_yes"].push(String(r.player).trim()); }
@@ -1082,7 +1243,7 @@ function mailDashboard_(admin, props){
       const would = [], seenW = new Set();
       mailTable_(repSheet).rows.forEach(r => {
         const k = mailNorm_(r.player);
-        if (!k || seenW.has(k) || !(r.confirm === true || /^true$/i.test(String(r.confirm == null ? "" : r.confirm).trim()))) return;     // any ticked row of the player reaches here
+        if (!k || seenW.has(k) || !mailConfirmTicked_(r)) return;     // any ticked row of the player reaches here
         seenW.add(k);
         const pr = cur.find(x => mailNorm_(x.player) === k);
         if (pr && !mailYes_(pr.committed)) would.push(String(r.player).trim());
@@ -1129,13 +1290,20 @@ function mailDashboard_(admin, props){
     status = isNaN(ms) ? "STALE - unreadable scan time" : (Date.now() - ms > MAIL_STALE_MS ? "STALE - over 1 h old" : "ok");
   }
 
-  const draftStatus = prefix => {
+  const draftStatusLive = prefix => {
     try {
       const t = mailLoadDraft_(prefix);
       if (t.ok) return `OK \u2014 ${t.subject}`;
       return ({ none: "MISSING \u2014 ", many: "2+ drafts \u2014 ", fill: "has [FILL] spots \u2014 " }[t.kind] || "BLOCKED \u2014 ") + t.msg;
     } catch (e){ return "UNKNOWN \u2014 Gmail unreadable"; }
   };
+  let tplStatus;
+  if (refreshDrafts){
+    tplStatus = draftStatusLive(mailTplPrefix_(props));
+    try { props.setProperty("TPL_STATUS", String(tplStatus).slice(0, 600)); } catch (e){ /* cache only */ }
+  } else {
+    tplStatus = props.getProperty("TPL_STATUS") || "not checked yet \u2014 run Polish admin sheet";
+  }
   try {
     const miss = JSON.parse(props.getProperty("SCAN_MISSING") || "[]");
     if (Array.isArray(miss) && miss.length) notes.push("invite thread missing in Gmail (deleted?) - replies not watched for: " + miss.join(", "));
@@ -1151,18 +1319,18 @@ function mailDashboard_(admin, props){
     ["committed", counts ? counts.committed : ""],
     ["out", counts ? counts.out : ""],
     ["", ""],
-    [L.nudge, nudge],
+    [L.nudge, nudge, "set via menu: Set nudge days\u2026"],
     ["", ""],
     [L.scan, stamp],
     [L.status, status],
-    ["template draft", draftStatus(mailTplPrefix_(props))],
+    ["template draft", tplStatus],
     ...notes.map(n => ["note", n]),
   ];
   const height = Math.max(left.length, 2 + Math.max(...MAIL_DASH_LISTS.map(k => lists[k].length)));
   const grid = [];
   for (let r = 0; r < height; r++){
     const row = new Array(MAIL_DASH_COL0 - 1 + MAIL_DASH_LISTS.length).fill("");
-    if (left[r]){ row[0] = left[r][0]; row[1] = left[r][1]; }
+    if (left[r]){ row[0] = left[r][0]; row[1] = left[r][1]; if (left[r][2]) row[2] = left[r][2]; }
     MAIL_DASH_LISTS.forEach((k, i) => {
       row[MAIL_DASH_COL0 - 1 + i] = r === 1 ? k : (r >= 2 ? (lists[k][r - 2] || "") : "");
     });
