@@ -122,13 +122,14 @@ function world(o = {}) {
   };
   const SpreadsheetApp = {
     getActiveSpreadsheet: () => admin, getActive: () => admin,
-    getUi: () => { if (o.noUi) throw new Error("Cannot call SpreadsheetApp.getUi() from this context."); return ui; },
+    getUi: () => { if (o.noUi || flags.noUi) throw new Error("Cannot call SpreadsheetApp.getUi() from this context."); return ui; },
     newConditionalFormatRule: mkRuleB, newDataValidation: mkDVB, ProtectionType: { RANGE: "RANGE" },
     openById: id => { opened.push(id); if (id === PUB) return pub; throw new Error("unknown id " + id); },
   };
   // Gmail
   const sent = []; const threads = {}; let tn = 0;
   const hooks = {};
+  const flags = {};
   const pendingDrafts = new Set();
   const mkMsg = m => ({ getId: () => m.id, getFrom: () => m.from, getSubject: () => m.subject, getDate: () => new Date(m.date || "2027-01-05T12:00:00Z"), getPlainBody: () => m.body || "", getTo: () => m.to || "", getRawContent: () => (m.raw || "") + "\r\n\r\n" + (m.body || "") });
   const draftOps = [];
@@ -194,7 +195,7 @@ function world(o = {}) {
   const sheet = n => admin.getSheetByName(n);
   const invSheet = pub.getSheetByName("Invites");
   const addIncoming = (threadId, m) => { threads[threadId].msgs.push({ id: threadId + "m" + threads[threadId].msgs.length, ...m }); };
-  return { M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages, hooks, lockState, pendingDrafts };
+  return { M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages, hooks, lockState, pendingDrafts, flags };
 }
 const run = (w, fn) => { try { return { ok: true, v: w.M[fn]() }; } catch (e) { return { ok: false, e: String(e && e.message || e) }; } };
 const pubWrites = w => w.log.filter(e => e.ev !== "lock" && e.ev !== "unlock" && e.ev !== "send" && e.sheet === "Invites");
@@ -1361,6 +1362,47 @@ for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
   const dl = world({ drafts: [STG, TPL_DRAFT] }); run(dl, "adminPolish");
   const ds = world({ props: { TEMPLATE_PREFIX: "[GFY STAGING TEMPLATE]" }, drafts: [STG, TPL_DRAFT] }); run(ds, "adminPolish");
   check("B5: the Dashboard's template-draft line follows the same prefix", /^OK — Good Friends Yearly/.test(dashVals(dl)["template draft"]) && /^OK — STAGING/.test(dashVals(ds)["template draft"]), JSON.stringify([dashVals(dl)["template draft"], dashVals(ds)["template draft"]]));
+}
+
+// M4: the Web App is anonymous and google.script.run can call any global without a trailing underscore
+{
+  // top-level lines only: skip comments and the inside of multi-line template literals (the RSVP page's inline <script>)
+  let inTpl = false;
+  const code = SRC.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").map(l => { const keep = inTpl ? "" : l; if ((l.match(/`/g) || []).length % 2) inTpl = !inTpl; return keep; }).join("\n").replace(/\/\/[^\n]*/g, "");
+  const globals = new Set([...code.matchAll(/^function\s+([A-Za-z0-9_$]+)/gm)].map(m => m[1]).concat([...code.matchAll(/^(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>/gm)].map(m => m[1])));
+  const open = [...globals].filter(n => !/_$/.test(n)).sort();
+  check("M4a: the ONLY globals without a trailing underscore are the allowlist (menu/trigger entrypoints + doGet + recordRsvp)",
+    JSON.stringify(open) === JSON.stringify(["adminPolish", "doGet", "installMailTriggers", "mailOnEdit", "onOpen", "recordRsvp", "scanReplies", "sendInvites", "sendNudges"]), JSON.stringify(open));
+}
+{
+  const gone = () => { const x = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP, ALERT_TO: ALERT } }); x.flags.noUi = true; return x; };
+  for (const fn of ["sendInvites", "sendNudges", "adminPolish", "installMailTriggers", "scanReplies"]) {
+    const w = gone();
+    const writes0 = w.log.length;
+    const r = run(w, fn);
+    check(`M4b: ${fn}() called with no UI and no trigger event (i.e. from the web) is refused: throws, sends nothing, writes nothing, installs nothing`,
+      !r.ok && w.sent.length === 0 && w.mails.length === 0 && w.triggers.length === 0 && w.log.slice(writes0).filter(e => e.ev === "write" || e.ev === "append" || e.ev === "send").length === 0, r.e || "did not throw");
+    let spoofed = true;
+    try { w.M[fn]({ triggerUid: "guess-me" }); } catch (e) { spoofed = false; }
+    check(`M4c: ${fn}({triggerUid:'guess-me'}) - a forged trigger event is refused too`, !spoofed && w.sent.length === 0 && w.triggers.length === 0, "");
+  }
+  const w = gone();
+  w.M.installMailTriggers && (w.flags.noUi = false, w.M.installMailTriggers(), w.flags.noUi = true);
+  let ok = true; try { w.M.scanReplies({ triggerUid: "uid-scanReplies" }); } catch (e) { ok = false; }
+  check("M4d: a REAL trigger event (uid of an installed trigger) runs scanReplies with no UI", ok && w.sheet("READ ME").rows[1][1] !== "", "");
+  const rep = world({ props: { GFY_MAIL_TEST: "0" }, replies: [["2027-01-02", "Alice Able", "A", "yes", true, true, "m1"]], invites: [[2027, "Alice Able", true, true, "", false, ""]] });
+  rep.flags.noUi = true;
+  const cc = colOf(rep.sheet("Replies").rows, "confirm");
+  try { rep.M.mailOnEdit({ range: rep.sheet("Replies").getRange(2, cc, 1, 1) }); } catch (x) { /* refused */ }
+  check("M4e: mailOnEdit called from the web with a crafted event writes nothing", pubWrites(rep).length === 0 && rep.invSheet.rows[1][5] === false, JSON.stringify(pubWrites(rep)));
+  rep.flags.noUi = false; rep.M.installMailTriggers(); rep.flags.noUi = true;
+  rep.M.mailOnEdit({ triggerUid: "uid-mailOnEdit", range: rep.sheet("Replies").getRange(2, cc, 1, 1) });
+  check("M4f: ... but the real installable onEdit trigger event (known uid) still commits", rep.invSheet.rows[1][5] === true, JSON.stringify(rep.invSheet.rows));
+  const dw = world({ props: { WEBAPP_URL: WEBAPP }, rsvp: [[2027, "Alice Able", "A".repeat(24), "", "", "", ""]] });
+  dw.flags.noUi = true;
+  const g = dw.M.doGet({ parameter: { t: "A".repeat(24) } });
+  let rr = true; try { dw.M.recordRsvp("A".repeat(24), "MAYBE"); } catch (x) { rr = false; }
+  check("M4g: doGet and recordRsvp stay web-callable (no UI needed)", /are you in/.test(String(g.html)) && rr && dw.sheet("RSVP").rows[1][3] === "MAYBE", "");
 }
 
 // ---------- no-'@' leak test ----------

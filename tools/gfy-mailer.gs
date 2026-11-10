@@ -53,6 +53,20 @@ const mailNorm_ = s => String(s == null ? "" : s).trim().replace(/\s+/g, " ").to
 const mailIsOutStatus_ = v => /^(out|declined|no|not coming|nope|n)$/i.test(String(v == null ? "" : v).trim());
 const mailYes_ = v => v === true || /^(y|yes|true|1|x|✓)$/i.test(String(v == null ? "" : v).trim());
 
+// ---- web-surface guard --------------------------------------------------------------
+// The deployed Web App is anonymous and google.script.run can call ANY global function whose name does not end
+// in "_". So the only such globals are: doGet, recordRsvp, onOpen and the thin menu/trigger entrypoints below,
+// which refuse unless they run from the sheet UI (getUi works) or from one of THIS project's own triggers
+// (the event's triggerUid must be the id of an installed trigger). Everything else ends in "_".
+function mailGuard_(e){
+  if (e && e.triggerUid){
+    const uid = String(e.triggerUid);
+    if (ScriptApp.getProjectTriggers().some(t => String(t.getUniqueId()) === uid)) return;
+  }
+  try { SpreadsheetApp.getUi(); }
+  catch (err){ throw new Error("Not available here: run this from the GFY Mail menu or by its trigger."); }
+}
+
 function onOpen(){
   SpreadsheetApp.getUi().createMenu("GFY Mail")
     .addItem("Send invites…", "sendInvites")
@@ -306,7 +320,8 @@ function mailSendOpts_(m){
 
 // ---- A: the button ---------------------------------------------------------
 
-function sendInvites(){
+function sendInvites(e){ mailGuard_(e); mailSendInvites_(); }
+function mailSendInvites_(){
   const ui = SpreadsheetApp.getUi();
   const say = (title, msg) => ui.alert(title, msg, ui.ButtonSet.OK);
   const props = PropertiesService.getScriptProperties();
@@ -439,7 +454,8 @@ function mailReadNudgeDays_(sh){
   return nudge;
 }
 
-function sendNudges(){
+function sendNudges(e){ mailGuard_(e); mailSendNudges_(); }
+function mailSendNudges_(){
   const ui = SpreadsheetApp.getUi();
   const say = (title, msg) => ui.alert(title, msg, ui.ButtonSet.OK);
   const props = PropertiesService.getScriptProperties();
@@ -672,7 +688,8 @@ function recordRsvp(token, choice){
 
 // ---- C: reply watcher --------------------------------------------------------
 
-function installMailTriggers(){
+function installMailTriggers(e){ mailGuard_(e); mailInstallTriggers_(); }
+function mailInstallTriggers_(){
   const has = fn => ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === fn);
   if (!has("scanReplies")) ScriptApp.newTrigger("scanReplies").timeBased().everyMinutes(15).create();
   // Installable onEdit (a simple onEdit cannot open the public sheet): confirm -> committed.
@@ -733,7 +750,8 @@ function mailAlert_(props, subject, body){
   } catch (e){ Logger.log("alert failed: " + (e && e.message || e)); }
 }
 
-function scanReplies(){
+function scanReplies(e){ mailGuard_(e); mailScanRun_(); }
+function mailScanRun_(){
   const props = PropertiesService.getScriptProperties();
   try {                       // stale check at scan start (never-scanned stays quiet)
     const admin = SpreadsheetApp.getActiveSpreadsheet();
@@ -821,8 +839,9 @@ function mailNoteBounce_(conSheet, player, date){
  *  for that player / current year on the PUBLIC Invites tab (only ever TRUE, via
  *  mailPublicWrite_, under the lock; NOT in test mode - the Dashboard says "would commit X"). UNticking never unticks committed - it
  *  logs a note on SendLog instead. Script edits (scanReplies) do not fire onEdit. */
-function mailOnEdit(e){
-  if (!e || !e.range) return;
+function mailOnEdit(e){ mailGuard_(e); mailOnEditRun_(e); }
+function mailOnEditRun_(e){
+  if (!e || !e.range || typeof e.range.getSheet !== "function") return;
   const sh = e.range.getSheet();
   if (!sh || sh.getName() !== MAIL_TAB.replies) return;
   const t = mailTable_(sh);
@@ -939,7 +958,8 @@ function mailOrderTabs_(admin){
   const home = admin.getSheetByName(MAIL_TAB.dash); if (home) admin.setActiveSheet(home);   // end on Dashboard
 }
 
-function adminPolish(){
+function adminPolish(e){ mailGuard_(e); mailAdminPolish_(); }
+function mailAdminPolish_(){
   const admin = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
   Object.keys(MAIL_SCHEMA).forEach(name => {
