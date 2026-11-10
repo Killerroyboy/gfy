@@ -87,8 +87,8 @@ export function diffVault(contacts, invites){
       const row = invByName.get(norm(c.player));
       if (!row) return false; // no row at all -> unpaired, not a violation
       if (yes(row.invited) || yes(row.responded)) return true;
-      const status = norm(row.status);
-      return status !== "out" && status !== "declined";
+      // mirrors tools/gfy-mailer.gs mailIsOutStatus_: every spelling of "not coming" is out
+      return !/^(out|declined|no|not coming|nope|n)$/.test(norm(row.status));
     }),
     dniUnpaired: dniContacts.filter(c => !invByName.has(norm(c.player))),
   };

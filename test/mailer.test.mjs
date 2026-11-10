@@ -1189,6 +1189,60 @@ const todayStr = new Date().toISOString().slice(0, 10);
   check("H3e: a test-mode nudge reuses the TEST token (one flagged row), still no live row exists", tokens.length === 1 && tokens[0][2] === t1 && String(tokens[0][6]).toUpperCase() === "TRUE", JSON.stringify(tokens));
 }
 
+// M1: scanning in TEST MODE must not tick `responded` publicly
+{
+  const { w, tid } = afterSend();
+  w.props.GFY_MAIL_TEST = "";                                // back to test mode, live threads still in the log
+  w.addIncoming(tid("alice@example.com"), { from: "Alice Able <alice@example.com>", subject: "Re:", body: "Yes, count me in." });
+  w.log.length = 0;
+  const r = run(w, "scanReplies");
+  check("M1a: scanReplies in TEST MODE writes nothing to the public sheet (responded NOT ticked); the private Replies row is still logged",
+    r.ok && pubWrites(w).length === 0 && w.invSheet.rows.find(x => x[1] === "Alice Able")[3] === false && w.sheet("Replies").rows.length === 2, r.e || JSON.stringify(pubWrites(w)));
+  check("M1b: ... and the Dashboard says 'test mode: would mark responded Alice Able'", /test mode: would mark responded [^"]*Alice Able/.test(dashText(w)), dashText(w));
+  w.props.GFY_MAIL_TEST = "0";
+  run(w, "scanReplies");
+  check("M1c: the same reply ticks responded once LIVE", w.invSheet.rows.find(x => x[1] === "Alice Able")[3] === true && !/would mark responded/.test(dashText(w)));
+  noteWrites(w);
+}
+// M5: RSVP from a do-not-invite / out / declined row never commits or declines it publicly
+{
+  const w = rsvpWorld({ noSend: true, rsvp: [[2027, "Cy Dnì", "C".repeat(24), "", "", "", ""]] });
+  w.log.length = 0;
+  const r = rsvpGo(w, "Cy Dnì", "IN");
+  const cy = w.invSheet.rows.find(x => x[1] === "Cy Dnì");
+  check("M5a: a do-not-invite player's RSVP is recorded privately but writes NOTHING public (no responded/committed/status), and is listed on the Dashboard",
+    r.ok && rsvpRows(w).find(x => x[1] === "Cy Dnì")[3] === "IN" && pubWrites(w).length === 0 && cy[3] === false && cy[5] === false && (dashList(w, "RSVP from out / DNI") || []).includes("Cy Dnì"), r.e || JSON.stringify([pubWrites(w), dashList(w, "RSVP from out / DNI")]));
+  const x = rsvpWorld({ noSend: true, rsvp: [[2027, "Dee Out", "D".repeat(24), "", "", "", ""]],
+    contacts: [["Dee Out", "d@example.com", "", "", "FALSE", "", ""]], invites: [[2027, "Dee Out", true, false, "declined", false, ""]] });
+  rsvpGo(x, "Dee Out", "IN");
+  const dee = x.invSheet.rows.find(y => y[1] === "Dee Out");
+  check("M5b: OUT/declined -> IN: committed is NOT ticked, status stays 'declined'; the player lands on 'Changed answer - fix by hand' and the out/DNI list",
+    dee[5] === false && dee[4] === "declined" && (dashList(x, "Changed answer — fix by hand") || []).includes("Dee Out") && (dashList(x, "RSVP from out / DNI") || []).includes("Dee Out"), JSON.stringify([dee, dashText(x)]));
+  noteWrites(w); noteWrites(x);
+}
+// L1: fill-down over Replies - the player counts as confirmed if ANY of their rows is ticked
+{
+  const w = repWorld({ replies: [["2027-01-02", "Alice Able", "A", "yes", true, false, "m1"], ["2027-01-03", "Alice Able", "A", "yes again", true, true, "m2"]] });
+  const cc = colOf(w.sheet("Replies").rows, "confirm");
+  w.M.mailOnEdit(editEvent(w, 2, cc, 2));
+  check("L1a: a fill-down over two rows of one player where only the SECOND is ticked still commits that player", w.invSheet.rows.find(x => x[0] === 2027 && x[1] === "Alice Able")[5] === true, JSON.stringify(w.invSheet.rows));
+  const d = world({ replies: [["2027-01-02", "Alice Able", "A", "yes", true, false, "m1"], ["2027-01-03", "Alice Able", "A", "yes again", true, true, "m2"]] });
+  run(d, "adminPolish");
+  check("L1b: the Dashboard 'Unconfirmed looks_yes' list does not include a player with ANY confirm ticked", !(dashList(d, "Unconfirmed looks_yes") || []).includes("Alice Able"), dashText(d));
+  noteWrites(w);
+}
+// L7: more spellings of "not coming" are out for SENDING; presend mirrors it
+for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
+  const w = world({ props: { GFY_MAIL_TEST: "0" }, invites: [[2027, "Alice Able", false, false, st, false, ""], [2027, "Bob Baker", false, false, "", false, ""], [2027, "Cy Dnì", false, false, "out", false, ""]] });
+  run(w, "sendInvites");
+  check(`L7a: status '${st.trim()}' is out for sending: never invited`, w.sent.length === 1 && w.sent[0].to === "bob@example.com", JSON.stringify(w.sent.map(y => y.to)));
+}
+{
+  const pre = await import("../tools/presend-check.mjs");
+  const vio = st => pre.diffVault([{ player: "Cy Dni", email: "c@example.com", do_not_invite: "TRUE" }], [{ year: "2027", player: "Cy Dni", invited: "", responded: "", status: st }]).dniViolations.length;
+  check("L7b: presend-check treats no / not coming / nope / n like out for a do-not-invite name (no violation), maybe still is one", vio("no") === 0 && vio("Not Coming") === 0 && vio("nope") === 0 && vio("n") === 0 && vio("out") === 0 && vio("maybe") === 1, [vio("no"), vio("n"), vio("maybe")].join());
+}
+
 // ---------- no-'@' leak test ----------
 {
   const bad = allPublicWrites.filter(e => /@/.test(String(e.v)));

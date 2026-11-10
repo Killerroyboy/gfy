@@ -49,6 +49,8 @@ const MAIL_NUDGE_DEFAULT = 7;
 const MAIL_STALE_MS = 60 * 60 * 1000;
 
 const mailNorm_ = s => String(s == null ? "" : s).trim().replace(/\s+/g, " ").toLowerCase();
+// "Not coming" in any of the spellings people type into the status cell. Mirror: tools/presend-check.mjs.
+const mailIsOutStatus_ = v => /^(out|declined|no|not coming|nope|n)$/i.test(String(v == null ? "" : v).trim());
 const mailYes_ = v => v === true || /^(y|yes|true|1|x|✓)$/i.test(String(v == null ? "" : v).trim());
 
 function onOpen(){
@@ -183,7 +185,7 @@ function mailPlan_(contacts, invites, logRows){
   const byName = new Map(cur.map(r => [mailNorm_(r.player), r]));
   const vault = new Map(contacts.filter(c => mailNorm_(c.player)).map(c => [mailNorm_(c.player), c]));
   const dni = contacts.filter(c => mailNorm_(c.player) && mailYes_(c.do_not_invite));
-  const isOut = r => /^(out|declined)$/i.test(String(r.status == null ? "" : r.status).trim());
+  const isOut = r => mailIsOutStatus_(r.status);
   const blocks = [];
 
   dni.forEach(c => {
@@ -355,7 +357,7 @@ function mailSendNew_(m){
  *  threadId / address come from that person's latest real invite row. */
 function mailNudgeRows_(cur, contacts, logRows, days){
   const dni = new Set(contacts.filter(c => mailYes_(c.do_not_invite)).map(c => mailNorm_(c.player)));
-  const isOut = r => /^(out|declined)$/i.test(String(r.status == null ? "" : r.status).trim());
+  const isOut = r => mailIsOutStatus_(r.status);
   const last = new Map(), inv = new Map();
   logRows.forEach(r => {
     const what = mailNorm_(r.what); if (what !== "invite" && what !== "nudge") return;
@@ -561,8 +563,14 @@ function recordRsvp(token, choice){
     set("answer", c); set("answered_at", stamp); set("history", (hist ? hist + "; " : "") + stamp + " " + c);
     if (test || mailYes_(row.test)) return;              // TEST MODE, or a TEST token: private RSVP tab only, never public
     try {
+      // A do-not-invite player gets NO public write at all (a ticked responded would also trip the DNI send-block);
+      // an out/declined player may tick responded but is never committed or re-declined. Both are listed on the Dashboard.
+      const dni = ctx.admin.getSheetByName(MAIL_TAB.contacts) && mailTable_(ctx.admin.getSheetByName(MAIL_TAB.contacts)).rows.some(x => mailNorm_(x.player) === mailNorm_(out.player) && mailYes_(x.do_not_invite));
+      if (dni) return;
+      const pt = mailTable_(ctx.inv), prow = pt.rows.find(x => (parseInt(x.year, 10) || 0) === ctx.year && mailNorm_(x.player) === mailNorm_(out.player));
+      const isOut = !!prow && mailIsOutStatus_(prow.status);
       mailTickPublicNL_(ctx.inv, ctx.year, out.player, "responded");
-      if (c === "IN") mailTickPublicNL_(ctx.inv, ctx.year, out.player, "committed");
+      if (c === "IN" && !isOut) mailTickPublicNL_(ctx.inv, ctx.year, out.player, "committed");
       if (c === "OUT") mailDeclinePublicNL_(ctx.inv, ctx.year, out.player);
     } catch (err){ out.publicFailed = true; }
   });
@@ -667,6 +675,7 @@ function mailScan_(){
   mailEnsureHeader_(repSheet, "msg_id");
   const me = Session.getEffectiveUser().getEmail();
   const year = mailCurrentYear_(mailTable_(invSheet).rows);
+  const test = mailIsTest_(props);                  // TEST MODE: the public sheet is never written (the Dashboard says what would be)
   const seen = new Set(mailTable_(repSheet).rows.map(r => String(r.msg_id)));
   const errors = [];
 
@@ -690,7 +699,7 @@ function mailScan_(){
           looks_yes: mailLooksYes_(snippet), confirm: false, msg_id: id,
         });
       });
-      if (replied) mailTickPublic_(invSheet, year, player, "responded");
+      if (replied && !test) mailTickPublic_(invSheet, year, player, "responded");
     } catch (e){ errors.push(`${player}: ${e && e.message || e}`); }
   });
 
@@ -740,10 +749,12 @@ function mailOnEdit(e){
 
   const test = mailIsTest_(PropertiesService.getScriptProperties());     // test mode never writes the public sheet
   const seen = new Set();
+  const isTicked = r => r.confirm === true || /^true$/i.test(String(r.confirm == null ? "" : r.confirm).trim());
+  const tickedBy = new Set(t.rows.filter(r => mailNorm_(r.player) && isTicked(r)).map(r => mailNorm_(r.player)));     // fill-down: ANY row ticked counts
   t.rows.filter(r => r._row >= r0 && r._row <= r1 && mailNorm_(r.player)).forEach(r => {
     const key = mailNorm_(r.player);
     if (seen.has(key)) return; seen.add(key);
-    const ticked = r.confirm === true || /^true$/i.test(String(r.confirm == null ? "" : r.confirm).trim());
+    const ticked = tickedBy.has(key);
     const player = String(r.player).trim();
     if (ticked){
       if (test) return;          // the Dashboard shows "test mode: would commit X"
@@ -858,7 +869,7 @@ function adminPolish(){
 
 // ---- Dashboard (PRIVATE admin tab - names are fine here, never on a published tab) ----
 
-const MAIL_DASH_LISTS = ["Needs nudge", "Bounced", "Unconfirmed looks_yes", "Name mismatches", "Changed answer \u2014 fix by hand"];
+const MAIL_DASH_LISTS = ["Needs nudge", "Bounced", "Unconfirmed looks_yes", "Name mismatches", "Changed answer \u2014 fix by hand", "RSVP from out / DNI"];
 const MAIL_DASH_COL0 = 4;                               // lists live in D..G, headers on row 2, entries from row 3
 const MAIL_DASH_LABELS = { nudge: "nudge after (days)", scan: "last reply scan", status: "scan status" };
 
@@ -892,10 +903,11 @@ function mailDashboard_(admin, props){
 
   if (conSheet) mailTable_(conSheet).rows.forEach(c => { if (mailNorm_(c.player) && /BOUNCED/.test(String(c.notes == null ? "" : c.notes))) lists["Bounced"].push(String(c.player).trim()); });
   if (repSheet){
-    const seen = new Set();
-    mailTable_(repSheet).rows.forEach(r => {
+    const seen = new Set(), repRows = mailTable_(repSheet).rows;
+    const confirmed = new Set(repRows.filter(r => mailYes_(r.confirm)).map(r => mailNorm_(r.player)));     // any row ticked = confirmed
+    repRows.forEach(r => {
       const k = mailNorm_(r.player);
-      if (k && mailYes_(r.looks_yes) && !mailYes_(r.confirm) && !seen.has(k)){ seen.add(k); lists["Unconfirmed looks_yes"].push(String(r.player).trim()); }
+      if (k && mailYes_(r.looks_yes) && !confirmed.has(k) && !seen.has(k)){ seen.add(k); lists["Unconfirmed looks_yes"].push(String(r.player).trim()); }
     });
   }
 
@@ -906,7 +918,7 @@ function mailDashboard_(admin, props){
     const inv = mailTable_(invSheet).rows;
     year = mailCurrentYear_(inv);
     const cur = inv.filter(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player));
-    const isOut = r => /^(out|declined)$/i.test(String(r.status == null ? "" : r.status).trim());
+    const isOut = r => mailIsOutStatus_(r.status);
     counts = {
       invited: cur.filter(r => mailYes_(r.invited)).length,
       responded: cur.filter(r => mailYes_(r.responded)).length,
@@ -918,12 +930,20 @@ function mailDashboard_(admin, props){
       const would = [], seenW = new Set();
       mailTable_(repSheet).rows.forEach(r => {
         const k = mailNorm_(r.player);
-        if (!k || seenW.has(k) || !(r.confirm === true || /^true$/i.test(String(r.confirm == null ? "" : r.confirm).trim()))) return;
+        if (!k || seenW.has(k) || !(r.confirm === true || /^true$/i.test(String(r.confirm == null ? "" : r.confirm).trim()))) return;     // any ticked row of the player reaches here
         seenW.add(k);
         const pr = cur.find(x => mailNorm_(x.player) === k);
         if (pr && !mailYes_(pr.committed)) would.push(String(r.player).trim());
       });
       if (would.length) notes.push("test mode: would commit " + would.join(", "));
+      const wouldR = [], seenR = new Set();
+      mailTable_(repSheet).rows.forEach(r => {
+        const k = mailNorm_(r.player);
+        if (!k || seenR.has(k)) return;
+        const pr = cur.find(x => mailNorm_(x.player) === k);
+        if (pr && !mailYes_(pr.responded)){ seenR.add(k); wouldR.push(String(r.player).trim()); }
+      });
+      if (wouldR.length) notes.push("test mode: would mark responded " + wouldR.join(", "));
     }
     const rsvpSh = admin.getSheetByName(MAIL_TAB.rsvp);
     if (rsvpSh) mailTable_(rsvpSh).rows.forEach(r => {
@@ -932,6 +952,16 @@ function mailDashboard_(admin, props){
       if ((ans !== "OUT" && ans !== "MAYBE") || !/\bIN$|\bIN;/.test(String(r.history == null ? "" : r.history) + ";")) return;
       const pr = cur.find(x => mailNorm_(x.player) === mailNorm_(r.player));
       if (pr && mailYes_(pr.committed)) lists["Changed answer \u2014 fix by hand"].push(String(r.player).trim());
+    });
+    // M5: answers from do-not-invite / out / declined players are never written publicly - list them for a human.
+    const dniSet = new Set(conSheet ? mailTable_(conSheet).rows.filter(c => mailYes_(c.do_not_invite)).map(c => mailNorm_(c.player)) : []);
+    if (rsvpSh) mailTable_(rsvpSh).rows.forEach(r => {
+      if ((parseInt(r.year, 10) || 0) !== year || !mailNorm_(r.player) || mailYes_(r.test) || !String(r.answer == null ? "" : r.answer).trim()) return;
+      const pr = cur.find(x => mailNorm_(x.player) === mailNorm_(r.player));
+      const dni = dniSet.has(mailNorm_(r.player)), out = !!pr && isOut(pr);
+      if (!dni && !out) return;
+      lists["RSVP from out / DNI"].push(String(r.player).trim());
+      if (out && !dni && String(r.answer).trim().toUpperCase() === "IN") lists["Changed answer \u2014 fix by hand"].push(String(r.player).trim());
     });
     const names = new Set(inv.filter(r => mailNorm_(r.player)).map(r => mailNorm_(r.player)));   // ANY year: a veteran not invited this year is not a mismatch
     if (conSheet) mailTable_(conSheet).rows.forEach(c => { if (mailNorm_(c.player) && !names.has(mailNorm_(c.player))) lists["Name mismatches"].push(String(c.player)); });
