@@ -162,7 +162,22 @@ function mailDeclinePublicNL_(invSheet, year, player){
 
 /** contacts / invites: arrays of lowercase-keyed row objects. Mirrors
  *  tools/presend-check.mjs diffVault: DNI violation, unpaired DNI, missing from vault. */
-function mailPlan_(contacts, invites){
+/** Has this person already been emailed an invite THIS season, per the SendLog (live `invite` rows)?
+ *  A row tagged `season <year>` in its note is exact. An older untagged row counts if it is dated
+ *  last year or later (invites for 2027 go out in 2026); an unreadable date counts too (safe side). */
+function mailInviteLogged_(logRows, player, year){
+  const k = mailNorm_(player);
+  return logRows.some(l => {
+    if (mailNorm_(l.what) !== "invite" || mailNorm_(l.player) !== k) return false;
+    const tag = String(l.note == null ? "" : l.note).match(/season (\d{4})/);
+    if (tag) return parseInt(tag[1], 10) === year;
+    const d = mailDateOf_(l.date);
+    return !d || parseInt(mailToday_(d).slice(0, 4), 10) >= year - 1;
+  });
+}
+
+function mailPlan_(contacts, invites, logRows){
+  logRows = logRows || [];
   const year = mailCurrentYear_(invites);
   const cur = invites.filter(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player));
   const byName = new Map(cur.map(r => [mailNorm_(r.player), r]));
@@ -182,16 +197,17 @@ function mailPlan_(contacts, invites){
     if (!vault.has(mailNorm_(r.player))) blocks.push(`${r.player}: on the Invites tab but missing from Contacts — add their address first`);
   });
 
-  const recipients = [], noAddress = [];
+  const recipients = [], noAddress = [], alreadySent = [];
   cur.forEach(r => {
     if (mailYes_(r.invited) || isOut(r)) return;
     const c = vault.get(mailNorm_(r.player));
     if (!c || mailYes_(c.do_not_invite)) return;
+    if (mailInviteLogged_(logRows, r.player, year)){ alreadySent.push(String(r.player).trim()); return; }
     const addr = String(c.email || "").trim() || String(c.email_alt || "").trim();
     if (!addr){ noAddress.push(String(r.player).trim()); return; }
     recipients.push({ player: String(r.player).trim(), address: addr });
   });
-  return { year, blocks, recipients, noAddress };
+  return { year, blocks, recipients, noAddress, alreadySent };
 }
 
 // ---- Gmail-draft template ----------------------------------------------------
@@ -258,12 +274,13 @@ function sendInvites(){
   const conSheet = admin.getSheetByName(MAIL_TAB.contacts), logSheet = admin.getSheetByName(MAIL_TAB.log);
   if (!invSheet || !conSheet || !logSheet){ say("GFY Mail", "Missing tab (public Invites, or Admin Contacts / SendLog). Nothing sent."); return; }
 
-  const plan = mailPlan_(mailTable_(conSheet).rows, mailTable_(invSheet).rows);
+  const plan = mailPlan_(mailTable_(conSheet).rows, mailTable_(invSheet).rows, mailTable_(logSheet).rows);
   if (plan.blocks.length){
     say("Send BLOCKED — fix these first (nothing was sent)", plan.blocks.join("\n"));
     return;
   }
-  if (!plan.recipients.length){ say("GFY Mail", `Nobody to invite for ${plan.year}.` + (plan.noAddress.length ? `\nNo address on file: ${plan.noAddress.join(", ")}` : "")); return; }
+  const dupNote = plan.alreadySent.length ? `\n\nAlready emailed according to SendLog, NOT sent again (tick invited on the public sheet by hand if it is missing): ${plan.alreadySent.join(", ")}` : "";
+  if (!plan.recipients.length){ say("GFY Mail", `Nobody to invite for ${plan.year}.` + (plan.noAddress.length ? `\nNo address on file: ${plan.noAddress.join(", ")}` : "") + dupNote); return; }
 
   let tpl;
   try { tpl = mailLoadDraft_(MAIL_TPL_PREFIX); } catch (e){ say("GFY Mail", "Could not read Gmail drafts (" + (e && e.message || e) + "). Nothing sent."); return; }
@@ -280,34 +297,54 @@ function sendInvites(){
   const msg = (test ? `TEST MODE: every message goes to ${MAIL_TEST_ADDR}; nothing is ticked on the public sheet.\n\n` : "LIVE: these people will be emailed for real.\n\n")
     + `Subject of the first email: ${mailBuild_(tpl, plan.recipients[0].player, plan.recipients[0].address, test).subject}\n\n`
     + `Send ${plan.recipients.length} ${plan.year} invite(s)?\n\n${list}`
-    + (plan.noAddress.length ? `\n\nSkipped (no address): ${plan.noAddress.join(", ")}` : "");
+    + (plan.noAddress.length ? `\n\nSkipped (no address): ${plan.noAddress.join(", ")}` : "") + dupNote;
   if (ui.alert("Send invites", msg, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
 
-  mailEnsureHeader_(logSheet, "thread_id");
-  const failed = [], tickFailed = [];
+  // The WHOLE send runs under the script lock; a second click (or a re-run after a crash) cannot overlap it.
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)){ say("GFY Mail", "Another send is already running (the script lock is held). Wait a minute and run Send invites again. Nothing sent."); return; }
+  const failed = [], tickFailed = [], skipped = [];
   let sent = 0;
-  plan.recipients.forEach(r => {
-    let m, threadId;
-    try {
-      const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpToken_(admin.getSheetByName(MAIL_TAB.rsvp), plan.year, r.player)) : "";
-      m = mailBuild_(tpl, r.player, r.address, test, url);
-      threadId = GmailApp.createDraft(m.to, m.subject, m.body, mailSendOpts_(m)).send().getThread().getId();
-    } catch (e){ failed.push(`${r.player} (${e && e.message || e})`); return; }
-    sent++;
-    // Log BEFORE ticking: a crash after the send must never lead to a second email.
-    mailAppend_(logSheet, {
-      date: mailToday_(), player: r.player, address_used: m.to,
-      what: test ? "invite-test" : "invite",
-      note: test ? `TEST MODE (real address ${r.address})` : "", thread_id: threadId,
+  try {
+    mailEnsureHeader_(logSheet, "thread_id");
+    plan.recipients.forEach(r => {
+      // Re-read EVERYTHING under the lock right before this send: invited tick, SendLog, DNI, status.
+      const fresh = mailPlan_(mailTable_(conSheet).rows, mailTable_(invSheet).rows, mailTable_(logSheet).rows);
+      const still = fresh.recipients.find(x => mailNorm_(x.player) === mailNorm_(r.player));
+      if (fresh.blocks.length || fresh.year !== plan.year || !still || still.address !== r.address){ skipped.push(r.player); return; }
+      let m, threadId;
+      try {
+        const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpTokenNL_(admin.getSheetByName(MAIL_TAB.rsvp), plan.year, r.player)) : "";
+        m = mailBuild_(tpl, r.player, r.address, test, url);
+        threadId = mailSendNew_(m);
+      } catch (e){ failed.push(`${r.player} (${e && e.message || e})`); return; }
+      sent++;
+      // Log BEFORE ticking: a crash after the send must never lead to a second email.
+      mailAppend_(logSheet, {
+        date: mailToday_(), player: r.player, address_used: m.to,
+        what: test ? "invite-test" : "invite",
+        note: test ? `TEST MODE (real address ${r.address})` : `season ${plan.year}`, thread_id: threadId,
+      });
+      if (!test){
+        try { mailTickPublicNL_(invSheet, plan.year, r.player, "invited"); }
+        catch (e){ tickFailed.push(r.player); }
+      }
     });
-    if (!test){
-      try { mailTickPublic_(invSheet, plan.year, r.player, "invited"); }
-      catch (e){ tickFailed.push(r.player); }
-    }
-  });
+  } finally { lock.releaseLock(); }
   say("GFY Mail", `${test ? "TEST " : ""}Sent ${sent} of ${plan.recipients.length}.`
     + (failed.length ? `\n\nSEND FAILED (not logged, not ticked — safe to re-run): ${failed.join("; ")}` : "")
+    + (skipped.length ? `\n\nSKIPPED (changed while sending — already invited, or edited): ${skipped.join(", ")}` : "")
     + (tickFailed.length ? `\n\nSent and logged, but could NOT tick invited on the public sheet — tick by hand: ${tickFailed.join(", ")}` : ""));
+}
+
+// Send ONE fresh message and return its Gmail thread id. A failed send deletes its own draft (no orphans);
+// a send that went out but whose thread id cannot be read still returns "" (the caller logs it - never re-sends).
+function mailSendNew_(m){
+  const d = GmailApp.createDraft(m.to, m.subject, m.body, mailSendOpts_(m));
+  let msg;
+  try { msg = d.send(); }
+  catch (e){ try { d.deleteDraft(); } catch (x){ /* already gone */ } throw e; }
+  try { return String(msg.getThread().getId()); } catch (e){ return ""; }
 }
 
 // ---- D: nudges -------------------------------------------------------------------
@@ -425,15 +462,15 @@ function mailRsvpUrl_(props, token){
 }
 
 // One random token per (year, player), created once and reused. Stored ONLY in the private RSVP tab.
-function mailRsvpToken_(sheet, year, player){
-  return mailWithLock_(() => {
-    const t = mailTable_(sheet);
-    const have = t.rows.find(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player) === mailNorm_(player) && String(r.token || "").trim().length >= 22);
-    if (have) return String(have.token).trim();
-    const token = Utilities.getUuid().replace(/-/g, "");     // 32 chars, 122 random bits
-    mailAppend_(sheet, { year, player: String(player).trim(), token, answer: "", answered_at: "", history: "" });
-    return token;
-  });
+function mailRsvpToken_(sheet, year, player){ return mailWithLock_(() => mailRsvpTokenNL_(sheet, year, player)); }
+// Caller MUST already hold the script lock (the lock is not reentrant).
+function mailRsvpTokenNL_(sheet, year, player){
+  const t = mailTable_(sheet);
+  const have = t.rows.find(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player) === mailNorm_(player) && String(r.token || "").trim().length >= 22);
+  if (have) return String(have.token).trim();
+  const token = Utilities.getUuid().replace(/-/g, "");     // 32 chars, 122 random bits
+  mailAppend_(sheet, { year, player: String(player).trim(), token, answer: "", answered_at: "", history: "" });
+  return token;
 }
 
 function mailAdmin_(props){

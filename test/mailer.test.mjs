@@ -1112,6 +1112,49 @@ function failingScanWorld(props = {}) {
   check("L2c: RSVP.answered_at is TEXT too", (rsvpGo(w, "Alice Able", "IN"), typeof rsvpRows(w).find(r => r[1] === "Alice Able")[4] === "string"), JSON.stringify(rsvpRows(w)));
 }
 
+// H1: a send can never double-email (re-run after a crash, concurrent click) + L8 (no orphan drafts)
+const todayStr = new Date().toISOString().slice(0, 10);
+{
+  // crash between send and tick: SendLog has the live invite row but `invited` was never ticked
+  const w = world({ props: { GFY_MAIL_TEST: "0" }, sendlog: [[todayStr, "Alice Able", "alice@example.com", "invite", "season 2027", "thrX"]] });
+  const r = run(w, "sendInvites");
+  check("H1a: someone with a current-season SendLog invite row is NOT emailed again even though `invited` is unticked; the dialog says why",
+    r.ok && w.sent.length === 1 && w.sent[0].to === "bob@example.com" && w.alerts.some(a => /Alice Able/.test(a.msg) && /SendLog|already/i.test(a.msg)), r.e || JSON.stringify([w.sent, w.alerts]));
+  const old = world({ props: { GFY_MAIL_TEST: "0" }, sendlog: [["2020-03-01", "Alice Able", "alice@example.com", "invite", "", "t0"], [todayStr, "Bob Baker", "bob@example.com", "invite", "season 2026", "t1"], [todayStr, "Bob Baker", "bob.alt@example.com", "invite-test", "", "t2"]] });
+  run(old, "sendInvites");
+  check("H1a2: an old-season invite row (tagged 2026, or untagged from 2020) and invite-test rows do not block this season's invite", old.sent.length === 2, JSON.stringify(old.sent.map(x => x.to)));
+  const leg = world({ props: { GFY_MAIL_TEST: "0" }, sendlog: [["2026-08-01", "Bob Baker", "bob@example.com", "invite", "", "t1"]] });
+  run(leg, "sendInvites");
+  check("H1a3: an untagged live invite row from the run-up to the season (2026-08 for 2027) counts as already sent", leg.sent.length === 1 && leg.sent[0].to === "alice@example.com", JSON.stringify(leg.sent.map(x => x.to)));
+}
+{
+  const w = world({ props: { GFY_MAIL_TEST: "0" } });
+  w.lockState.held = true;                                  // another execution holds the script lock
+  const r = run(w, "sendInvites");
+  check("H1b: the whole send needs the script lock: while another send holds it, nothing is sent or written and the alert says so",
+    r.ok && w.sent.length === 0 && w.sheet("SendLog").rows.length === 1 && w.alerts.some(a => /another|already|running|lock/i.test(a.msg)), r.e || JSON.stringify(w.alerts));
+}
+{
+  const w = world({ props: { GFY_MAIL_TEST: "0" } });
+  // a second click lands while the first is mid-send: Bob is logged + ticked by the other run after Alice's mail went out
+  w.hooks.afterSend = n => { if (n === 1) { w.sheet("SendLog").rows.push([todayStr, "Bob Baker", "bob@example.com", "invite", "season 2027", "thrOther"]); } };
+  run(w, "sendInvites");
+  check("H1c: SendLog is re-read under the lock right before EACH send: Bob (logged by a concurrent run mid-send) is not emailed again", w.sent.length === 1 && w.sent[0].to === "alice@example.com", JSON.stringify(w.sent.map(x => x.to)));
+  const x = world({ props: { GFY_MAIL_TEST: "0" } });
+  x.hooks.afterSend = n => { if (n === 1) { x.invSheet.rows.find(r => r[1] === "Bob Baker")[2] = true; } };
+  run(x, "sendInvites");
+  check("H1c2: ... and the public `invited` tick is re-read too", x.sent.length === 1 && x.sent[0].to === "alice@example.com", JSON.stringify(x.sent.map(y => y.to)));
+}
+{
+  const w = world({ props: { GFY_MAIL_TEST: "0" }, failTo: "alice@example.com" });
+  run(w, "sendInvites");
+  const ev = w.log.map(e => e.ev + (e.sheet ? ":" + e.sheet : ""));
+  const firstSend = ev.indexOf("send"), lastSend = ev.lastIndexOf("send");
+  check("H1d: the lock is held across the WHOLE send (taken before the first mail, released after the last) and is free afterwards, even after a failed send",
+    firstSend > 0 && ev.slice(0, firstSend).includes("lock") && !ev.slice(0, firstSend).includes("unlock") && ev.slice(lastSend).includes("unlock") && w.lockState.held === false, ev.join(","));
+  check("L8a: a send that throws leaves no orphan draft in Gmail", w.pendingDrafts.size === 0, String(w.pendingDrafts.size));
+}
+
 // ---------- no-'@' leak test ----------
 {
   const bad = allPublicWrites.filter(e => /@/.test(String(e.v)));
