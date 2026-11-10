@@ -264,7 +264,13 @@ is excluded even if `invited` was never ticked (listed in the dialog; tick `invi
 missing). **If `send()` throws** the reservation is NOT deleted: it is marked `send error - check Sent
 before re-running` (the email may or may not have gone out). The person is not emailed again until a human
 checks Gmail Sent and removes/fixes that row. The Dashboard list **Pending / unconfirmed sends** shows every
-`pending` (run died before settling) and `send error` row. A failed send deletes its own Gmail draft (no orphans). Status `out`, `declined`, `no`, `not coming`, `nope` or
+`pending` (run died before settling) and `send error` row. **Time limit:** Apps Script kills an execution at 6
+minutes, so a send (or nudge) run stops starting new emails after 4.5 minutes counted from the moment you pressed the
+menu item (the confirm dialog counts); the summary says `N not sent yet - run again`, and re-running is safe (the SendLog
+excludes everyone already sent). Every lock is flushed (`SpreadsheetApp.flush()`) before it is released, so the
+reservation row is durable before its email goes out. If a block appears mid-run (e.g. someone is made do-not-invite) the
+run STOPS and the summary names the block (who / what). Every send/nudge run ends with a full Dashboard rebuild that also
+re-reads the Gmail drafts (`template draft:` line). A failed send deletes its own Gmail draft (no orphans). Status `out`, `declined`, `no`, `not coming`, `nope` or
 `n` (any case) all mean "not coming": never invited (`npm run presend` agrees).
 
 **Replies:** every 15 minutes the watcher checks each logged invite thread. A real
@@ -274,7 +280,11 @@ and any fresh nudge thread); a thread whose player is already `responded` is ski
 touching Gmail, an already-logged message is never re-classified, and a deleted thread is listed on
 the Dashboard (a note) instead of failing the scan. The scan has a time budget (~4.5 min,
 `SCAN_BUDGET_MS`): if it runs out it stops, remembers where, resumes next run, and only stamps the
-last-scan time when a full pass has completed. **In test mode the scan never ticks `responded`**;
+last-scan time when a full pass has completed. **An unreadable thread:** if `getThreadById` THROWS for the
+same thread on 3 consecutive scans (Script Property `SCAN_THROWS`, reset by any successful read) it is treated
+as missing, never a permanent scan failure: throws #1 and #2 are scan errors (the stale/health path), the 3rd is
+listed. The Dashboard notes say `invite thread missing in Gmail ...` / `nudge thread missing in Gmail ...`
+separately (keyed per thread, so a healthy sibling thread never hides a missing one). **In test mode the scan never ticks `responded`**;
 the Dashboard says "test mode: would mark responded X". A bounce writes `BOUNCED <date>` into
 that person's Contacts notes and does **not** count as a response. The reply text
 goes only to the private `Replies` tab (`looks_yes` is a guess; `confirm` is yours
@@ -311,7 +321,7 @@ the lock, through the same no-`@` guard). **Unticking does not untick `committed
 if the player is currently committed, a `note` row goes to SendLog instead. Run
 **GFY Mail → Install / repair triggers** again after pasting this version to add the new trigger. It acts
 on a real human tick only in LIVE mode: in test mode it writes nothing public and the Dashboard
-notes "test mode: would commit X". The Dashboard is rebuilt after every commit. The onEdit commit and every
+notes "test mode: would commit X". The Dashboard is rebuilt after a commit (debounced to once per 60 s). The onEdit commit and every
 Dashboard list use ONE definition of "ticked" (a real checkbox TRUE, or the text TRUE - `yes`/`1` do not count).
 
 **Dashboard** (private admin tab, names are fine here — never copy it to a published
@@ -372,15 +382,15 @@ out / DNI**, and IN-from-declined also under **Changed answer — fix by hand**)
 untick; the player lands on the Dashboard list **Changed answer — fix by hand**. An unknown /
 previous-year token shows a friendly "not valid" page. **Test mode:** RSVP works fully but writes
 only the private `RSVP` tab; the Dashboard says "RSVP test mode". All public writes still go
-through `mailPublicWrite_` (no `@`). The Dashboard is rebuilt after every RSVP.
+through `mailPublicWrite_` (no `@`). The Dashboard is rebuilt after an RSVP or an onEdit commit, but at most once per 60 s (Script Property `DASH_AT`; the scan, the menu items and the end of every send/nudge run always rebuild). The Gmail-draft status is read BEFORE the lock is taken.
 
 **Nudges** (menu **GFY Mail → Send nudges…**). Template = the ONE draft starting `[GFY NUDGE]`
 (same blocks as the invite; `{first}`, `{rsvp}`, `{rsvp_button}`). Candidates: current season, invited, not
 responded / committed / out / declined / do-not-invite, and the last real SendLog `invite` or
 `nudge` at least N days ago (`NUDGE_DAYS`, default 7, menu **Set nudge days…**). **BOUNCED players
 are skipped** (and named). **A nudge is ALWAYS a fresh email** to the exact logged address (never a
-`GmailThread.reply`): subject `Re: <the person's original invite subject>` (read from their logged invite
-thread; if that thread is gone or unreadable the nudge draft's own subject is used), body from the NUDGE
+`GmailThread.reply`): subject `Reminder: <the person's original invite subject>` (read from their logged invite
+thread; no fake "Re:"; if that thread is gone or unreadable the nudge draft's own subject is used), body from the NUDGE
 draft. Gmail threads it for most recipients; its own `thread_id` is logged on the nudge row and the reply
 watcher watches it like the invite thread. A row with no confirmed `thread_id` (a pending / errored invite)
 is skipped and listed. Nudges use the same lease + reservation design as invites (row `what=nudge`, note
