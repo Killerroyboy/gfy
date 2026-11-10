@@ -1,12 +1,20 @@
 # Invite + nudge copy (for the Gmail drafts)
 
 Paste each block into its own normal Gmail draft in goodfriendsyearly@gmail.com.
-`{first}` and `{rsvp}` are filled per person by `tools/gfy-mailer.gs`. Every
+`{first}`, `{rsvp_button}` and `{rsvp}` are filled per person by `tools/gfy-mailer.gs`. Every
 `[FILL: ...]` must be replaced by hand: the sender BLOCKS while any `[FILL` is left
 in the subject or body. Do not add inline images (the sender blocks those too).
 
 Only these seven things are left to fill: 2027 dates, course, lodging, format,
 deposit amount, payment handle, sign-off name.
+
+**Never make the button a link yourself.** Gmail rewrites a link typed into a draft:
+`href="{rsvp}"` becomes `href="javascript:void(0);"`, the button colours are stripped, and URLs are
+wrapped as `https://www.google.com/url?q=...`. So type the text token `{rsvp_button}` on its own line
+(plain text, no link, no formatting): the sender replaces it with a full pine/bone styled button for
+each person. `{rsvp}` typed as plain text becomes the person's URL (shown as a link in the HTML,
+plain in the text version). The sender BLOCKS if the draft still contains a `javascript:` link or a
+`%7B...%7D` link, and unwraps any `google.com/url?q=` wrapper back to the real URL.
 
 ---
 
@@ -31,9 +39,7 @@ Deposit: [FILL: deposit amount], to [FILL: payment handle]
 
 <p>One tap, no login:</p>
 
-<p>
-<a href="{rsvp}" style="display:inline-block;padding:12px 22px;background:#0E2019;color:#E9E3D3;text-decoration:none;font-weight:bold;border-radius:6px;">Tell me: IN, OUT or MAYBE</a>
-</p>
+<p>{rsvp_button}</p>
 
 <p>If the button does not work, paste this into your browser: {rsvp}</p>
 
@@ -77,9 +83,7 @@ keeps the thread's subject). The subject still needs the prefix for the sender t
 ```html
 <p>{first}, quick one: still waiting on your answer for [FILL: 2027 dates].</p>
 
-<p>
-<a href="{rsvp}" style="display:inline-block;padding:12px 22px;background:#0E2019;color:#E9E3D3;text-decoration:none;font-weight:bold;border-radius:6px;">IN, OUT or MAYBE</a>
-</p>
+<p>{rsvp_button}</p>
 
 <p>Same link as before, or paste: {rsvp}</p>
 
@@ -94,6 +98,6 @@ keeps the thread's subject). The subject still needs the prefix for the sender t
 
 1. Replace every `[FILL: ...]`.
 2. Exactly ONE draft starts `[GFY TEMPLATE]` and at most ONE starts `[GFY NUDGE]`.
-3. Script property `WEBAPP_URL` set (the Web App `/exec` URL); `RSVP` tab exists (run Polish admin sheet).
+3. Script property `WEBAPP_URL` set (the Web App `/exec` URL, deployed from the CURRENT code: Manage deployments -> Edit -> New version); `RSVP` tab exists (run Polish admin sheet).
 4. Check the Dashboard line "template draft: OK - ...".
 5. Send in TEST MODE first: every message goes to goodfriendsyearly@ with a `[TEST -> address]` subject.

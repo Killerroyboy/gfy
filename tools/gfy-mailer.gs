@@ -11,19 +11,29 @@
  *                   public sheet. Set it to 0 BY HAND to go live.
  *
  *    WEBAPP_URL     the deployed Web App /exec URL of THIS project (RSVP links).
- *                   Required only when the template draft contains {rsvp}.
+ *                   Required only when the template draft contains {rsvp} / {rsvp_button}.
  *    ALERT_TO       optional: an address that gets ONE health alert per 24 h
  *                   (a scan threw, or the last good scan is over 3 h old). Empty = off.
+ *    TEMPLATE_PREFIX / NUDGE_PREFIX   optional: the Gmail-draft subject prefixes (defaults
+ *                   "[GFY TEMPLATE]" / "[GFY NUDGE]"). A staging project in the same Gmail uses
+ *                   "[GFY STAGING TEMPLATE]" / "[GFY STAGING NUDGE]"; the match is EXACT on the
+ *                   leading [bracket] token, so live never sees staging drafts or vice versa.
+ *    SCAN_BUDGET_MS  optional: reply-scan time budget (default 270000 = 4.5 min).
  *    ADMIN_ID       optional fallback for the Web App if getActiveSpreadsheet() is
  *                   unavailable there: the Admin sheet's own id.
  *
  *  Privacy rule: addresses, reply text and bounce notes live ONLY on the Admin
  *  sheet. The one thing this file writes to the public sheet is a boolean tick
- *  in Invites (`invited` / `responded`), through mailPublicWrite_, which refuses
- *  any value containing '@'.
+ *  in Invites (`invited` / `responded` / `committed`, and `declined` into a blank status),
+ *  through mailPublicWrite_, which refuses any value containing '@'.
  *
- *  TODO (out of scope, separate work order): publish the last-scan time on the
- *  public START HERE tab. START HERE is published — counts/time only, no names.
+ *  Web surface: the deployed Web App is anonymous, so every global except doGet,
+ *  recordRsvp, onOpen and the guarded menu/trigger entrypoints ends in "_" (see mailGuard_).
+ *  The deployed web app is a SNAPSHOT: after changing this file, Deploy > Manage deployments >
+ *  Edit > Version: New version (same URL) - saving the file alone does not update it.
+ *
+ *  Not built (separate work order): publishing the last-scan time on the public START HERE
+ *  tab (counts/time only, no names - START HERE is published).
  */
 
 const MAIL_TEST_ADDR = "goodfriendsyearly@gmail.com";

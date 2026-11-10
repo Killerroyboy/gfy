@@ -229,8 +229,11 @@ tested offline; **not installed anywhere yet.**
    if it is missing), `Replies`, `RSVP`, `READ ME`. (There is **no** InviteTemplate tab any
    more: an old one is left alone, and the Dashboard says it is safe to delete.)
 4. Write the invite as a normal **Gmail draft** in goodfriendsyearly@gmail.com whose subject
-   starts `[GFY TEMPLATE]` (copy is in `docs/invite-copy.md`). `{first}` and `{rsvp}` are filled
-   per person. See "Gmail-draft template" below.
+   starts `[GFY TEMPLATE]` (copy is in `docs/invite-copy.md`). `{first}`, `{rsvp}` and `{rsvp_button}`
+   are filled per person. See "Gmail-draft template" below. (A staging copy of this project in the
+   same Gmail sets Script properties `TEMPLATE_PREFIX` = `[GFY STAGING TEMPLATE]` and `NUDGE_PREFIX` =
+   `[GFY STAGING NUDGE]`; each project then sees only its own drafts. The match is exact on the
+   leading `[bracket]` token, so a longer or different prefix is never mistaken for the live one.)
 5. Run `installMailTriggers` once (authorise Gmail + Sheets). It adds ONE 15-minute
    `scanReplies` trigger and is safe to run again.
 
@@ -248,17 +251,30 @@ and has an address (`email`, else `email_alt`). It **blocks the whole send** on 
 do-not-invite name with an active row, an unpaired do-not-invite name, or an
 invitee missing from Contacts, and lists the culprits. You get a name → address
 confirm list; Cancel sends nothing. Each send is logged to SendLog (with the Gmail
-`thread_id`) before `invited` is ticked on the public Invites tab, so a hiccup can
-never cause a second email.
+`thread_id`, note `season <year>`) before `invited` is ticked on the public Invites tab, so a
+hiccup can never cause a second email. **Double-send guards:** anyone with a current-season
+`invite` row in SendLog is excluded even if `invited` was never ticked (listed in the dialog;
+tick `invited` by hand if it is missing); the WHOLE send runs under the script lock (a second click
+gets "another send is already running"); and right before EACH email the Invites row and SendLog
+are re-read, so a concurrent click or a crash-and-re-run cannot email anyone twice. A failed send
+deletes its own Gmail draft (no orphans). Status `out`, `declined`, `no`, `not coming`, `nope` or
+`n` (any case) all mean "not coming": never invited (`npm run presend` agrees).
 
 **Replies:** every 15 minutes the watcher checks each logged invite thread. A real
 human reply ticks `responded` on the public Invites row. Out-of-office / automatic
-replies and your own messages are ignored. A bounce writes `BOUNCED <date>` into
+replies and your own messages are ignored. Every logged live thread is watched (invite threads
+and any fresh nudge thread); a thread whose player is already `responded` is skipped without
+touching Gmail, an already-logged message is never re-classified, and a deleted thread is listed on
+the Dashboard (a note) instead of failing the scan. The scan has a time budget (~4.5 min,
+`SCAN_BUDGET_MS`): if it runs out it stops, remembers where, resumes next run, and only stamps the
+last-scan time when a full pass has completed. **In test mode the scan never ticks `responded`**;
+the Dashboard says "test mode: would mark responded X". A bounce writes `BOUNCED <date>` into
 that person's Contacts notes and does **not** count as a response. The reply text
 goes only to the private `Replies` tab (`looks_yes` is a guess; `confirm` is yours
 to tick) — **it never auto-commits anyone.** The last successful scan time is
-written to `READ ME` B2 (timestamp only; a scan with an unreadable thread does not
-stamp). The only thing ever written to the public sheet is a TRUE tick in
+written to `READ ME` B2 as TEXT (`yyyy-MM-dd HH:mm`; Sheets would otherwise turn it into a Date,
+and every reader also accepts a Date or number; a scan with an unreadable thread does not
+stamp). `thread_id`, `msg_id`, `token`, `date`, `answered_at` are also written as text. The only thing ever written to the public sheet is a TRUE tick in
 `invited`/`responded`; the code refuses any public write containing `@`.
 TODO: publishing the last-scan time on START HERE is a separate piece of work.
 
@@ -275,8 +291,10 @@ orders them Dashboard, Contacts, Replies, RSVP, SendLog, READ ME (ending on
 Dashboard). `Contacts.player` names with no match (trim / spaces / case) on ANY year of the
 public Invites are highlighted and listed on the Dashboard (a veteran simply not invited this
 year is not a mismatch). Contacts
-conditional formatting is owned by this script (replaced each run). It never writes to
-the public sheet.
+conditional formatting: only this script's own (tagged) rules are replaced each run; your own rules
+on Contacts are kept. A cell in a checkbox column that holds a **formula** is never overwritten.
+(The Dashboard tab is rebuilt wholesale by code - do not keep your own formulas on it.) It never
+writes to the public sheet.
 
 **confirm → committed.** `installMailTriggers` also installs one installable `onEdit`
 trigger (`mailOnEdit`; works from the phone). Ticking `Replies.confirm` ticks
@@ -290,16 +308,23 @@ notes "test mode: would commit X". The Dashboard is rebuilt after every commit.
 **Dashboard** (private admin tab, names are fine here — never copy it to a published
 tab). Rebuilt by `adminPolish()` and at the end of every `scanReplies` (also after a
 failed scan, so STALE can show). Shows current-season counts (invited / responded /
-committed / out) and four lists: **Needs nudge** (invited, not responded / committed /
+committed / out) and these lists: **Needs nudge** (invited, not responded / committed /
 out, last real `invite` SendLog row at least N days ago; N is the editable
 `nudge after (days)` cell, default 7, kept across rebuilds), **Bounced**, **Unconfirmed
-looks_yes**, **Name mismatches**; plus the last scan time with **STALE** when it is
+looks_yes** (confirmed if ANY of the player's Replies rows is ticked), **Name mismatches**,
+**Changed answer — fix by hand**, **RSVP from out / DNI**; plus the last scan time with **STALE** when it is
 over an hour old (or never). Test-mode (`invite-test`) rows are not invites for nudging.
 
 **Gmail-draft template.** The invite is the ONE draft whose subject starts `[GFY TEMPLATE]`
 (case-insensitive, trimmed); that prefix is stripped from the sent subject. Per recipient the
 sender copies the draft's HTML body, plain body and file attachments and replaces `{first}`
-(HTML-escaped inside the HTML body). Send is **BLOCKED** (nothing sent) when: there are 0 or 2+
+(HTML-escaped inside the HTML body). **Links:** Gmail rewrites a link typed into a draft
+(`href="{rsvp}"` becomes `javascript:void(0);`, button styling is stripped, URLs get wrapped as
+`google.com/url?q=...`), so the button is produced by the mailer: put `{rsvp_button}` in the text and
+the mailer injects a full inline-styled link (pine `#0E2019` / bone `#E9E3D3`); `{rsvp}` in the text
+becomes the URL (a linked URL in the HTML, plain in the text body). `google.com/url?q=` wrappers in the
+copied draft are unwrapped to the real URL. Send is **BLOCKED** when the draft HTML contains
+`href="javascript:..."` or `%7B...%7D`. Send is **BLOCKED** (nothing sent) when: there are 0 or 2+
 template drafts (the message names the count); any other `{token}` is left unreplaced; the
 subject/body still contains `[FILL`; or the draft has **inline images** (cid mapping is not
 supported, so it refuses rather than send a broken email: use a normal attachment or a hosted
@@ -307,38 +332,59 @@ image link). The draft itself is only read, never sent, edited or deleted. The c
 shows the final subject for the first recipient; test mode is unchanged. The Dashboard shows
 `template draft: OK — <subject>` / `MISSING` / `2+ drafts`.
 
-**RSVP buttons** (Web App in this same Admin project). Put `{rsvp}` in the draft: each
+**RSVP buttons** (Web App in this same Admin project). Put `{rsvp_button}` (or `{rsvp}`) in the draft: each
 recipient gets `<WEBAPP_URL>?t=<token>`; `{rsvp}` with no `WEBAPP_URL` script property (or no
-`RSVP` tab) BLOCKS the send. Deploy once: Apps Script → Deploy → New deployment → Web app,
+`RSVP` tab) BLOCKS the send. **After any code change the web app is a deployed snapshot:** paste the
+new file, then Deploy → Manage deployments → Edit (pencil) → Version: **New version** → Deploy (same URL).
+Saving the file alone does not update what the link serves. Deploy once: Apps Script → Deploy → New deployment → Web app,
 *Execute as: Me*, *Who has access: Anyone*; paste the `/exec` URL into `WEBAPP_URL`
 (`ADMIN_ID` = the Admin sheet id is an optional fallback if `getActiveSpreadsheet()` is
 unavailable in the Web App). One random 32-character token per (year, player), stored **only**
-in the private `RSVP` tab (`year, player, token, answer, answered_at, history`). Opening the link
+in the private `RSVP` tab (`year, player, token, answer, answered_at, history, test`). **Test-mode
+sends mint their own tokens (`test` = TRUE)**; live sends never reuse one, and a test token never writes
+the public sheet even after go-live, so a rehearsal answer can never show up on a real player's page.
+(Rows written by an older version in test mode have no flag: before going live, clear any rehearsal
+answers from the RSVP tab.) Opening the link
 renders "<first>, are you in for 2027?" with IN / OUT / MAYBE and records **nothing** (email link
 scanners prefetch GETs); a tap calls `recordRsvp` under the lock. IN → `responded`+`committed`
 TRUE; MAYBE → `responded`; OUT → `responded` and status `declined` (only if status was blank;
-never overwrites out/declined/anything). Changing away from IN after committed does **not**
+never overwrites out/declined/anything). A do-not-invite player's answer writes nothing public at all;
+an out/declined player's IN never ticks `committed` (both are listed on the Dashboard: **RSVP from
+out / DNI**, and IN-from-declined also under **Changed answer — fix by hand**). Changing away from IN after committed does **not**
 untick; the player lands on the Dashboard list **Changed answer — fix by hand**. An unknown /
 previous-year token shows a friendly "not valid" page. **Test mode:** RSVP works fully but writes
 only the private `RSVP` tab; the Dashboard says "RSVP test mode". All public writes still go
 through `mailPublicWrite_` (no `@`). The Dashboard is rebuilt after every RSVP.
 
 **Nudges** (menu **GFY Mail → Send nudges…**). Template = the ONE draft starting `[GFY NUDGE]`
-(same blocks as the invite; `{first}`, `{rsvp}`). Candidates: current season, invited, not
+(same blocks as the invite; `{first}`, `{rsvp}`, `{rsvp_button}`). Candidates: current season, invited, not
 responded / committed / out / declined / do-not-invite, and the last real SendLog `invite` or
-`nudge` at least N days ago (the Dashboard `nudge after (days)` cell, default 7). Live: sent as
-a reply in the person's logged invite thread (`GmailThread.replyAll`) so the reply watcher keeps
-matching; SendLog `what=nudge`. Guards: the logged thread's first message must have gone to
-that person's address, else it is skipped and reported; a row with no `thread_id` is skipped
-and listed. The confirm dialog lists names. **Test mode** never posts into real threads: it
+`nudge` at least N days ago (the Dashboard `nudge after (days)` cell, default 7). **BOUNCED players
+are skipped** (and named). Live: `GmailThread.reply` into the logged invite thread ONLY when its last
+message is from this account and went to exactly the logged address (parsed, not a substring);
+otherwise (last message is a bounce / the thread was deleted / it also went to someone else) a fresh
+email goes to the logged address with subject `Re: <invite subject>`, and its NEW thread id is logged
+(SendLog `what=nudge`) - the reply watcher watches every logged thread of a player. A row with no
+`thread_id` is skipped and listed. Like invites, a nudge run holds the script lock and re-reads SendLog
+before each send. The confirm dialog lists names. **Test mode** never posts into real threads: it
 sends fresh messages to goodfriendsyearly@ (`[TEST → address]`, SendLog `nudge-test`, which
-does not count as a send, so rehearsal is repeatable).
+does not count as a send, so rehearsal is repeatable). In test mode `invite-test` rows make people
+candidates, so a test-only rehearsal (invites in test mode, then nudges in test mode) works.
 
 **Health alerts.** Script property `ALERT_TO` (empty = off): if a scan throws, or the last
 good scan (READ ME B2) is over 3 h old when a scan starts, one `MailApp` alert goes to
 `ALERT_TO`, at most one per 24 h (stored in `ALERT_LAST`). The alert text carries no addresses.
 
-Tests: `npm run check-mailer` (also part of `npm run test:all`).
+**Web surface.** The Web App is anonymous, and `google.script.run` can call any global function
+whose name does not end in `_`. So every helper ends in `_`; the only open names are `doGet`,
+`recordRsvp`, `onOpen` and the menu/trigger entrypoints (`sendInvites`, `sendNudges`, `scanReplies`,
+`adminPolish`, `installMailTriggers`, `mailOnEdit`), which are thin wrappers that refuse unless run
+from the sheet UI or by one of this project's own installed triggers (the event's `triggerUid` must
+match). A test enumerates the globals and fails if the list changes.
+
+Tests: `npm run check-mailer` (also part of `npm run test:all`). The fake Google services coerce typed
+text to Date/Number like Sheets does, model the non-reentrant script lock, forbid `getUi()` outside the
+sheet, and track orphan drafts.
 
 ### Replies (Gmail loop)
 
