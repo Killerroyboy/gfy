@@ -85,7 +85,7 @@ const HDR_INV = ["year", "player", "invited", "responded", "status", "committed"
 const HDR_CON = ["player", "email", "email_alt", "phone", "do_not_invite", "reason", "notes"];
 const HDR_LOG = ["date", "player", "address_used", "what", "note", "thread_id"];
 const HDR_REP = ["date", "player", "from", "snippet", "looks_yes", "confirm", "msg_id"];
-const HDR_RSVP = ["year", "player", "token", "answer", "answered_at", "history"];
+const HDR_RSVP = ["year", "player", "token", "answer", "answered_at", "history", "test"];
 const TPL_DRAFT = { subject: "[GFY TEMPLATE] Good Friends Yearly 2027, {first}?", html: "<p>Hi {first},</p><p>You in for 2027?</p>", plain: "Hi {first},\n\nYou in for 2027?\n\n- R" };
 const NUDGE_DRAFT = { subject: "[GFY NUDGE] Still in, {first}?", html: "<p>{first}, nudge: <a href=\"{rsvp}\">answer here</a></p>", plain: "{first}, nudge: {rsvp}" };
 
@@ -1153,6 +1153,40 @@ const todayStr = new Date().toISOString().slice(0, 10);
   check("H1d: the lock is held across the WHOLE send (taken before the first mail, released after the last) and is free afterwards, even after a failed send",
     firstSend > 0 && ev.slice(0, firstSend).includes("lock") && !ev.slice(0, firstSend).includes("unlock") && ev.slice(lastSend).includes("unlock") && w.lockState.held === false, ev.join(","));
   check("L8a: a send that throws leaves no orphan draft in Gmail", w.pendingDrafts.size === 0, String(w.pendingDrafts.size));
+}
+
+// H3: test-mode RSVP answers must never surface on a live token
+{
+  const w = world({ props: { WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT], answers: ["YES", "YES"] });     // TEST MODE
+  run(w, "sendInvites");
+  const testTok = tokenOf(w, "Alice Able");
+  rsvpGo(w, "Alice Able", "IN");
+  const trow = rsvpRows(w).find(r => r[1] === "Alice Able");
+  check("H3a: a test-mode send mints a token flagged `test` in the RSVP row, and the test answer lands on that test row", trow[3] === "IN" && String(trow[6]).toUpperCase() === "TRUE", JSON.stringify(trow));
+  w.props.GFY_MAIL_TEST = "0"; w.sent.length = 0; w.log.length = 0; w.alerts.length = 0;
+  run(w, "sendInvites");
+  const live = rsvpRows(w).filter(r => r[1] === "Alice Able" && String(r[6]).toUpperCase() !== "TRUE");
+  const liveTok = live[0] && live[0][2];
+  const sentA = w.sent.find(x => x.to === "alice@example.com");
+  check("H3b: after go-live the real invite carries a NEW live token (never the test one) with no answer on it",
+    !!liveTok && liveTok !== testTok && live.length === 1 && live[0][3] === "" && !!sentA && sentA.body.includes(liveTok) && !sentA.body.includes(testTok) && !sentA.html.includes(testTok), JSON.stringify([rsvpRows(w), sentA]));
+  const pg = pageOf(w, liveTok);
+  check("H3c: the live token's page shows no prior answer (the test answer is not visible)", /are you in for 2027/.test(pg.html) && !/Your answer so far/.test(pg.html) && !/>\s*IN\s*</.test(pg.html.replace(/<button[\s\S]*?<\/button>/g, "")), pg.html.slice(0, 300));
+  w.log.length = 0;
+  const before = JSON.stringify(w.invSheet.rows);
+  const stale = rsvpGo(w, "Alice Able", "IN");     // tokenOf() = the first (test) row for Alice
+  const aliceInv = w.invSheet.rows.find(x => x[1] === "Alice Able" && x[0] === 2027);
+  check("H3d: even in LIVE mode a TEST token only ever writes its own private RSVP row - nothing public (no responded/committed)",
+    aliceInv[3] === false && aliceInv[5] === false && pubWrites(w).every(e => e.c === 3), JSON.stringify([stale, aliceInv, pubWrites(w)]));
+}
+{
+  const w = world({ props: { WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT, NUDGE_DRAFT], answers: ["YES", "YES"] });
+  run(w, "sendInvites");
+  w.sheet("SendLog").rows.slice(1).forEach(r => { r[0] = daysAgo(10); });
+  const t1 = tokenOf(w, "Alice Able");
+  run(w, "sendNudges");
+  const tokens = rsvpRows(w).filter(r => r[1] === "Alice Able");
+  check("H3e: a test-mode nudge reuses the TEST token (one flagged row), still no live row exists", tokens.length === 1 && tokens[0][2] === t1 && String(tokens[0][6]).toUpperCase() === "TRUE", JSON.stringify(tokens));
 }
 
 // ---------- no-'@' leak test ----------

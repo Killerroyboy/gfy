@@ -29,8 +29,8 @@ TABS = {
         "rows": [["2026-08-02", "Person One", "Person One <person.one@example.com>", "sample — reply text lands HERE only, never on the public sheet. looks_yes is a guess; tick confirm yourself, then commit them on the public Invites tab by hand.", "TRUE", "FALSE", "sample-msg-id"]],
     },
     "RSVP": {
-        "headers": ["year", "player", "token", "answer", "answered_at", "history"],
-        "rows": [["2027", "Person One", "sample-token-not-real", "IN", "2026-08-03 09:00", "2026-08-03 09:00 IN"]],
+        "headers": ["year", "player", "token", "answer", "answered_at", "history", "test"],
+        "rows": [["2027", "Person One", "sample-token-not-real", "IN", "2026-08-03 09:00", "2026-08-03 09:00 IN", ""]],
     },
     "READ ME": {
         "headers": ["warning", "last_reply_scan"],

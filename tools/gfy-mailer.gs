@@ -38,7 +38,7 @@ const MAIL_SCHEMA = {
   "Contacts": ["player", "email", "email_alt", "phone", "do_not_invite", "reason", "notes"],
   "SendLog": ["date", "player", "address_used", "what", "note", "thread_id"],
   "Replies": ["date", "player", "from", "snippet", "looks_yes", "confirm", "msg_id"],
-  "RSVP": ["year", "player", "token", "answer", "answered_at", "history"],
+  "RSVP": ["year", "player", "token", "answer", "answered_at", "history", "test"],
   "READ ME": ["warning", "last_reply_scan"],
 };
 const MAIL_ORDER = ["Dashboard", "Contacts", "Replies", "RSVP", "SendLog", "READ ME"];
@@ -314,7 +314,7 @@ function sendInvites(){
       if (fresh.blocks.length || fresh.year !== plan.year || !still || still.address !== r.address){ skipped.push(r.player); return; }
       let m, threadId;
       try {
-        const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpTokenNL_(admin.getSheetByName(MAIL_TAB.rsvp), plan.year, r.player)) : "";
+        const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpTokenNL_(admin.getSheetByName(MAIL_TAB.rsvp), plan.year, r.player, test)) : "";
         m = mailBuild_(tpl, r.player, r.address, test, url);
         threadId = mailSendNew_(m);
       } catch (e){ failed.push(`${r.player} (${e && e.message || e})`); return; }
@@ -423,7 +423,7 @@ function sendNudges(){
   let sent = 0;
   cands.forEach(c => {
     try {
-      const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpToken_(admin.getSheetByName(MAIL_TAB.rsvp), year, c.player)) : "";
+      const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpToken_(admin.getSheetByName(MAIL_TAB.rsvp), year, c.player, test)) : "";
       const m = mailBuild_(tpl, c.player, c.address, test, url);
       let threadId = c.threadId;
       if (test){
@@ -461,15 +461,18 @@ function mailRsvpUrl_(props, token){
   return base + (base.indexOf("?") >= 0 ? "&" : "?") + "t=" + token;
 }
 
-// One random token per (year, player), created once and reused. Stored ONLY in the private RSVP tab.
-function mailRsvpToken_(sheet, year, player){ return mailWithLock_(() => mailRsvpTokenNL_(sheet, year, player)); }
+// One random token per (year, player, test?), created once and reused. Stored ONLY in the private RSVP tab.
+// TEST-mode sends use their own tokens (RSVP.test = TRUE) so a rehearsal answer can never sit on the
+// token a real player later receives; live sends never reuse a test token.
+function mailRsvpToken_(sheet, year, player, test){ return mailWithLock_(() => mailRsvpTokenNL_(sheet, year, player, test)); }
 // Caller MUST already hold the script lock (the lock is not reentrant).
-function mailRsvpTokenNL_(sheet, year, player){
+function mailRsvpTokenNL_(sheet, year, player, test){
+  mailEnsureHeader_(sheet, "test");
   const t = mailTable_(sheet);
-  const have = t.rows.find(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player) === mailNorm_(player) && String(r.token || "").trim().length >= 22);
+  const have = t.rows.find(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player) === mailNorm_(player) && mailYes_(r.test) === !!test && String(r.token || "").trim().length >= 22);
   if (have) return String(have.token).trim();
   const token = Utilities.getUuid().replace(/-/g, "");     // 32 chars, 122 random bits
-  mailAppend_(sheet, { year, player: String(player).trim(), token, answer: "", answered_at: "", history: "" });
+  mailAppend_(sheet, { year, player: String(player).trim(), token, answer: "", answered_at: "", history: "", test: test ? true : "" });
   return token;
 }
 
@@ -556,7 +559,7 @@ function recordRsvp(token, choice){
     const hist = String(row.history == null ? "" : row.history).trim();
     const set = (name, v) => { if (name in tb.idx){ const cell = ctx.rsvp.getRange(row._row, tb.idx[name] + 1); if (MAIL_TEXT_COLS.indexOf(name) >= 0) cell.setNumberFormat("@"); cell.setValue(v); } };
     set("answer", c); set("answered_at", stamp); set("history", (hist ? hist + "; " : "") + stamp + " " + c);
-    if (test) return;                                    // TEST MODE: private RSVP tab only
+    if (test || mailYes_(row.test)) return;              // TEST MODE, or a TEST token: private RSVP tab only, never public
     try {
       mailTickPublicNL_(ctx.inv, ctx.year, out.player, "responded");
       if (c === "IN") mailTickPublicNL_(ctx.inv, ctx.year, out.player, "committed");
@@ -924,7 +927,7 @@ function mailDashboard_(admin, props){
     }
     const rsvpSh = admin.getSheetByName(MAIL_TAB.rsvp);
     if (rsvpSh) mailTable_(rsvpSh).rows.forEach(r => {
-      if ((parseInt(r.year, 10) || 0) !== year || !mailNorm_(r.player)) return;
+      if ((parseInt(r.year, 10) || 0) !== year || !mailNorm_(r.player) || mailYes_(r.test)) return;
       const ans = String(r.answer == null ? "" : r.answer).trim().toUpperCase();
       if ((ans !== "OUT" && ans !== "MAYBE") || !/\bIN$|\bIN;/.test(String(r.history == null ? "" : r.history) + ";")) return;
       const pr = cur.find(x => mailNorm_(x.player) === mailNorm_(r.player));
