@@ -74,6 +74,9 @@ const HDR_INV = ["year", "player", "invited", "responded", "status", "committed"
 const HDR_CON = ["player", "email", "email_alt", "phone", "do_not_invite", "reason", "notes"];
 const HDR_LOG = ["date", "player", "address_used", "what", "note", "thread_id"];
 const HDR_REP = ["date", "player", "from", "snippet", "looks_yes", "confirm", "msg_id"];
+const HDR_RSVP = ["year", "player", "token", "answer", "answered_at", "history"];
+const TPL_DRAFT = { subject: "[GFY TEMPLATE] Good Friends Yearly 2027, {first}?", html: "<p>Hi {first},</p><p>You in for 2027?</p>", plain: "Hi {first},\n\nYou in for 2027?\n\n- R" };
+const NUDGE_DRAFT = { subject: "[GFY NUDGE] Still in, {first}?", html: "<p>{first}, nudge: <a href=\"{rsvp}\">answer here</a></p>", plain: "{first}, nudge: {rsvp}" };
 
 function world(o = {}) {
   const log = [];
@@ -91,7 +94,7 @@ function world(o = {}) {
   const adminSheets = [
     mkSheet("Contacts", [HDR_CON, ...contacts], log),
     mkSheet("SendLog", [HDR_LOG, ...(o.sendlog || [])], log),
-    mkSheet("InviteTemplate", o.template || [["field", "text"], ["subject", "Good Friends Yearly 2027, {first}?"], ["body", "Hi {first},\n\nYou in for 2027?\n\n- R"]], log),
+    mkSheet("RSVP", [HDR_RSVP, ...(o.rsvp || [])], log),
     mkSheet("Replies", [HDR_REP, ...(o.replies || [])], log),
     mkSheet("READ ME", [["warning", "last_reply_scan"], ["be careful", ""]], log),
   ];
@@ -113,15 +116,30 @@ function world(o = {}) {
   };
   // Gmail
   const sent = []; const threads = {}; let tn = 0;
-  const mkMsg = m => ({ getId: () => m.id, getFrom: () => m.from, getSubject: () => m.subject, getDate: () => new Date(m.date || "2027-01-05T12:00:00Z"), getPlainBody: () => m.body || "", getRawContent: () => (m.raw || "") + "\r\n\r\n" + (m.body || "") });
+  const mkMsg = m => ({ getId: () => m.id, getFrom: () => m.from, getSubject: () => m.subject, getDate: () => new Date(m.date || "2027-01-05T12:00:00Z"), getPlainBody: () => m.body || "", getTo: () => m.to || "", getRawContent: () => (m.raw || "") + "\r\n\r\n" + (m.body || "") });
+  const draftOps = [];
+  const mkDraft = d => {
+    const msg = { getSubject: () => d.subject, getBody: () => d.html, getPlainBody: () => d.plain, getAttachments: opt => {
+      const inc = !opt || opt.includeInlineImages !== false;
+      return [...(d.attachments || []), ...(inc ? (d.inline || []) : [])]; } };
+    return { getId: () => "d" + d.subject, getMessage: () => msg,
+      send: () => { draftOps.push("send"); throw new Error("template draft must never be sent"); },
+      update: () => { draftOps.push("update"); throw new Error("template draft must never be updated"); },
+      deleteDraft: () => { draftOps.push("delete"); throw new Error("template draft must never be deleted"); } };
+  };
+  const drafts = (o.drafts || [TPL_DRAFT]).map(mkDraft);
+  const threadReplies = [];
   const GmailApp = {
-    createDraft: (to, subject, body) => ({ send: () => {
+    getDrafts: () => { if (o.draftsError) throw new Error("gmail down"); return drafts; },
+    createDraft: (to, subject, body, opts) => ({ send: () => {
       if (o.failTo && o.failTo === to) throw new Error("smtp boom");
-      const id = "thr" + (++tn); const t = { id, msgs: [{ id: id + "m0", from: "Riley <me@gmail.com>", subject, body, date: "2027-01-05T10:00:00Z" }] };
-      threads[id] = t; sent.push({ to, subject, body, threadId: id }); log.push({ ev: "send", to });
+      const id = "thr" + (++tn); const t = { id, to, msgs: [{ id: id + "m0", from: "Riley <me@gmail.com>", to, subject, body, date: "2027-01-05T10:00:00Z" }] };
+      threads[id] = t; sent.push({ to, subject, body, html: opts && opts.htmlBody, attachments: opts && opts.attachments, threadId: id }); log.push({ ev: "send", to });
       return { getThread: () => ({ getId: () => id }) };
     } }),
-    getThreadById: id => { if (o.threadError && o.threadError === id) throw new Error("gmail down"); const t = threads[id]; return t ? { getId: () => id, getMessages: () => t.msgs.map(mkMsg) } : null; },
+    getThreadById: id => { if (o.threadError && o.threadError === id) throw new Error("gmail down"); const t = threads[id]; if (!t) return null;
+      const rep = all => (body, opts) => { if (o.replyFails && o.replyFails === id) throw new Error("reply boom"); threadReplies.push({ id, body, html: opts && opts.htmlBody, attachments: opts && opts.attachments, subject: opts && opts.subject, all }); t.msgs.push({ id: id + "m" + t.msgs.length, from: "Riley <me@gmail.com>", subject: "Re: x", body }); log.push({ ev: "send", to: "(thread " + id + ")" }); };
+      return { getId: () => id, getMessages: () => t.msgs.map(mkMsg), reply: rep(false), replyAll: rep(true) }; },
   };
   const lockLog = log;
   const LockService = { getScriptLock: () => ({ waitLock: () => lockLog.push({ ev: "lock" }), releaseLock: () => lockLog.push({ ev: "unlock" }) }) };
@@ -131,20 +149,24 @@ function world(o = {}) {
     newTrigger: fn => { const t = { fn, every: null, onEdit: false }; const b = { timeBased: () => b, everyMinutes: n => { t.every = n; return b; }, forSpreadsheet: x => { t.ss = x; return b; }, onEdit: () => { t.onEdit = true; return b; }, create: () => { triggers.push(t); return t; } }; return b; },
     deleteTrigger: () => {},
   };
-  const PropertiesService = { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null) }) };
-  const MailApp = { getRemainingDailyQuota: () => (o.quota ?? 100) };
+  const PropertiesService = { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); } }) };
+  const mails = [];
+  const MailApp = { getRemainingDailyQuota: () => (o.quota ?? 100), sendEmail: (to, subj, body) => { mails.push({ to, subj, body }); } };
   const Session = { getEffectiveUser: () => ({ getEmail: () => "me@gmail.com" }), getScriptTimeZone: () => "UTC" };
-  const Utilities = { formatDate: (d, tz, f) => f === "yyyy-MM-dd" ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace("T", " "), parseDate: (str, tz, f) => new Date(String(str).replace(" ", "T") + (f === "yyyy-MM-dd" ? "T00:00:00Z" : ":00Z")) };
+  let uuidN = 0;
+  const Utilities = { getUuid: () => "00000000-0000-4000-8000-" + String(++uuidN).padStart(12, "0"), formatDate: (d, tz, f) => f === "yyyy-MM-dd" ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace("T", " "), parseDate: (str, tz, f) => new Date(String(str).replace(" ", "T") + (f === "yyyy-MM-dd" ? "T00:00:00Z" : ":00Z")) };
   const Logger = { log() {} };
-  const env = { SpreadsheetApp, GmailApp, MailApp, PropertiesService, LockService, ScriptApp, Session, Utilities, Logger };
-  const names = ["onOpen", "sendInvites", "scanReplies", "installMailTriggers", "mailPublicWrite_", "adminPolish", "mailOnEdit", "mailDashboard_", "MAIL_SCHEMA"];
+  const htmlPages = [];
+  const HtmlService = { createHtmlOutput: h => { const out = { html: h, title: "", getContent: () => h, setTitle: t => { out.title = t; return out; }, addMetaTag: () => out, setXFrameOptionsMode: () => out }; htmlPages.push(out); return out; }, XFrameOptionsMode: { ALLOWALL: "ALLOWALL" } };
+  const env = { SpreadsheetApp, GmailApp, MailApp, PropertiesService, LockService, ScriptApp, Session, Utilities, Logger, HtmlService };
+  const names = ["onOpen", "sendInvites", "scanReplies", "installMailTriggers", "mailPublicWrite_", "adminPolish", "mailOnEdit", "mailDashboard_", "MAIL_SCHEMA", "sendNudges", "doGet", "recordRsvp"];
   let M;
   try { M = new Function(...Object.keys(env), SRC + "\nreturn {" + names.map(n => `${n}: typeof ${n}!=='undefined'?${n}:undefined`).join(",") + "};")(...Object.values(env)); }
   catch (e) { M = { _err: String(e) }; }
   const sheet = n => admin.getSheetByName(n);
   const invSheet = pub.getSheetByName("Invites");
   const addIncoming = (threadId, m) => { threads[threadId].msgs.push({ id: threadId + "m" + threads[threadId].msgs.length, ...m }); };
-  return { M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props };
+  return { M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages };
 }
 const run = (w, fn) => { try { return { ok: true, v: w.M[fn]() }; } catch (e) { return { ok: false, e: String(e && e.message || e) }; } };
 const pubWrites = w => w.log.filter(e => e.ev !== "lock" && e.ev !== "unlock" && e.ev !== "send" && e.sheet === "Invites");
@@ -231,7 +253,7 @@ const noteWrites = w => { pubWrites(w).forEach(e => allPublicWrites.push(e)); };
   const a = w.sent.find(s => s.to === "alice@example.com");
   const inv = w.invSheet.rows;
   const aliceRow = inv.find(x => x[1] === "Alice Able"), bobRow = inv.find(x => x[1] === "Bob Baker"), cyRow = inv.find(x => x[1] === "Cy Dnì");
-  check("MA6a: live mode sends ONE email per person to the real address; subject/body come from InviteTemplate with {first} filled",
+  check("MA6a: live mode sends ONE email per person to the real address; subject/body come from the [GFY TEMPLATE] Gmail draft with {first} filled",
     r.ok && w.sent.length === 2 && !!a && a.subject === "Good Friends Yearly 2027, Alice?" && a.body.startsWith("Hi Alice,") && w.sent.some(s => s.to === "bob@example.com" && s.body.startsWith("Hi Bob,")), r.e || JSON.stringify(w.sent));
   check("MA6b: SendLog gets one row per email (date, player, address_used, what=invite, note, thread_id = the Gmail thread)",
     log.length === 2 && log.every(l => /^\d{4}-\d{2}-\d{2}/.test(String(l[0])) && l[3] === "invite" && /^thr\d+$/.test(l[5])) && log.some(l => l[1] === "Alice Able" && l[2] === "alice@example.com" && l[5] === a.threadId), JSON.stringify(log));
@@ -270,10 +292,81 @@ for (const [label, props] of [["unset (default ON)", {}], ["1", { GFY_MAIL_TEST:
   const r = run(w, "sendInvites");
   check("MA8: daily-quota guard - fewer remaining sends than recipients => nothing sent, alert says so", r.ok && w.sent.length === 0 && w.alerts.some(a => /quota/i.test(a.msg)), r.e || JSON.stringify(w.alerts));
 }
+// ---------- Gmail draft template (WO-DRAFT-TEMPLATE) ----------
 {
-  const w = world({ props: { GFY_MAIL_TEST: "0" }, template: [["field", "text"], ["subject", ""], ["body", ""]] });
+  for (const [label, drafts, re] of [
+    ["zero template drafts", [], /\b0\b|no .*draft|missing/i],
+    ["two template drafts", [TPL_DRAFT, { ...TPL_DRAFT, subject: "  [gfy template] second" }], /\b2\b/],
+  ]) {
+    const w = world({ props: { GFY_MAIL_TEST: "0" }, drafts });
+    const r = run(w, "sendInvites");
+    check(`DT1: ${label} => Send BLOCKED with a message naming the count; nothing sent or written, no confirm`,
+      r.ok && w.sent.length === 0 && !w.alerts.some(a => a.btns === "YES_NO") && w.alerts.some(a => re.test(a.msg) && /template/i.test(a.msg)) && w.log.filter(e => e.ev === "write" || e.ev === "append").length === 0, r.e || JSON.stringify(w.alerts));
+  }
+  const w1 = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [{ ...TPL_DRAFT, subject: "   [Gfy Template]   Hello {first}" }, { subject: "Re: something else", html: "x", plain: "x" }] });
+  run(w1, "sendInvites");
+  check("DT2: the template is found case-insensitively/trimmed; the prefix is stripped from the sent subject; other drafts are ignored",
+    w1.sent.length === 2 && w1.sent.some(s => s.subject === "Hello Alice") && w1.sent.some(s => s.subject === "Hello Bob"), JSON.stringify(w1.sent.map(s => s.subject)));
+}
+{
+  const w = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [{ ...TPL_DRAFT, html: "<p>Hi {first} &amp; {first}</p>", plain: "Hi {first}" , subject: "[GFY TEMPLATE] {first}: {first}" }] });
+  run(w, "sendInvites");
+  const a = w.sent.find(s => s.to === "alice@example.com");
+  check("DT3: {first} replaced everywhere (subject, plain body, HTML body, repeated); HTML body is sent as htmlBody",
+    !!a && a.subject === "Alice: Alice" && a.body === "Hi Alice" && a.html === "<p>Hi Alice &amp; Alice</p>", JSON.stringify(a));
+  check("DT3b: the draft itself is never sent, updated or deleted", w.draftOps.length === 0);
+}
+{
+  const w = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [{ ...TPL_DRAFT, subject: "[GFY TEMPLATE] <b>", html: "<p>Hi {first}</p>", plain: "Hi {first}" }], contacts: [["Ann O'Brien <x>", "ann@example.com", "", "", "FALSE", "", ""]], invites: [[2027, "Ann O'Brien <x>", false, false, "", false, ""]] });
+  run(w, "sendInvites");
+  check("DT3c: a name is HTML-escaped inside the HTML body but plain in subject/plain body", w.sent.length === 1 && w.sent[0].html === "<p>Hi Ann</p>" , JSON.stringify(w.sent));
+  const w2 = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [{ ...TPL_DRAFT, html: "<p>Hi {first}</p>", plain: "Hi {first}" }], contacts: [["<i>Zed Q", "z@example.com", "", "", "FALSE", "", ""]], invites: [[2027, "<i>Zed Q", false, false, "", false, ""]] });
+  run(w2, "sendInvites");
+  check("DT3d: first name '<i>Zed' becomes &lt;i&gt;Zed in HTML, raw in plain", w2.sent.length === 1 && w2.sent[0].html === "<p>Hi &lt;i&gt;Zed</p>" && w2.sent[0].body === "Hi <i>Zed", JSON.stringify(w2.sent));
+}
+for (const [label, draft] of [
+  ["unreplaced {token} in the subject", { subject: "[GFY TEMPLATE] hi {first} {oops}", html: "<p>x</p>", plain: "x" }],
+  ["unreplaced {token} in the HTML", { ...TPL_DRAFT, html: "<p>Hi {first} {date}</p>" }],
+  ["unreplaced {token} in the plain body", { ...TPL_DRAFT, plain: "Hi {first} {Course Name}" }],
+]) {
+  const w = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [draft] });
   const r = run(w, "sendInvites");
-  check("MA9: empty InviteTemplate subject/body => alert, nothing sent", r.ok && w.sent.length === 0 && w.alerts.some(a => /InviteTemplate/.test(a.msg)), r.e || JSON.stringify(w.alerts));
+  check(`DT4: ${label} => BLOCK, nothing sent`, r.ok && w.sent.length === 0 && w.alerts.some(a => /\{/.test(a.msg)), r.e || JSON.stringify(w.alerts));
+}
+{
+  const w = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [{ ...TPL_DRAFT, html: "<style>p{color:red}</style><p>Hi {first}</p>" }] });
+  run(w, "sendInvites");
+  check("DT4b: CSS braces in the HTML are not mistaken for unreplaced tokens", w.sent.length === 2, JSON.stringify(w.alerts));
+}
+for (const [label, draft] of [
+  ["[FILL in the subject", { ...TPL_DRAFT, subject: "[GFY TEMPLATE] hi {first} [fill: date]" }],
+  ["[FILL in the HTML", { ...TPL_DRAFT, html: "<p>Hi {first} [FILL: course]</p>" }],
+  ["[fill in the plain body (case-insensitive)", { ...TPL_DRAFT, plain: "Hi {first} [fill: course]" }],
+]) {
+  const w = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [draft] });
+  const r = run(w, "sendInvites");
+  check(`DT5: ${label} => BLOCK with 'the template draft still has [FILL] spots'`, r.ok && w.sent.length === 0 && w.alerts.some(a => /the template draft still has \[FILL\] spots/.test(a.msg)), r.e || JSON.stringify(w.alerts));
+}
+{
+  const att = { getName: () => "schedule.pdf", kind: "att" };
+  const w = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [{ ...TPL_DRAFT, attachments: [att] }] });
+  run(w, "sendInvites");
+  check("DT6: file attachments on the draft are copied onto every sent email", w.sent.length === 2 && w.sent.every(s => Array.isArray(s.attachments) && s.attachments.length === 1 && s.attachments[0] === att), JSON.stringify(w.sent.map(s => s.attachments && s.attachments.length)));
+  const w2 = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [{ ...TPL_DRAFT, inline: [{ getName: () => "logo.png", kind: "inline" }] }] });
+  const r2 = run(w2, "sendInvites");
+  check("DT7: a draft with inline images => BLOCK (cid mapping not supported) with a message saying so; nothing sent", r2.ok && w2.sent.length === 0 && w2.alerts.some(a => /inline image/i.test(a.msg)), r2.e || JSON.stringify(w2.alerts));
+}
+{
+  const w = world({ drafts: [{ ...TPL_DRAFT, subject: "[GFY TEMPLATE] Hello {first}" }], answers: ["YES"] });
+  run(w, "sendInvites");
+  const conf = w.alerts.find(a => a.btns === "YES_NO");
+  check("DT8: test mode unchanged (to the test address, '[TEST → real address]' prefix) and the confirm dialog shows the final subject for the first recipient",
+    w.sent.length === 2 && w.sent.every(s => s.to === TEST_ADDR) && w.sent.some(s => s.subject === "[TEST → alice@example.com] Hello Alice") && !!conf && /Hello Alice/.test(conf.msg), JSON.stringify([w.sent.map(s => s.subject), conf && conf.msg]));
+}
+{
+  const w = world({ draftsError: true, props: { GFY_MAIL_TEST: "0" } });
+  const r = run(w, "sendInvites");
+  check("DT9: Gmail unreadable (getDrafts throws) => alert, nothing sent", r.ok && w.sent.length === 0 && w.alerts.length > 0, r.e || JSON.stringify(w.alerts));
 }
 {
   const w = world({ props: { GFY_MAIL_TEST: "0" }, failTo: "alice@example.com" });
@@ -402,7 +495,7 @@ function bareAdmin(log) {
   const w = world({ adminSheets: bareAdmin });
   const r = run(w, "adminPolish");
   const sch = w.M.MAIL_SCHEMA || {};
-  const okTabs = ["Replies", "SendLog", "InviteTemplate", "READ ME"].every(n => w.sheet(n) && JSON.stringify(w.sheet(n).rows[0]) === JSON.stringify(sch[n]));
+  const okTabs = ["Replies", "SendLog", "RSVP", "READ ME"].every(n => w.sheet(n) && JSON.stringify(w.sheet(n).rows[0]) === JSON.stringify(sch[n]));
   check("AP2: adminPolish creates every missing tab with its template headers (and a Dashboard)", r.ok && okTabs && !!w.sheet("Dashboard"), r.e || w.admin.sheets.map(s => s.name).join(","));
   check("AP2b: existing Contacts data untouched when tabs are added", JSON.stringify(w.sheet("Contacts").rows[1]) === JSON.stringify(["Alice Able", "alice@example.com", "", "", false, "", "keep me"]) || JSON.stringify(w.sheet("Contacts").rows[1]) === JSON.stringify(["Alice Able", "alice@example.com", "", "", "FALSE", "", "keep me"]), JSON.stringify(w.sheet("Contacts").rows));
 }
@@ -458,8 +551,8 @@ function bareAdmin(log) {
   const w = world();
   run(w, "adminPolish");
   const names = w.admin.sheets.map(s => s.name).join();
-  check("AP8: tab order Dashboard, Contacts, Replies, SendLog, InviteTemplate, READ ME; active tab ends on Dashboard; every tab coloured",
-    names === "Dashboard,Contacts,Replies,SendLog,InviteTemplate,READ ME" && w.admin.active && w.admin.active.name === "Dashboard" && w.admin.sheets.every(s => !!s.tabColor), names);
+  check("AP8: tab order Dashboard, Contacts, Replies, RSVP, SendLog, READ ME; active tab ends on Dashboard; every tab coloured",
+    names === "Dashboard,Contacts,Replies,RSVP,SendLog,READ ME" && w.admin.active && w.admin.active.name === "Dashboard" && w.admin.sheets.every(s => !!s.tabColor), names);
 }
 {
   const w = world({ contacts: [["Alice Able", "alice@example.com", "", "", "TRUE", "", ""], ["Bob Baker", "bob@example.com", "", "", "FALSE", "", ""], ["Zed Nomatch", "z@example.com", "", "", "FALSE", "", ""]],
@@ -570,6 +663,29 @@ function dashWorld(extra = {}) {
   check("D9: a scan that fails on an unreadable thread still throws, does not stamp a success time, and still refreshes the Dashboard (so STALE can show)",
     !r.ok && !!w3.sheet("Dashboard") && String(w3.sheet("READ ME").rows[1][1]) === "", r.e);
   noteWrites(w3);
+}
+
+{
+  // InviteTemplate tab retired: polish must not delete a live one, and says it is unused
+  const w = world({ adminSheets: log => [...bareAdmin(log), mkSheet("InviteTemplate", [["field", "text"], ["subject", "old"], ["body", "old body"]], log)] });
+  const r = run(w, "adminPolish");
+  const tpl = w.sheet("InviteTemplate");
+  check("DT10: adminPolish leaves an existing InviteTemplate tab alone (not deleted, not edited, not in the schema) and the Dashboard says it is no longer used",
+    r.ok && !!tpl && tpl.rows.length === 3 && tpl.rows[1][1] === "old" && !("InviteTemplate" in w.M.MAIL_SCHEMA) && /InviteTemplate tab is no longer used — safe to delete/.test(dashText(w)), r.e || dashText(w));
+  const w2 = world();
+  run(w2, "adminPolish");
+  check("DT10b: no InviteTemplate tab => no such note and none is created", !w2.sheet("InviteTemplate") && !/InviteTemplate/.test(dashText(w2)));
+}
+{
+  const w = world();
+  run(w, "adminPolish");
+  check("DT11: Dashboard shows 'template draft: OK — <subject>'", /template draft/.test(dashText(w)) && dashVals(w)["template draft"] === "OK — Good Friends Yearly 2027, {first}?", JSON.stringify(dashVals(w)));
+  const w0 = world({ drafts: [] }); run(w0, "adminPolish");
+  const w2 = world({ drafts: [TPL_DRAFT, { ...TPL_DRAFT }] }); run(w2, "adminPolish");
+  check("DT11b: ... 'MISSING' with no template draft and '2+ drafts' with two", /^MISSING/.test(String(dashVals(w0)["template draft"])) && /^2\+ drafts/.test(String(dashVals(w2)["template draft"])), JSON.stringify([dashVals(w0), dashVals(w2)]));
+  const wf = world({ drafts: [{ ...TPL_DRAFT, plain: "[FILL: x] {first}" }] }); run(wf, "adminPolish");
+  const wg = world({ draftsError: true }); const rg = run(wg, "adminPolish");
+  check("DT11c: a template with [FILL] spots shows as such; an unreadable Gmail does not break adminPolish", /FILL/.test(String(dashVals(wf)["template draft"])) && rg.ok && /unreadable|UNKNOWN/i.test(String(dashVals(wg)["template draft"])), JSON.stringify([dashVals(wf), dashVals(wg), rg.e]));
 }
 
 // ---------- confirm -> committed (installable onEdit) ----------

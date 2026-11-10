@@ -20,7 +20,9 @@
  */
 
 const MAIL_TEST_ADDR = "goodfriendsyearly@gmail.com";
-const MAIL_TAB = { contacts: "Contacts", log: "SendLog", tpl: "InviteTemplate", replies: "Replies", readme: "READ ME", invites: "Invites", dash: "Dashboard" };
+const MAIL_TAB = { contacts: "Contacts", log: "SendLog", replies: "Replies", readme: "READ ME", invites: "Invites", dash: "Dashboard", rsvp: "RSVP", oldTpl: "InviteTemplate" };
+const MAIL_TPL_PREFIX = "[GFY TEMPLATE]";     // the ONE Gmail draft whose subject starts with this is the invite
+const MAIL_NUDGE_PREFIX = "[GFY NUDGE]";      // the ONE Gmail draft whose subject starts with this is the nudge
 
 // Admin-sheet schema. LOCKSTEP with tools/make_admin_template.py TABS (single
 // source: test/mailer.test.mjs AP1 fails if the two differ). Dashboard is built
@@ -28,12 +30,12 @@ const MAIL_TAB = { contacts: "Contacts", log: "SendLog", tpl: "InviteTemplate", 
 const MAIL_SCHEMA = {
   "Contacts": ["player", "email", "email_alt", "phone", "do_not_invite", "reason", "notes"],
   "SendLog": ["date", "player", "address_used", "what", "note", "thread_id"],
-  "InviteTemplate": ["field", "text"],
   "Replies": ["date", "player", "from", "snippet", "looks_yes", "confirm", "msg_id"],
+  "RSVP": ["year", "player", "token", "answer", "answered_at", "history"],
   "READ ME": ["warning", "last_reply_scan"],
 };
-const MAIL_ORDER = ["Dashboard", "Contacts", "Replies", "SendLog", "InviteTemplate", "READ ME"];
-const MAIL_TAB_COLORS = { "Dashboard": "#1155cc", "Contacts": "#6aa84f", "Replies": "#f1c232", "SendLog": "#999999", "InviteTemplate": "#e69138", "READ ME": "#cc0000" };
+const MAIL_ORDER = ["Dashboard", "Contacts", "Replies", "RSVP", "SendLog", "READ ME"];
+const MAIL_TAB_COLORS = { "Dashboard": "#1155cc", "Contacts": "#6aa84f", "Replies": "#f1c232", "SendLog": "#999999", "RSVP": "#e69138", "READ ME": "#cc0000" };
 const MAIL_CHECKBOX = { "Contacts": ["do_not_invite"], "Replies": ["looks_yes", "confirm"] };   // CLOSED list
 const MAIL_POLISH_TAG = "gfy-admin-polish";
 const MAIL_NUDGE_DEFAULT = 7;
@@ -151,24 +153,54 @@ function mailPlan_(contacts, invites){
   return { year, blocks, recipients, noAddress };
 }
 
-function mailTemplate_(admin){
-  const sh = admin.getSheetByName(MAIL_TAB.tpl);
-  const out = { subject: "", body: "" };
-  if (!sh) return out;
-  sh.getDataRange().getValues().forEach(r => {
-    const k = mailNorm_(r[0]);
-    if (k === "subject" || k === "body") out[k] = String(r[1] == null ? "" : r[1]);
-  });
-  return out;
+// ---- Gmail-draft template ----------------------------------------------------
+
+const mailHtmlEsc_ = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+const MAIL_TOKEN_RE = /\{[A-Za-z][A-Za-z0-9_ -]*\}/g;     // word-like {tokens} only, so CSS braces never trip it
+
+/** Find THE template draft (subject starts with `prefix`, case-insensitive, trimmed).
+ *  Returns { ok:true, subject, html, plain, attachments } or { ok:false, kind, msg }.
+ *  The draft is only ever READ - never sent, updated or deleted. */
+function mailLoadDraft_(prefix){
+  const want = mailNorm_(prefix);
+  const found = GmailApp.getDrafts().filter(d => mailNorm_(d.getMessage().getSubject()).indexOf(want) === 0);
+  if (found.length !== 1){
+    return { ok: false, kind: found.length ? "many" : "none",
+      msg: found.length ? `Found ${found.length} drafts whose subject starts with ${prefix} - there must be exactly ONE. Delete the extras.`
+                        : `No draft whose subject starts with ${prefix} was found (0). Write it as a normal Gmail draft in this account.` };
+  }
+  const m = found[0].getMessage();
+  const raw = String(m.getSubject() || "").trim();
+  const subject = raw.slice(prefix.length).trim();
+  const html = String(m.getBody() || ""), plain = String(m.getPlainBody() || "");
+  if (/\[fill/i.test(raw + "\n" + html + "\n" + plain)) return { ok: false, kind: "fill", msg: "the template draft still has [FILL] spots" };
+  const all = m.getAttachments({ includeInlineImages: true }) || [];
+  const files = m.getAttachments({ includeInlineImages: false }) || [];
+  if (all.length > files.length) return { ok: false, kind: "inline", msg: "The template draft has inline images, which this sender cannot copy safely (it would send a broken email). Remove them or use a normal attachment / a hosted image link." };
+  const left = [];
+  [raw, html, plain].forEach(t => (String(t).replace(/\{(first|rsvp)\}/g, "").match(MAIL_TOKEN_RE) || []).forEach(x => { if (left.indexOf(x) < 0) left.push(x); }));
+  if (left.length) return { ok: false, kind: "token", msg: `The template draft has unreplaced ${left.join(" ")} - only {first} and {rsvp} are filled in. Nothing sent.` };
+  if (!subject || !(html.trim() || plain.trim())) return { ok: false, kind: "empty", msg: "The template draft needs a subject (after the prefix) and a body." };
+  return { ok: true, subject, html, plain, attachments: files, hasRsvp: /\{rsvp\}/.test(raw + html + plain) };
 }
 
-function mailBuild_(tpl, player, address, test){
+/** Per-recipient copy of the draft. Names are HTML-escaped inside the HTML body only. */
+function mailBuild_(tpl, player, address, test, rsvpUrl){
   const first = String(player).trim().split(/\s+/)[0];
-  const fill = s => s.replace(/\{first\}/g, first);
-  const subject = fill(tpl.subject);
-  return test
-    ? { to: MAIL_TEST_ADDR, subject: `[TEST → ${address}] ${subject}`, body: fill(tpl.body) }
-    : { to: address, subject, body: fill(tpl.body) };
+  const fill = (t, esc) => String(t).replace(/\{first\}/g, () => (esc ? mailHtmlEsc_(first) : first)).replace(/\{rsvp\}/g, () => (esc ? mailHtmlEsc_(rsvpUrl || "") : (rsvpUrl || "")));
+  const subject = fill(tpl.subject, false);
+  return {
+    to: test ? MAIL_TEST_ADDR : address,
+    subject: test ? `[TEST \u2192 ${address}] ${subject}` : subject,
+    body: fill(tpl.plain, false), htmlBody: fill(tpl.html, true), attachments: tpl.attachments || [],
+  };
+}
+
+function mailSendOpts_(m){
+  const o = {};
+  if (m.htmlBody && m.htmlBody.trim()) o.htmlBody = m.htmlBody;
+  if (m.attachments && m.attachments.length) o.attachments = m.attachments;
+  return o;
 }
 
 // ---- A: the button ---------------------------------------------------------
@@ -192,8 +224,9 @@ function sendInvites(){
   }
   if (!plan.recipients.length){ say("GFY Mail", `Nobody to invite for ${plan.year}.` + (plan.noAddress.length ? `\nNo address on file: ${plan.noAddress.join(", ")}` : "")); return; }
 
-  const tpl = mailTemplate_(admin);
-  if (!tpl.subject.trim() || !tpl.body.trim()){ say("GFY Mail", "The InviteTemplate tab needs a subject and a body. Nothing sent."); return; }
+  let tpl;
+  try { tpl = mailLoadDraft_(MAIL_TPL_PREFIX); } catch (e){ say("GFY Mail", "Could not read Gmail drafts (" + (e && e.message || e) + "). Nothing sent."); return; }
+  if (!tpl.ok){ say("Send BLOCKED - template draft (nothing was sent)", tpl.msg); return; }
 
   const quota = MailApp.getRemainingDailyQuota();
   if (quota < plan.recipients.length){ say("GFY Mail", `Daily send quota too low: ${quota} left, ${plan.recipients.length} needed. Nothing sent.`); return; }
@@ -201,6 +234,7 @@ function sendInvites(){
   const test = mailIsTest_(props);
   const list = plan.recipients.map(r => `${r.player} → ${r.address}`).join("\n");
   const msg = (test ? `TEST MODE: every message goes to ${MAIL_TEST_ADDR}; nothing is ticked on the public sheet.\n\n` : "LIVE: these people will be emailed for real.\n\n")
+    + `Subject of the first email: ${mailBuild_(tpl, plan.recipients[0].player, plan.recipients[0].address, test).subject}\n\n`
     + `Send ${plan.recipients.length} ${plan.year} invite(s)?\n\n${list}`
     + (plan.noAddress.length ? `\n\nSkipped (no address): ${plan.noAddress.join(", ")}` : "");
   if (ui.alert("Send invites", msg, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
@@ -212,7 +246,7 @@ function sendInvites(){
     const m = mailBuild_(tpl, r.player, r.address, test);
     let threadId;
     try {
-      threadId = GmailApp.createDraft(m.to, m.subject, m.body).send().getThread().getId();
+      threadId = GmailApp.createDraft(m.to, m.subject, m.body, mailSendOpts_(m)).send().getThread().getId();
     } catch (e){ failed.push(`${r.player} (${e && e.message || e})`); return; }
     sent++;
     // Log BEFORE ticking: a crash after the send must never lead to a second email.
@@ -564,6 +598,14 @@ function mailDashboard_(admin, props){
     status = (!t || isNaN(t.getTime())) ? "STALE - unreadable scan time" : (Date.now() - t.getTime() > MAIL_STALE_MS ? "STALE - over 1 h old" : "ok");
   }
 
+  const draftStatus = prefix => {
+    try {
+      const t = mailLoadDraft_(prefix);
+      if (t.ok) return `OK \u2014 ${t.subject}`;
+      return ({ none: "MISSING \u2014 ", many: "2+ drafts \u2014 ", fill: "has [FILL] spots \u2014 " }[t.kind] || "BLOCKED \u2014 ") + t.msg;
+    } catch (e){ return "UNKNOWN \u2014 Gmail unreadable"; }
+  };
+  if (admin.getSheetByName(MAIL_TAB.oldTpl)) notes.push("InviteTemplate tab is no longer used \u2014 safe to delete");
   const L = MAIL_DASH_LABELS;
   const left = [
     ["GFY Admin Dashboard", ""],
@@ -578,6 +620,7 @@ function mailDashboard_(admin, props){
     ["", ""],
     [L.scan, stamp],
     [L.status, status],
+    ["template draft", draftStatus(MAIL_TPL_PREFIX)],
     ...notes.map(n => ["note", n]),
   ];
   const height = Math.max(left.length, 2 + Math.max(...MAIL_DASH_LISTS.map(k => lists[k].length)));

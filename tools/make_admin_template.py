@@ -24,22 +24,20 @@ TABS = {
         "headers": ["date", "player", "address_used", "what", "note", "thread_id"],
         "rows": [["2026-08-01", "Person One", "person.one@example.com", "invite", "sample row — one line per email sent", "sample-thread-id"]],
     },
-    "InviteTemplate": {
-        "headers": ["field", "text"],
-        "rows": [
-            ["subject", "Good Friends Yearly — are you in, {first}?"],
-            ["body", "Hi {first},\n\n[SAMPLE — replace with your real invite text. {first} becomes the first word of the player's name.]\n\n— [your name]"],
-        ],
-    },
     "Replies": {
         "headers": ["date", "player", "from", "snippet", "looks_yes", "confirm", "msg_id"],
         "rows": [["2026-08-02", "Person One", "Person One <person.one@example.com>", "sample — reply text lands HERE only, never on the public sheet. looks_yes is a guess; tick confirm yourself, then commit them on the public Invites tab by hand.", "TRUE", "FALSE", "sample-msg-id"]],
+    },
+    "RSVP": {
+        "headers": ["year", "player", "token", "answer", "answered_at", "history"],
+        "rows": [["2027", "Person One", "sample-token-not-real", "IN", "2026-08-03 09:00", "2026-08-03 09:00 IN"]],
     },
     "READ ME": {
         "headers": ["warning", "last_reply_scan"],
         "rows": [
             ["This file holds real addresses once filled in. NEVER click File → Share → Publish to web on it.", ""],
             ["Keep it a SEPARATE Google Sheets file. Never add it as a tab of the public GFY sheet."],
+            ["The invite and nudge texts are NOT here: write them as normal Gmail drafts in the sending account, subjects starting [GFY TEMPLATE] / [GFY NUDGE] (use {first} and {rsvp}).", ""],
             ["Before every send round: export Contacts as CSV (somewhere OUTSIDE the repo) and run: npm run presend -- <that .csv> --vault-url <this sheet's URL>", ""],
         ],
     },
