@@ -755,6 +755,115 @@ function repWorld(extra = {}) {
   check("E7: no PUBLIC_ID -> no public sheet opened, no write", w.opened.length === 0 && pubWrites(w).length === 0 && !threw);
 }
 
+// ---------- B: RSVP web app (WO-PROGRAM-33 s2) ----------
+const WEBAPP = "https://script.google.com/macros/s/FAKE/exec";
+const RSVP_DRAFT = { subject: "[GFY TEMPLATE] Are you in, {first}?", html: "<p>Hi {first}</p><p><a href=\"{rsvp}\">IN / OUT / MAYBE</a></p>", plain: "Hi {first}\nAnswer: {rsvp}" };
+const rsvpRows = w => w.sheet("RSVP").rows.slice(1);
+const tokenOf = (w, who) => (rsvpRows(w).find(r => r[1] === who) || [])[2];
+function rsvpWorld(extra = {}) {
+  const w = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT], ...extra });
+  if (!extra.noSend) { run(w, "sendInvites"); w.alerts.length = 0; w.log.length = 0; }
+  return w;
+}
+const pageOf = (w, t) => { const n = w.htmlPages.length; const r = w.M.doGet({ parameter: t === undefined ? {} : { t } }); return { r, html: String((r && (r.html || (r.getContent && r.getContent()))) || "") }; };
+{
+  const w = world({ props: { GFY_MAIL_TEST: "0" }, drafts: [RSVP_DRAFT] });
+  const r = run(w, "sendInvites");
+  check("RS1: {rsvp} in the template but no WEBAPP_URL script property => Send BLOCKED, nothing sent", r.ok && w.sent.length === 0 && w.alerts.some(a => /WEBAPP_URL/.test(a.msg)), r.e || JSON.stringify(w.alerts));
+  const w2 = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [TPL_DRAFT] });
+  run(w2, "sendInvites");
+  check("RS1b: no {rsvp} in the draft => WEBAPP_URL not needed and no tokens are created", w2.sent.length === 2 && rsvpRows(w2).length === 0 && !w2.alerts.some(a => /WEBAPP_URL/.test(a.msg)));
+  const w3 = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT], adminSheets: log => [mkSheet("Contacts", [HDR_CON, ["Alice Able", "alice@example.com", "", "", "FALSE", "", ""]], log), mkSheet("SendLog", [HDR_LOG], log)] });
+  w3.invSheet.rows.splice(3);
+  const r3 = run(w3, "sendInvites");
+  check("RS1c: {rsvp} but no RSVP tab => BLOCK (run Polish admin sheet), nothing sent", r3.ok && w3.sent.length === 0 && w3.alerts.some(a => /RSVP/.test(a.msg)), r3.e || JSON.stringify(w3.alerts));
+}
+{
+  const w = rsvpWorld();
+  const rows = rsvpRows(w);
+  const a = w.sent.find(s => s.to === "alice@example.com");
+  const ta = tokenOf(w, "Alice Able"), tb = tokenOf(w, "Bob Baker");
+  check("RS2: one RSVP row per (year, player), token >= 22 chars of [A-Za-z0-9], tokens differ", rows.length === 2 && rows.every(r => String(r[0]) === "2027" && /^[A-Za-z0-9]{22,}$/.test(String(r[2])) && r[3] === "") && ta !== tb, JSON.stringify(rows));
+  check("RS3: {rsvp} becomes <WEBAPP_URL>?t=<token> in both the HTML and plain bodies, per recipient", !!a && a.body === `Hi Alice\nAnswer: ${WEBAPP}?t=${ta}` && a.html.includes(`href="${WEBAPP}?t=${ta}"`), JSON.stringify(a));
+  check("RS4: tokens live ONLY in the private RSVP tab (not on the public sheet)", !JSON.stringify(w.pub.sheets.map(s => s.rows)).includes(ta) && !w.sheet("SendLog").rows.some(r => r.join("|").includes(ta)));
+  w.alerts.length = 0; run(w, "sendInvites");
+  check("RS4b: tokens are reused, never regenerated (get-or-create)", tokenOf(w, "Alice Able") === ta && rsvpRows(w).length === 2);
+}
+{
+  const w = rsvpWorld({ noSend: true, rsvp: [[2027, "Alice Able", "A".repeat(24), "", "", ""], [2026, "Old Timer", "B".repeat(24), "IN", "x", "x IN"]] });
+  const g = pageOf(w, "A".repeat(24));
+  check("RS5: GET with a valid token renders the page: '<first>, are you in for 2027?' and three buttons IN / OUT / MAYBE wired to recordRsvp", /Alice, are you in for 2027\?/.test(g.html) && /IN/.test(g.html) && /OUT/.test(g.html) && /MAYBE/.test(g.html) && /google\.script\.run/.test(g.html) && /recordRsvp/.test(g.html) && !/Bob/.test(g.html), g.html.slice(0, 300));
+  check("RS6: GET records NOTHING (no sheet writes of any kind - link scanners prefetch)", w.log.filter(e => e.ev === "write" || e.ev === "append").length === 0 && w.invSheet.rows.every(r => r[3] !== true || r[0] === 2026) && w.sheet("RSVP").rows[1][3] === "");
+  const bad = [["unknown token", "Z".repeat(24)], ["previous-year token", "B".repeat(24)], ["missing token", undefined], ["short token", "A"]];
+  for (const [label, t] of bad) {
+    const x = pageOf(w, t);
+    check(`RS7: ${label} => friendly 'not valid' page, no player names, no writes`, /not valid/i.test(x.html) && !/Alice|Old Timer|Bob/.test(x.html) && w.log.filter(e => e.ev === "write" || e.ev === "append").length === 0, x.html.slice(0, 200));
+  }
+  w.sheet("RSVP").rows[1][3] = "MAYBE";
+  check("RS8: the current answer is shown on the page", /MAYBE/.test(pageOf(w, "A".repeat(24)).html.replace(/<button[\s\S]*?<\/button>/g, "")) || /current answer[^<]*MAYBE|Your answer[^<]*MAYBE/i.test(pageOf(w, "A".repeat(24)).html));
+  w.sheet("RSVP").rows[1][1] = "<script>x</script> Quinn";
+  check("RS8b: the first name is HTML-escaped on the page", !/<script>x/.test(pageOf(w, "A".repeat(24)).html));
+}
+function rsvpGo(w, who, choice) { const tk = tokenOf(w, who); try { return { ok: true, v: w.M.recordRsvp(tk, choice) }; } catch (e) { return { ok: false, e: String(e && e.message || e) }; } }
+{
+  const w = rsvpWorld();
+  const r = rsvpGo(w, "Alice Able", "IN");
+  const al = w.invSheet.rows.find(x => x[1] === "Alice Able" && x[0] === 2027);
+  const row = rsvpRows(w).find(x => x[1] === "Alice Able");
+  check("RS9: recordRsvp IN => RSVP tab answer + answered_at + history; public responded AND committed TRUE (nothing else)", r.ok && row[3] === "IN" && /^\d{4}-/.test(String(row[4])) && /IN/.test(String(row[5])) && al[3] === true && al[5] === true && al[2] === true, r.e || JSON.stringify([row, al]));
+  const ev = w.log.map(e => e.ev + (e.sheet ? ":" + e.sheet : ""));
+  const lockedOk = ev.every((e, i) => e !== "write:Invites" || (ev.slice(0, i).lastIndexOf("lock") > ev.slice(0, i).lastIndexOf("unlock")));
+  check("RS10: every public write in recordRsvp happens under the lock", pubWrites(w).length >= 2 && lockedOk, ev.join(","));
+  const r2 = rsvpGo(w, "Alice Able", "MAYBE");
+  const row2 = rsvpRows(w).find(x => x[1] === "Alice Able");
+  check("RS11: answering again replaces the answer and APPENDS to history; committed is never unticked", r2.ok && row2[3] === "MAYBE" && (String(row2[5]).match(/IN|MAYBE/g) || []).length >= 2 && al[5] === true, JSON.stringify(row2));
+  check("RS12: Dashboard lists 'Changed answer - fix by hand' for committed-then-changed", (dashList(w, "Changed answer — fix by hand") || []).includes("Alice Able"), dashText(w));
+  noteWrites(w);
+}
+{
+  const w = rsvpWorld();
+  rsvpGo(w, "Bob Baker", "MAYBE");
+  const bob = w.invSheet.rows.find(x => x[1] === "Bob Baker" && x[0] === 2027);
+  check("RS13: MAYBE => responded TRUE only (no committed, status untouched)", bob[3] === true && bob[5] === false && bob[4] === "", JSON.stringify(bob));
+  rsvpGo(w, "Alice Able", "OUT");
+  const al = w.invSheet.rows.find(x => x[1] === "Alice Able" && x[0] === 2027);
+  check("RS14: OUT => responded TRUE and status 'declined' (status was blank); committed stays false", al[3] === true && al[4] === "declined" && al[5] === false, JSON.stringify(al));
+  noteWrites(w);
+}
+{
+  for (const st of ["out", "Declined", "maybe"]) {
+    const w = rsvpWorld({ noSend: true, rsvp: [[2027, "Alice Able", "A".repeat(24), "", "", ""]], invites: [[2027, "Alice Able", true, false, st, false, ""], [2027, "Bob Baker", false, false, "", false, ""]] });
+    rsvpGo(w, "Alice Able", "OUT");
+    const al = w.invSheet.rows.find(x => x[1] === "Alice Able");
+    check(`RS15: OUT never overwrites an existing status ('${st}' stays)`, al[4] === st && al[3] === true, JSON.stringify(al));
+    noteWrites(w);
+  }
+}
+{
+  const wt = world({ props: { WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT] });
+  run(wt, "sendInvites");
+  const sentBefore = wt.sent.length;
+  wt.log.length = 0;
+  const r = rsvpGo(wt, "Alice Able", "IN");
+  check("RS16: TEST MODE: RSVP works fully on the private RSVP tab but writes NOTHING to the public sheet", r.ok && rsvpRows(wt).find(x => x[1] === "Alice Able")[3] === "IN" && pubWrites(wt).length === 0 && wt.invSheet.rows.slice(1).every(x => x[3] === false || x[0] === 2026), r.e || JSON.stringify(pubWrites(wt)));
+  check("RS17: in test mode the Dashboard labels it ('RSVP test mode')", /RSVP test mode/.test(dashText(wt)), dashText(wt));
+}
+{
+  const w = rsvpWorld();
+  const wr = () => w.log.filter(e => e.ev === "write" || e.ev === "append").length;
+  const n0 = wr();
+  const bads = [["bad choice", () => w.M.recordRsvp(tokenOf(w, "Alice Able"), "SURE")], ["unknown token", () => w.M.recordRsvp("Z".repeat(24), "IN")], ["empty token", () => w.M.recordRsvp("", "IN")]];
+  for (const [label, fn] of bads) { let threw = false; try { fn(); } catch (e) { threw = true; } check(`RS18: recordRsvp rejects ${label} and writes nothing`, threw && wr() === n0, String(wr())); }
+  const w2 = rsvpWorld({ noSend: true, rsvp: [[2026, "Old Timer", "B".repeat(24), "", "", ""]] });
+  let t2 = false; try { w2.M.recordRsvp("B".repeat(24), "IN"); } catch (e) { t2 = true; }
+  check("RS19: a previous-year token is rejected by recordRsvp too", t2 && w2.sheet("RSVP").rows[1][3] === "");
+}
+{
+  const w = rsvpWorld();
+  rsvpGo(w, "Alice Able", "IN");
+  check("RS20: Dashboard is rebuilt after recordRsvp (responded/committed counts current)", dashVals(w)[DASH.committed] === 1 && dashVals(w)[DASH.responded] === 1, JSON.stringify(dashVals(w)));
+}
+
 // ---------- no-'@' leak test ----------
 {
   const bad = allPublicWrites.filter(e => /@/.test(String(e.v)));

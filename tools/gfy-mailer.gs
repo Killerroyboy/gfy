@@ -10,6 +10,13 @@
  *                   prefixed "[TEST → real address]", nothing is ticked on the
  *                   public sheet. Set it to 0 BY HAND to go live.
  *
+ *    WEBAPP_URL     the deployed Web App /exec URL of THIS project (RSVP links).
+ *                   Required only when the template draft contains {rsvp}.
+ *    ALERT_TO       optional: an address that gets ONE health alert per 24 h
+ *                   (a scan threw, or the last good scan is over 3 h old). Empty = off.
+ *    ADMIN_ID       optional fallback for the Web App if getActiveSpreadsheet() is
+ *                   unavailable there: the Admin sheet's own id.
+ *
  *  Privacy rule: addresses, reply text and bounce notes live ONLY on the Admin
  *  sheet. The one thing this file writes to the public sheet is a boolean tick
  *  in Invites (`invited` / `responded`), through mailPublicWrite_, which refuses
@@ -107,14 +114,25 @@ function mailCurrentYear_(invRows){
 // Tick a boolean column for (year, player) on the PUBLIC Invites sheet, under
 // the script lock, re-reading the row at write time. Returns true if it wrote.
 function mailTickPublic_(invSheet, year, player, col){
-  return mailWithLock_(() => {
-    const t = mailTable_(invSheet);
-    if (!(col in t.idx)) return false;
-    const row = t.rows.find(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player) === mailNorm_(player));
-    if (!row || mailYes_(row[col])) return false;
-    mailPublicWrite_(invSheet, row._row, t.idx[col] + 1, true);
-    return true;
-  });
+  return mailWithLock_(() => mailTickPublicNL_(invSheet, year, player, col));
+}
+// Caller MUST already hold the script lock.
+function mailTickPublicNL_(invSheet, year, player, col){
+  const t = mailTable_(invSheet);
+  if (!(col in t.idx)) return false;
+  const row = t.rows.find(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player) === mailNorm_(player));
+  if (!row || mailYes_(row[col])) return false;
+  mailPublicWrite_(invSheet, row._row, t.idx[col] + 1, true);
+  return true;
+}
+// "declined" only into a BLANK status; never overwrites anything (out / declined / maybe ...). Lock held by caller.
+function mailDeclinePublicNL_(invSheet, year, player){
+  const t = mailTable_(invSheet);
+  if (!("status" in t.idx)) return false;
+  const row = t.rows.find(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player) === mailNorm_(player));
+  if (!row || String(row.status == null ? "" : row.status).trim() !== "") return false;
+  mailPublicWrite_(invSheet, row._row, t.idx.status + 1, "declined");
+  return true;
 }
 
 // ---- A: planning (pure) ---------------------------------------------------
@@ -228,6 +246,9 @@ function sendInvites(){
   try { tpl = mailLoadDraft_(MAIL_TPL_PREFIX); } catch (e){ say("GFY Mail", "Could not read Gmail drafts (" + (e && e.message || e) + "). Nothing sent."); return; }
   if (!tpl.ok){ say("Send BLOCKED - template draft (nothing was sent)", tpl.msg); return; }
 
+  const rs = mailRsvpPrereq_(props, admin, tpl);
+  if (rs){ say("Send BLOCKED - RSVP links (nothing was sent)", rs); return; }
+
   const quota = MailApp.getRemainingDailyQuota();
   if (quota < plan.recipients.length){ say("GFY Mail", `Daily send quota too low: ${quota} left, ${plan.recipients.length} needed. Nothing sent.`); return; }
 
@@ -243,9 +264,10 @@ function sendInvites(){
   const failed = [], tickFailed = [];
   let sent = 0;
   plan.recipients.forEach(r => {
-    const m = mailBuild_(tpl, r.player, r.address, test);
-    let threadId;
+    let m, threadId;
     try {
+      const url = tpl.hasRsvp ? mailRsvpUrl_(props, mailRsvpToken_(admin.getSheetByName(MAIL_TAB.rsvp), plan.year, r.player)) : "";
+      m = mailBuild_(tpl, r.player, r.address, test, url);
       threadId = GmailApp.createDraft(m.to, m.subject, m.body, mailSendOpts_(m)).send().getThread().getId();
     } catch (e){ failed.push(`${r.player} (${e && e.message || e})`); return; }
     sent++;
@@ -263,6 +285,132 @@ function sendInvites(){
   say("GFY Mail", `${test ? "TEST " : ""}Sent ${sent} of ${plan.recipients.length}.`
     + (failed.length ? `\n\nSEND FAILED (not logged, not ticked — safe to re-run): ${failed.join("; ")}` : "")
     + (tickFailed.length ? `\n\nSent and logged, but could NOT tick invited on the public sheet — tick by hand: ${tickFailed.join(", ")}` : ""));
+}
+
+// ---- B: RSVP links (Web App in this same project) ---------------------------------
+// Deploy: Apps Script -> Deploy -> New deployment -> Web app, Execute as: Me,
+// Who has access: Anyone. Put the /exec URL in the WEBAPP_URL script property.
+
+function mailRsvpPrereq_(props, admin, tpl){
+  if (!tpl.hasRsvp) return "";
+  if (!String(props.getProperty("WEBAPP_URL") || "").trim()) return "The template draft contains {rsvp} but the script property WEBAPP_URL is not set (deploy the Web App, then paste its /exec URL).";
+  if (!admin.getSheetByName(MAIL_TAB.rsvp)) return "The template draft contains {rsvp} but the Admin sheet has no RSVP tab - run GFY Mail > Polish admin sheet first.";
+  return "";
+}
+
+function mailRsvpUrl_(props, token){
+  const base = String(props.getProperty("WEBAPP_URL")).trim();
+  return base + (base.indexOf("?") >= 0 ? "&" : "?") + "t=" + token;
+}
+
+// One random token per (year, player), created once and reused. Stored ONLY in the private RSVP tab.
+function mailRsvpToken_(sheet, year, player){
+  return mailWithLock_(() => {
+    const t = mailTable_(sheet);
+    const have = t.rows.find(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player) === mailNorm_(player) && String(r.token || "").trim().length >= 22);
+    if (have) return String(have.token).trim();
+    const token = Utilities.getUuid().replace(/-/g, "");     // 32 chars, 122 random bits
+    mailAppend_(sheet, { year, player: String(player).trim(), token, answer: "", answered_at: "", history: "" });
+    return token;
+  });
+}
+
+function mailAdmin_(props){
+  let a = null;
+  try { a = SpreadsheetApp.getActiveSpreadsheet(); } catch (e){ a = null; }
+  if (!a && props.getProperty("ADMIN_ID")) a = SpreadsheetApp.openById(props.getProperty("ADMIN_ID"));
+  return a;
+}
+
+// { admin, rsvp, inv, year } or null when anything is unavailable.
+function mailRsvpCtx_(props){
+  const admin = mailAdmin_(props), pid = props.getProperty("PUBLIC_ID");
+  if (!admin || !pid) return null;
+  const rsvp = admin.getSheetByName(MAIL_TAB.rsvp), inv = SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites);
+  if (!rsvp || !inv) return null;
+  return { admin, rsvp, inv, year: mailCurrentYear_(mailTable_(inv).rows) };
+}
+
+function mailRsvpFind_(ctx, token){
+  const t = String(token == null ? "" : token).trim();
+  if (t.length < 22) return null;
+  const tb = mailTable_(ctx.rsvp);
+  const row = tb.rows.find(r => String(r.token == null ? "" : r.token).trim() === t && (parseInt(r.year, 10) || 0) === ctx.year);
+  return row ? { tb, row } : null;
+}
+
+function mailRsvpPage_(first, year, token, current){
+  const f = mailHtmlEsc_(first), tk = JSON.stringify(String(token)).replace(/</g, "\\u003c");
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Good Friends Yearly</title><style>
+:root{--pine:#0E2019;--bone:#E9E3D3;--sage:#8A9B8C;--brass:#C8A24A;--rust:#B0705E}
+*{box-sizing:border-box}body{margin:0;background:var(--pine);color:var(--bone);font-family:Jost,Futura,"Helvetica Neue",Arial,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+main{width:100%;max-width:420px;text-align:center}.brand{font-family:"Bodoni Moda",Didot,Georgia,serif;font-weight:700;letter-spacing:.14em;color:var(--brass);font-size:.9rem;margin-bottom:18px}
+h1{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:1.7rem;line-height:1.2;margin:0 0 22px}
+button{display:block;width:100%;min-height:64px;margin:12px 0;border-radius:10px;border:2px solid var(--brass);background:transparent;color:var(--bone);font:600 1.3rem Jost,Futura,Arial,sans-serif;letter-spacing:.08em;cursor:pointer}
+button:active,button.sel{background:var(--brass);color:var(--pine)}button:disabled{opacity:.6}
+#cur,#msg{color:var(--sage);min-height:1.4em;margin-top:14px}#msg.err{color:var(--rust)}</style></head><body><main>
+<div class="brand">GOOD FRIENDS YEARLY</div>
+<h1 id="q">${f}, are you in for ${year}?</h1>
+<button id="b-IN" onclick="go('IN')">IN</button><button id="b-OUT" onclick="go('OUT')">OUT</button><button id="b-MAYBE" onclick="go('MAYBE')">MAYBE</button>
+<div id="cur">${current ? "Your answer so far: " + mailHtmlEsc_(current) : ""}</div><div id="msg"></div></main>
+<script>var T=${tk};
+function go(c){var bs=document.getElementsByTagName("button");for(var i=0;i<bs.length;i++){bs[i].disabled=true;}
+document.getElementById("msg").className="";document.getElementById("msg").textContent="Saving...";
+google.script.run.withSuccessHandler(function(){for(var i=0;i<bs.length;i++){bs[i].disabled=false;bs[i].className="";}
+document.getElementById("b-"+c).className="sel";document.getElementById("q").textContent="Got it - you're "+c+".";
+document.getElementById("cur").textContent="Your answer: "+c+". Tap another to change it.";document.getElementById("msg").textContent="Saved.";})
+.withFailureHandler(function(){for(var i=0;i<bs.length;i++){bs[i].disabled=false;}document.getElementById("msg").className="err";document.getElementById("msg").textContent="Could not save - try again, or reply to the email.";}).recordRsvp(T,c);}
+</script></body></html>`;
+}
+
+function mailRsvpInvalid_(){
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Good Friends Yearly</title><style>body{margin:0;background:#0E2019;color:#E9E3D3;font-family:Jost,Futura,Arial,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center}</style></head><body><main><h1>This link is not valid</h1><p>It may be from an older year. Just reply to the email and we will sort it out.</p></main></body></html>`;
+}
+
+/** Web App GET. Records NOTHING (link scanners prefetch GETs); only renders. */
+function doGet(e){
+  const props = PropertiesService.getScriptProperties();
+  const token = String((e && e.parameter && e.parameter.t) || "").trim();
+  let html = null;
+  try {
+    const ctx = mailRsvpCtx_(props);
+    const f = ctx && mailRsvpFind_(ctx, token);
+    if (f) html = mailRsvpPage_(String(f.row.player).trim().split(/\s+/)[0], ctx.year, token, String(f.row.answer || "").trim());
+  } catch (err){ html = null; }
+  return HtmlService.createHtmlOutput(html || mailRsvpInvalid_()).setTitle("Good Friends Yearly").addMetaTag("viewport", "width=device-width, initial-scale=1");
+}
+
+/** Called from the page via google.script.run. Everything under one lock. */
+function recordRsvp(token, choice){
+  const c = String(choice == null ? "" : choice).trim().toUpperCase();
+  if (c !== "IN" && c !== "OUT" && c !== "MAYBE") throw new Error("invalid choice");
+  const props = PropertiesService.getScriptProperties();
+  const ctx = mailRsvpCtx_(props);
+  if (!ctx) throw new Error("RSVP is unavailable right now");
+  const test = mailIsTest_(props);
+  const out = { player: "", publicFailed: false };
+  mailWithLock_(() => {
+    const f = mailRsvpFind_(ctx, token);                 // re-read under the lock
+    if (!f) throw new Error("This link is not valid");
+    const { tb, row } = f;
+    const stamp = mailStamp_();
+    out.player = String(row.player).trim();
+    const hist = String(row.history == null ? "" : row.history).trim();
+    const set = (name, v) => { if (name in tb.idx) ctx.rsvp.getRange(row._row, tb.idx[name] + 1).setValue(v); };
+    set("answer", c); set("answered_at", stamp); set("history", (hist ? hist + "; " : "") + stamp + " " + c);
+    if (test) return;                                    // TEST MODE: private RSVP tab only
+    try {
+      mailTickPublicNL_(ctx.inv, ctx.year, out.player, "responded");
+      if (c === "IN") mailTickPublicNL_(ctx.inv, ctx.year, out.player, "committed");
+      if (c === "OUT") mailDeclinePublicNL_(ctx.inv, ctx.year, out.player);
+    } catch (err){ out.publicFailed = true; }
+  });
+  if (out.publicFailed){
+    const log = ctx.admin.getSheetByName(MAIL_TAB.log);
+    if (log) mailAppend_(log, { date: mailToday_(), player: out.player, what: "note", note: `RSVP ${c} recorded but the public sheet could not be updated - fix by hand` });
+  }
+  try { mailDashboard_(ctx.admin, props); } catch (err){ Logger.log("dashboard rebuild failed: " + (err && err.message || err)); }
+  return { answer: c, first: out.player.split(/\s+/)[0] };
 }
 
 // ---- C: reply watcher --------------------------------------------------------
@@ -512,7 +660,7 @@ function adminPolish(){
 
 // ---- Dashboard (PRIVATE admin tab - names are fine here, never on a published tab) ----
 
-const MAIL_DASH_LISTS = ["Needs nudge", "Bounced", "Unconfirmed looks_yes", "Name mismatches"];
+const MAIL_DASH_LISTS = ["Needs nudge", "Bounced", "Unconfirmed looks_yes", "Name mismatches", "Changed answer \u2014 fix by hand"];
 const MAIL_DASH_COL0 = 4;                               // lists live in D..G, headers on row 2, entries from row 3
 const MAIL_DASH_LABELS = { nudge: "nudge after (days)", scan: "last reply scan", status: "scan status" };
 
@@ -542,7 +690,7 @@ function mailDashboard_(admin, props){
   }
 
   const notes = [];
-  const lists = { "Needs nudge": [], "Bounced": [], "Unconfirmed looks_yes": [], "Name mismatches": [] };
+  const lists = {}; MAIL_DASH_LISTS.forEach(k => { lists[k] = []; });
   let year = "", counts = null;
 
   const pid = props.getProperty("PUBLIC_ID");
@@ -558,6 +706,7 @@ function mailDashboard_(admin, props){
     });
   }
 
+  if (mailIsTest_(props)) notes.push("RSVP test mode: answers are recorded on the RSVP tab only; the public sheet is not written.");
   if (!invSheet){
     notes.push(pid ? "Public Invites tab not found - counts and name checks unavailable." : "PUBLIC_ID script property not set - counts and name checks unavailable.");
   } else {
@@ -583,6 +732,14 @@ function mailDashboard_(admin, props){
       if (!mailYes_(r.invited) || mailYes_(r.responded) || mailYes_(r.committed) || isOut(r)) return;
       const d = lastSent.get(mailNorm_(r.player)); if (!d) return;
       if (Math.round((today - d) / 864e5) >= nudge) lists["Needs nudge"].push(String(r.player).trim());
+    });
+    const rsvpSh = admin.getSheetByName(MAIL_TAB.rsvp);
+    if (rsvpSh) mailTable_(rsvpSh).rows.forEach(r => {
+      if ((parseInt(r.year, 10) || 0) !== year || !mailNorm_(r.player)) return;
+      const ans = String(r.answer == null ? "" : r.answer).trim().toUpperCase();
+      if ((ans !== "OUT" && ans !== "MAYBE") || !/\bIN$|\bIN;/.test(String(r.history == null ? "" : r.history) + ";")) return;
+      const pr = cur.find(x => mailNorm_(x.player) === mailNorm_(r.player));
+      if (pr && mailYes_(pr.committed)) lists["Changed answer \u2014 fix by hand"].push(String(r.player).trim());
     });
     const names = new Set(cur.map(r => mailNorm_(r.player)));
     if (conSheet) mailTable_(conSheet).rows.forEach(c => { if (mailNorm_(c.player) && !names.has(mailNorm_(c.player))) lists["Name mismatches"].push(String(c.player)); });
