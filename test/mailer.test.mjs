@@ -449,9 +449,10 @@ function bareAdmin(log) {
   run(w, "adminPolish");
   const con = w.sheet("Contacts");
   const rules = con.rules;
-  const emailRule = rules.find(r => /REGEXMATCH/.test(r.f || ""));
-  check("AP7: Contacts email/email_alt get a highlight conditional-format rule (not a rejecting validation)",
-    !!emailRule && /\$B2/.test(emailRule.f) && /\$C2/.test(emailRule.f) && Object.values(con.validations).every(v => v.kind === "checkbox"), JSON.stringify(rules));
+  const emailRules = rules.filter(r => /REGEXMATCH/.test(r.f || ""));
+  const ef = emailRules.map(r => r.f).join("|");
+  check("AP7: Contacts email/email_alt get highlight conditional-format rules (not a rejecting validation); the regex in the formula is single-escaped",
+    emailRules.length === 2 && /\$B2/.test(ef) && /\$C2/.test(ef) && ef.includes('"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"') && Object.values(con.validations).every(v => v.kind === "checkbox"), JSON.stringify(rules));
 }
 {
   const w = world();

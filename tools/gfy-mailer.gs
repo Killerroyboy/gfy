@@ -20,7 +20,24 @@
  */
 
 const MAIL_TEST_ADDR = "goodfriendsyearly@gmail.com";
-const MAIL_TAB = { contacts: "Contacts", log: "SendLog", tpl: "InviteTemplate", replies: "Replies", readme: "READ ME", invites: "Invites" };
+const MAIL_TAB = { contacts: "Contacts", log: "SendLog", tpl: "InviteTemplate", replies: "Replies", readme: "READ ME", invites: "Invites", dash: "Dashboard" };
+
+// Admin-sheet schema. LOCKSTEP with tools/make_admin_template.py TABS (single
+// source: test/mailer.test.mjs AP1 fails if the two differ). Dashboard is built
+// by code, not templated, so it is deliberately not here.
+const MAIL_SCHEMA = {
+  "Contacts": ["player", "email", "email_alt", "phone", "do_not_invite", "reason", "notes"],
+  "SendLog": ["date", "player", "address_used", "what", "note", "thread_id"],
+  "InviteTemplate": ["field", "text"],
+  "Replies": ["date", "player", "from", "snippet", "looks_yes", "confirm", "msg_id"],
+  "READ ME": ["warning", "last_reply_scan"],
+};
+const MAIL_ORDER = ["Dashboard", "Contacts", "Replies", "SendLog", "InviteTemplate", "READ ME"];
+const MAIL_TAB_COLORS = { "Dashboard": "#1155cc", "Contacts": "#6aa84f", "Replies": "#f1c232", "SendLog": "#999999", "InviteTemplate": "#e69138", "READ ME": "#cc0000" };
+const MAIL_CHECKBOX = { "Contacts": ["do_not_invite"], "Replies": ["looks_yes", "confirm"] };   // CLOSED list
+const MAIL_POLISH_TAG = "gfy-admin-polish";
+const MAIL_NUDGE_DEFAULT = 7;
+const MAIL_STALE_MS = 60 * 60 * 1000;
 
 const mailNorm_ = s => String(s == null ? "" : s).trim().replace(/\s+/g, " ").toLowerCase();
 const mailYes_ = v => v === true || /^(y|yes|true|1|x|✓)$/i.test(String(v == null ? "" : v).trim());
@@ -29,6 +46,7 @@ function onOpen(){
   SpreadsheetApp.getUi().createMenu("GFY Mail")
     .addItem("Send invites…", "sendInvites")
     .addItem("Scan replies now", "scanReplies")
+    .addItem("Polish admin sheet", "adminPolish")
     .addToUi();
 }
 
@@ -216,8 +234,10 @@ function sendInvites(){
 // ---- C: reply watcher --------------------------------------------------------
 
 function installMailTriggers(){
-  const have = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === "scanReplies");
-  if (!have) ScriptApp.newTrigger("scanReplies").timeBased().everyMinutes(15).create();
+  const has = fn => ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === fn);
+  if (!has("scanReplies")) ScriptApp.newTrigger("scanReplies").timeBased().everyMinutes(15).create();
+  // Installable onEdit (a simple onEdit cannot open the public sheet): confirm -> committed.
+  if (!has("mailOnEdit")) ScriptApp.newTrigger("mailOnEdit").forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet()).onEdit().create();
 }
 
 const MAIL_AUTO_SUBJECT = /out of office|automatic reply|auto[- ]?reply|autoreply|away from (my )?(desk|office)/i;
@@ -297,11 +317,13 @@ function scanReplies(){
     } catch (e){ errors.push(`${player}: ${e && e.message || e}`); }
   });
 
-  if (errors.length) throw new Error("reply scan incomplete — " + errors.join("; "));
-  if (readme){                       // timestamp only — never names (START HERE publication is a TODO above)
+  if (!errors.length && readme){     // timestamp only — never names (START HERE publication is a TODO above)
     readme.getRange(1, 2).setValue("last_reply_scan");
     readme.getRange(2, 2).setValue(mailStamp_());
   }
+  // Rebuild the private Dashboard even after a failed scan (so STALE can show).
+  try { mailDashboard_(admin, props); } catch (e){ Logger.log("dashboard rebuild failed: " + (e && e.message || e)); }
+  if (errors.length) throw new Error("reply scan incomplete — " + errors.join("; "));
 }
 
 function mailNoteBounce_(conSheet, player, date){
@@ -313,4 +335,267 @@ function mailNoteBounce_(conSheet, player, date){
   const cur = String(row.notes == null ? "" : row.notes);
   if (cur.indexOf(tag) >= 0) return;
   conSheet.getRange(row._row, t.idx.notes + 1).setValue(cur ? cur + "; " + tag : tag);
+}
+
+// ---- confirm -> committed (installable onEdit) --------------------------------
+
+/** Installed by installMailTriggers. Ticking Replies.confirm ticks `committed`
+ *  for that player / current year on the PUBLIC Invites tab (only ever TRUE, via
+ *  mailPublicWrite_, under the lock). UNticking never unticks committed - it
+ *  logs a note on SendLog instead. Script edits (scanReplies) do not fire onEdit. */
+function mailOnEdit(e){
+  if (!e || !e.range) return;
+  const sh = e.range.getSheet();
+  if (!sh || sh.getName() !== MAIL_TAB.replies) return;
+  const t = mailTable_(sh);
+  if (!("confirm" in t.idx)) return;
+  const cc = t.idx.confirm + 1;
+  const c0 = e.range.getColumn(), c1 = c0 + e.range.getNumColumns() - 1;
+  if (cc < c0 || cc > c1) return;
+  const r0 = Math.max(2, e.range.getRow()), r1 = e.range.getRow() + e.range.getNumRows() - 1;
+  const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIL_TAB.log);
+  const note = (player, text) => { if (logSheet) mailAppend_(logSheet, { date: mailToday_(), player, what: "note", note: text }); else Logger.log(player + ": " + text); };
+
+  const pid = PropertiesService.getScriptProperties().getProperty("PUBLIC_ID");
+  const invSheet = pid ? SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites) : null;
+  if (!invSheet){ Logger.log("mailOnEdit: PUBLIC_ID / Invites unavailable - nothing written"); return; }
+  const year = mailCurrentYear_(mailTable_(invSheet).rows);
+
+  const seen = new Set();
+  t.rows.filter(r => r._row >= r0 && r._row <= r1 && mailNorm_(r.player)).forEach(r => {
+    const key = mailNorm_(r.player);
+    if (seen.has(key)) return; seen.add(key);
+    const ticked = r.confirm === true || /^true$/i.test(String(r.confirm == null ? "" : r.confirm).trim());
+    const player = String(r.player).trim();
+    if (ticked){
+      try { mailTickPublic_(invSheet, year, player, "committed"); }
+      catch (err){ note(player, "confirm ticked but could NOT tick committed on the public sheet - tick by hand (" + (err && err.message || err) + ")"); }
+    } else {
+      const pt = mailTable_(invSheet);
+      const row = pt.rows.find(x => (parseInt(x.year, 10) || 0) === year && mailNorm_(x.player) === key);
+      if (row && "committed" in pt.idx && mailYes_(row.committed)) note(player, "confirm unticked - committed left ticked on the public sheet (untick it there by hand if wanted)");
+    }
+  });
+}
+
+// ---- adminPolish (menu: GFY Mail -> Polish admin sheet) -----------------------
+
+function mailColLetter_(i){ let s = ""; while (i > 0){ s = String.fromCharCode(65 + ((i - 1) % 26)) + s; i = Math.floor((i - 1) / 26); } return s; }
+
+// Append the template headers that row 1 lacks, after the last NON-EMPTY header
+// cell. Never moves, inserts or clears anything. A brand-new tab gets them all.
+function mailAdminHeaders_(sh, headers){
+  const width = Math.max(1, sh.getLastColumn());
+  const row = sh.getLastRow() >= 1 ? sh.getRange(1, 1, 1, width).getValues()[0] : [];
+  const have = new Set(row.map(mailNorm_));
+  let last = 0; row.forEach((v, i) => { if (String(v).trim() !== "") last = i + 1; });
+  headers.forEach(h => {
+    if (have.has(mailNorm_(h))) return;
+    sh.getRange(1, ++last).setValue(h);
+  });
+}
+
+function mailHeaderCol_(sh, name){
+  if (sh.getLastRow() < 1) return 0;
+  const row = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0];
+  return row.findIndex(h => mailNorm_(h) === name) + 1;
+}
+
+function mailProtectHeader_(sh){
+  sh.setFrozenRows(1);
+  const have = sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).find(p => p.getDescription() === MAIL_POLISH_TAG);
+  if (!have) sh.getRange("1:1").protect().setDescription(MAIL_POLISH_TAG).setWarningOnly(true);   // warn, never block
+}
+
+// Real checkboxes on the closed column list; "TRUE"/"FALSE" TEXT becomes a real
+// boolean, nothing else is touched. Validation stops at last data row + 50.
+function mailCheckboxes_(sh, cols){
+  cols.forEach(c => {
+    const i = mailHeaderCol_(sh, c); if (!i) return;
+    const last = sh.getLastRow();
+    if (last >= 2){
+      const rng = sh.getRange(2, i, last - 1, 1);
+      const vals = rng.getValues();
+      let changed = false;
+      const out = vals.map(r => {
+        const v = r[0];
+        if (typeof v === "string" && /^(true|false)$/i.test(v.trim())){ changed = true; return [/^true$/i.test(v.trim())]; }
+        return [v];
+      });
+      if (changed) rng.setValues(out);
+    }
+    const end = Math.min(sh.getMaxRows(), last + 50);
+    sh.getRange(2, i, Math.max(1, end - 1), 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+  });
+}
+
+function mailContactsRules_(sh){
+  const n = Math.max(1, sh.getMaxRows() - 1);
+  const rules = [];
+  const re = '"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"';   // formula text: ^[^@\s]+@[^@\s]+\.[^@\s]+$
+  ["email", "email_alt"].forEach(h => {
+    const i = mailHeaderCol_(sh, h); if (!i) return;
+    const L = mailColLetter_(i);
+    rules.push(SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied(`=AND($${L}2<>"",NOT(REGEXMATCH($${L}2&"",${re})))`)       // highlight only - never rejects input
+      .setBackground("#f4cccc").setRanges([sh.getRange(2, i, n, 1)]).build());
+  });
+  const p = mailHeaderCol_(sh, "player");
+  if (p){
+    const P = mailColLetter_(p), M = mailColLetter_(MAIL_DASH_COL0 + MAIL_DASH_LISTS.indexOf("Name mismatches"));
+    const esc = `SUBSTITUTE(SUBSTITUTE(SUBSTITUTE($${P}2,"~","~~"),"*","~*"),"?","~?")`;
+    rules.push(SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied(`=AND($${P}2<>"",COUNTIF(INDIRECT("Dashboard!${M}3:${M}"),${esc})>0)`)
+      .setBackground("#fce5cd").setRanges([sh.getRange(2, p, n, 1)]).build());
+  }
+  sh.setConditionalFormatRules(rules);                  // polish owns CF on Contacts (replaced wholesale, idempotent)
+}
+
+function mailOrderTabs_(admin){
+  MAIL_ORDER.forEach((n, i) => { const s = admin.getSheetByName(n); if (s){ admin.setActiveSheet(s); admin.moveActiveSheet(i + 1); } });
+  const home = admin.getSheetByName(MAIL_TAB.dash); if (home) admin.setActiveSheet(home);   // end on Dashboard
+}
+
+function adminPolish(){
+  const admin = SpreadsheetApp.getActiveSpreadsheet();
+  const props = PropertiesService.getScriptProperties();
+  Object.keys(MAIL_SCHEMA).forEach(name => {
+    const sh = admin.getSheetByName(name) || admin.insertSheet(name);
+    mailAdminHeaders_(sh, MAIL_SCHEMA[name]);
+    mailProtectHeader_(sh);
+    mailCheckboxes_(sh, MAIL_CHECKBOX[name] || []);
+    if (MAIL_TAB_COLORS[name]) sh.setTabColor(MAIL_TAB_COLORS[name]);
+  });
+  const con = admin.getSheetByName(MAIL_TAB.contacts);
+  mailContactsRules_(con);
+  mailDashboard_(admin, props);
+  const dash = admin.getSheetByName(MAIL_TAB.dash);
+  mailProtectHeader_(dash);
+  dash.setTabColor(MAIL_TAB_COLORS.Dashboard);
+  mailOrderTabs_(admin);
+  Logger.log("adminPolish complete");
+}
+
+// ---- Dashboard (PRIVATE admin tab - names are fine here, never on a published tab) ----
+
+const MAIL_DASH_LISTS = ["Needs nudge", "Bounced", "Unconfirmed looks_yes", "Name mismatches"];
+const MAIL_DASH_COL0 = 4;                               // lists live in D..G, headers on row 2, entries from row 3
+const MAIL_DASH_LABELS = { nudge: "nudge after (days)", scan: "last reply scan", status: "scan status" };
+
+function mailTrimGrid_(g){
+  const rows = g.map(r => r.map(v => (v == null ? "" : v)));
+  while (rows.length && rows[rows.length - 1].every(v => v === "")) rows.pop();
+  let w = 0; rows.forEach(r => { r.forEach((v, i) => { if (v !== "") w = Math.max(w, i + 1); }); });
+  return rows.map(r => { const o = r.slice(0, w); while (o.length < w) o.push(""); return o; });
+}
+
+function mailDateOf_(v){
+  if (v instanceof Date) return v;
+  const m = String(v == null ? "" : v).match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? Utilities.parseDate(m[1], Session.getScriptTimeZone(), "yyyy-MM-dd") : null;
+}
+
+function mailDashboard_(admin, props){
+  let sh = admin.getSheetByName(MAIL_TAB.dash);
+  if (!sh) sh = admin.insertSheet(MAIL_TAB.dash);
+
+  // N (nudge days) is an editable cell on this tab - read it back before rebuilding.
+  let nudge = MAIL_NUDGE_DEFAULT;
+  if (sh.getLastRow() >= 1){
+    const old = sh.getDataRange().getValues().find(r => mailNorm_(r[0]) === MAIL_DASH_LABELS.nudge);
+    const n = old ? parseInt(old[1], 10) : NaN;
+    if (n > 0) nudge = n;
+  }
+
+  const notes = [];
+  const lists = { "Needs nudge": [], "Bounced": [], "Unconfirmed looks_yes": [], "Name mismatches": [] };
+  let year = "", counts = null;
+
+  const pid = props.getProperty("PUBLIC_ID");
+  const invSheet = pid ? SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites) : null;
+  const conSheet = admin.getSheetByName(MAIL_TAB.contacts), logSheet = admin.getSheetByName(MAIL_TAB.log), repSheet = admin.getSheetByName(MAIL_TAB.replies);
+
+  if (conSheet) mailTable_(conSheet).rows.forEach(c => { if (mailNorm_(c.player) && /BOUNCED/.test(String(c.notes == null ? "" : c.notes))) lists["Bounced"].push(String(c.player).trim()); });
+  if (repSheet){
+    const seen = new Set();
+    mailTable_(repSheet).rows.forEach(r => {
+      const k = mailNorm_(r.player);
+      if (k && mailYes_(r.looks_yes) && !mailYes_(r.confirm) && !seen.has(k)){ seen.add(k); lists["Unconfirmed looks_yes"].push(String(r.player).trim()); }
+    });
+  }
+
+  if (!invSheet){
+    notes.push(pid ? "Public Invites tab not found - counts and name checks unavailable." : "PUBLIC_ID script property not set - counts and name checks unavailable.");
+  } else {
+    const inv = mailTable_(invSheet).rows;
+    year = mailCurrentYear_(inv);
+    const cur = inv.filter(r => (parseInt(r.year, 10) || 0) === year && mailNorm_(r.player));
+    const isOut = r => /^(out|declined)$/i.test(String(r.status == null ? "" : r.status).trim());
+    counts = {
+      invited: cur.filter(r => mailYes_(r.invited)).length,
+      responded: cur.filter(r => mailYes_(r.responded)).length,
+      committed: cur.filter(r => mailYes_(r.committed)).length,
+      out: cur.filter(isOut).length,
+    };
+    // last REAL invite send per player (test-mode rows are not invites)
+    const lastSent = new Map();
+    if (logSheet) mailTable_(logSheet).rows.filter(r => mailNorm_(r.what) === "invite").forEach(r => {
+      const d = mailDateOf_(r.date); if (!d) return;
+      const k = mailNorm_(r.player);
+      if (!lastSent.has(k) || d > lastSent.get(k)) lastSent.set(k, d);
+    });
+    const today = mailDateOf_(mailToday_());
+    cur.forEach(r => {
+      if (!mailYes_(r.invited) || mailYes_(r.responded) || mailYes_(r.committed) || isOut(r)) return;
+      const d = lastSent.get(mailNorm_(r.player)); if (!d) return;
+      if (Math.round((today - d) / 864e5) >= nudge) lists["Needs nudge"].push(String(r.player).trim());
+    });
+    const names = new Set(cur.map(r => mailNorm_(r.player)));
+    if (conSheet) mailTable_(conSheet).rows.forEach(c => { if (mailNorm_(c.player) && !names.has(mailNorm_(c.player))) lists["Name mismatches"].push(String(c.player)); });
+  }
+
+  // last scan health
+  const readme = admin.getSheetByName(MAIL_TAB.readme);
+  const stamp = readme ? String(readme.getRange(2, 2).getValue() == null ? "" : readme.getRange(2, 2).getValue()).trim() : "";
+  let status = "STALE - never scanned";
+  if (stamp){
+    let t = null;
+    try { t = Utilities.parseDate(stamp, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm"); } catch (e){ t = null; }
+    status = (!t || isNaN(t.getTime())) ? "STALE - unreadable scan time" : (Date.now() - t.getTime() > MAIL_STALE_MS ? "STALE - over 1 h old" : "ok");
+  }
+
+  const L = MAIL_DASH_LABELS;
+  const left = [
+    ["GFY Admin Dashboard", ""],
+    ["", ""],
+    ["season", counts ? year : ""],
+    ["invited", counts ? counts.invited : ""],
+    ["responded", counts ? counts.responded : ""],
+    ["committed", counts ? counts.committed : ""],
+    ["out", counts ? counts.out : ""],
+    ["", ""],
+    [L.nudge, nudge],
+    ["", ""],
+    [L.scan, stamp],
+    [L.status, status],
+    ...notes.map(n => ["note", n]),
+  ];
+  const height = Math.max(left.length, 2 + Math.max(...MAIL_DASH_LISTS.map(k => lists[k].length)));
+  const grid = [];
+  for (let r = 0; r < height; r++){
+    const row = new Array(MAIL_DASH_COL0 - 1 + MAIL_DASH_LISTS.length).fill("");
+    if (left[r]){ row[0] = left[r][0]; row[1] = left[r][1]; }
+    MAIL_DASH_LISTS.forEach((k, i) => {
+      row[MAIL_DASH_COL0 - 1 + i] = r === 1 ? k : (r >= 2 ? (lists[k][r - 2] || "") : "");
+    });
+    grid.push(row);
+  }
+  // Skip the write entirely when nothing changed (idempotent, no flicker).
+  const want = mailTrimGrid_(grid);
+  const have = sh.getLastRow() >= 1 ? mailTrimGrid_(sh.getDataRange().getValues()) : [];
+  if (JSON.stringify(want) === JSON.stringify(have)) return;
+  sh.clearContents();
+  sh.getRange(1, 1, grid.length, grid[0].length).setValues(grid);
+  sh.getRange(1, 1).setFontWeight("bold");
+  sh.getRange(2, MAIL_DASH_COL0, 1, MAIL_DASH_LISTS.length).setFontWeight("bold");
 }
