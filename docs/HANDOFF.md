@@ -6,6 +6,12 @@
 > and `BACKLOG.md`, then emit the doctrine loaded-heartbeat before acting
 > (`~/.claude/projects/-Users-riley/memory/DOCTRINE.md` §1 first; GFY has no company layer).
 
+## 2026-11-12 update — #33 invite automation is LIVE in TEST MODE (read before §0)
+main c812346. Live GFY Admin: mailer + RSVP web app deployed, consented, Polish + triggers run
+(1 scanReplies + 1 mailOnEdit), GFY_MAIL_TEST unset/1 = test mode. Live public polish run.
+Staging copies trashed. Riley-only before January: real Contacts, [FILL] in drafts, ALERT_TO,
+optional Info form_url, then GFY_MAIL_TEST=0. Detail: BACKLOG #33 last sentence. Scorer still UNARMED.
+
 ## §0 — paste this into a fresh session as its first message
 
 ```
