@@ -14,6 +14,7 @@
     "check-qr": "node tools/print/qr.test.mjs",
     "make-kit": "node tools/print/make-kit.mjs",
     "check-kit": "node tools/print/make-kit.test.mjs",
+    "check-publish": "node tools/check-publish.mjs",
     "check-endpoint": "node tools/check-endpoint.mjs",
     "check-armkit": "node tools/check-armkit.mjs",
     "drill-sweep": "node tools/drill-sweep.mjs",

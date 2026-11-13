@@ -92,5 +92,33 @@ const call = (w, expr) => vm.runInContext(expr, w.ctx);
   check("OF7: an RSVP request with an empty token still goes to the RSVP page (a bare ?t= is a mailer link, not a scorer probe)", rsvp2.kind === "html", rsvp2.kind);
 }
 
+// ---- the publish guard (tools/check-publish.mjs) - fixtures are trimmed pubhtml shapes ----
+const fx = f => readFileSync(path.join(ROOT, "fixtures", "pubhtml", f), "utf8");
+let CP = null, PT = null;
+try { CP = await import("../tools/check-publish.mjs"); PT = await import("../tools/private-tabs.mjs"); } catch (e) { check("CP0: tools/check-publish.mjs + tools/private-tabs.mjs load", false, String(e && e.message)); }
+if (CP && PT) {
+  const { readConfig } = await import("../tools/presend-check.mjs");
+  const { gids } = readConfig(readFileSync(path.join(ROOT, "config.js"), "utf8"));
+  const PUBLIC16 = ["START HERE", "Field", "Invites", "Rooms", "Announce", "Form Responses 1", "Info", "Course", "Scores", "Schedule", "Pairings", "Calcutta", "Payout", "Ledger", "Champions", "Shame"];
+  const sorted = a => a.slice().sort();
+  check("CP1: ONE closed list of private tabs (Contacts, Replies, RSVP, SendLog, Dashboard, Admin READ ME)", JSON.stringify(sorted(PT.PRIVATE_TABS)) === JSON.stringify(sorted(["Contacts", "Replies", "RSVP", "SendLog", "Dashboard", "Admin READ ME"])), JSON.stringify(PT.PRIVATE_TABS));
+  check("CP2: parser reads the items.push form (all 16 public tabs, names unescaped)", JSON.stringify(sorted(CP.parsePublishedTabs(fx("items-public.html")).names)) === JSON.stringify(sorted(PUBLIC16)), JSON.stringify(CP.parsePublishedTabs(fx("items-public.html"))));
+  check("CP3: parser reads the sheet-button- menu form", JSON.stringify(sorted(CP.parsePublishedTabs(fx("buttons-public.html")).names)) === JSON.stringify(sorted(PUBLIC16)));
+  check("CP4: parser reads the single-sheet form", JSON.stringify(CP.parsePublishedTabs(fx("single-public.html")).names) === JSON.stringify(["Field"]));
+  check("CP5: unparseable page -> no names (the caller must treat it as 'cannot verify', never as clean)", CP.parsePublishedTabs(fx("garbage.html")).names.length === 0);
+  const v = f => CP.publishVerdict({ html: fx(f), gids });
+  check("CP6: only public tabs published -> OK, nothing private, nothing unknown", v("items-public.html").level === "OK" && v("buttons-public.html").level === "OK" && v("single-public.html").level === "OK", JSON.stringify([v("items-public.html"), v("single-public.html")]));
+  const lk = v("items-leak.html"), lb = v("buttons-leak.html"), ls = v("single-leak.html");
+  check("CP7: a private tab published -> FAIL naming it (items form, menu form, single-sheet form)",
+    lk.level === "FAIL" && JSON.stringify(sorted(lk.private)) === JSON.stringify(["Admin READ ME", "Contacts"]) && lb.level === "FAIL" && JSON.stringify(sorted(lb.private)) === JSON.stringify(["Dashboard", "RSVP"]) && ls.level === "FAIL" && ls.private[0] === "Contacts", JSON.stringify([lk, lb, ls]));
+  const un = v("items-unknown.html");
+  check("CP8: a tab that is neither private nor in the site's public set -> WARN (exit stays 0), named", un.level === "WARN" && un.unknown[0] === "Scratch work" && un.private.length === 0, JSON.stringify(un));
+  check("CP9: an unparseable page -> UNVERIFIED (never OK)", v("garbage.html").level === "UNVERIFIED");
+  const caseVar = CP.publishVerdict({ html: fx("items-public.html").replace('name: "Field"', 'name: "  sendlog "'), gids });
+  check("CP10: private-tab matching ignores case and stray spaces ('  sendlog ' is SendLog)", caseVar.level === "FAIL" && caseVar.private.length === 1, JSON.stringify(caseVar));
+  check("CP11: the expected public set is the site's own: every config.js GID tab + START HERE + Form Responses 1", PUBLIC16.every(n => CP.expectedPublic(gids).has(CP.normTab(n))) && !PT.PRIVATE_TABS.some(n => CP.expectedPublic(gids).has(CP.normTab(n))));
+  check("CP12: no private tab name collides with a tab the site reads (config.js GID keys)", !Object.keys(gids).some(k => PT.PRIVATE_TABS.some(p => CP.normTab(p) === CP.normTab(k.replace(/_/g, " ")))));
+}
+
 console.log(`\nONEFILE ${pass}/${total}`);
 process.exit(pass === total ? 0 : 1);
