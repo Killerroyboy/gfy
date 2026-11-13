@@ -24,12 +24,12 @@ function mkSheet(name, rows, o = {}) {
   sh.getMaxRows = () => Math.max(sh.maxRows, sh.rows.length);
   sh.getMaxColumns = () => Math.max(26, sh.getLastColumn());
   sh.insertColumnsAfter = () => {};
-  sh.setFrozenRows = () => {}; sh.getProtections = () => []; sh.setColumnWidth = (c, w) => { sh.widths[c] = w; };
+  sh.frozenCalls = 0; sh.protectCalls = 0; sh.setFrozenRows = () => { sh.frozenCalls++; }; sh.getProtections = () => []; sh.setColumnWidth = (c, w) => { sh.widths[c] = w; };
   sh.clear = () => { sh.rows = []; return sh; };
   sh.getDataRange = () => ({ getValues: () => { const w = sh.getLastColumn(); return sh.rows.map(r => { const x = r.slice(); while (x.length < w) x.push(""); return x; }); } });
   sh.setConditionalFormatRules = r => { sh.rules = r; };
   sh.getConditionalFormatRules = () => sh.rules || [];
-  sh.getRange = (r, c, nr = 1, nc = 1) => typeof r === "string" ? lenient({}) : lenient({
+  sh.getRange = (r, c, nr = 1, nc = 1) => typeof r === "string" ? lenient({ protect: () => { sh.protectCalls++; return lenient({}); } }) : lenient({
     getValues: () => { const out = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push((sh.rows[r - 1 + i] || [])[c - 1 + j] ?? ""); out.push(row); } return out; },
     setValue: v => { sh.writes.push({ r, c, v }); ensure(r, c); sh.rows[r - 1][c - 1] = v; },
     setValues: vs => { vs.forEach((row, i) => row.forEach((v, j) => { sh.writes.push({ r: r + i, c: c + j, v }); ensure(r + i, c + j); sh.rows[r - 1 + i][c - 1 + j] = v; })); },
@@ -119,6 +119,43 @@ const cbRanges = (sh, col) => sh.validations.filter(v => v.kind === "checkbox" &
   check("PT12: START HERE column A wraps text and is widened beyond the old 340px", full.wraps.some(w => w.c === 1 && w.w === true && w.nr >= full.rows.length - 1) && full.widths[1] > 340, JSON.stringify([full.wraps, full.widths]));
   const written = full.writes.map(w => w.v).concat(full.rows.flat());
   check("PT13: nothing written to START HERE carries an '@' (published tab)", !written.some(v => /@/.test(String(v))));
+}
+
+{
+  // WO-ONE-FILE item 3: private tabs (Contacts, Replies, RSVP, SendLog, Dashboard, Admin READ ME) live in the same
+  // spreadsheet. Public polish leaves their data/format alone and keeps them AFTER every public tab.
+  const priv = () => [
+    mkSheet("Contacts", [["player", "email", "email_alt", "phone", "do_not_invite", "reason", "notes"], ["Alice Able", "alice@example.com", "", "", "FALSE", "", ""]]),
+    mkSheet("Replies", [["date", "player", "from", "snippet", "looks_yes", "confirm", "msg_id"], ["2027-01-02", "Alice Able", "A <a@example.com>", "yes", "TRUE", "FALSE", "m1"]]),
+    mkSheet("RSVP", [["year", "player", "token", "answer", "answered_at", "history", "test"]]),
+    mkSheet("SendLog", [["date", "player", "address_used", "what", "note", "thread_id"]]),
+    mkSheet("Dashboard", [["GFY Admin Dashboard"]]),
+    mkSheet("Admin READ ME", [["warning", "last_reply_scan"], ["be careful", ""]]),
+  ];
+  const pubs = () => [
+    junkTab("Invites", ["year", "player", "invited", "responded", "status", "committed", "invited_by"], [[2027, "A One", true, false, "", false, ""]], [2, 3, 5]),
+    mkSheet("Field", [["year", "player", "team", "deposit", "handicap"], [2027, "A One", "", true, 5]]),
+    mkSheet("Info", [["key", "value"], ["first_tee", "2099-06-01"]]),
+    mkSheet("Rooms", [["room", "player"]]),
+    mkSheet("START HERE", []),
+  ];
+  const snapPriv = ss => JSON.stringify(ss.sheets.filter(x => PRIV.includes(x.name)).sort((a, b) => a.name < b.name ? -1 : 1).map(x => [x.name, x.rows, x.validations, x.rules, x.wraps, x.writes, x.frozenCalls, x.protectCalls]));
+  const PRIV = ["Contacts", "Replies", "RSVP", "SendLog", "Dashboard", "Admin READ ME"];
+  const ss = mkSS([...priv().slice(0, 3), ...pubs(), ...priv().slice(3)]);   // private tabs scattered among the public ones
+  const before = snapPriv(ss);
+  let err = ""; try { loadPolish(ss).polish(); } catch (e) { err = String(e); }
+  check("PC1: public polish() leaves every private tab alone - no write, no checkbox/validation, no rule, no frozen row, no header protection", !err && snapPriv(ss) === before, err || snapPriv(ss).slice(0, 300));
+  const names = ss.sheets.map(x => x.name);
+  const lastPublic = Math.max(...names.map((n, i) => PRIV.includes(n) ? -1 : i)), firstPriv = Math.min(...names.map((n, i) => PRIV.includes(n) ? i : 99));
+  check("PC2: polish orders the private tabs AFTER every public tab (START HERE, Field, Invites, Rooms first)", !err && firstPriv > lastPublic && names.slice(0, 4).join() === "START HERE,Field,Invites,Rooms", names.join());
+  const orderAfter1 = names.join(), snapAll = JSON.stringify(ss.sheets.map(x => [x.name, x.rows, x.validations, x.writes.length]));
+  const moves = []; const mv = ss.moveActiveSheet; ss.moveActiveSheet = i => { moves.push(i); mv(i); };
+  loadPolish(ss).polish();
+  check("PC3: a second polish() changes nothing: same tab order, same data, no tab moved, private tabs still untouched", ss.sheets.map(x => x.name).join() === orderAfter1 && moves.length === 0 && snapPriv(ss) === before && JSON.stringify(ss.sheets.map(x => [x.name, x.rows, x.validations])) === JSON.stringify(JSON.parse(snapAll).map(([n, r, v]) => [n, r, v])), moves.join());
+  const inEvent = mkSS([...priv(), mkSheet("Info", [["key", "value"], ["first_tee", new Date().toISOString().slice(0, 10)]]), mkSheet("Scores", [["year"]]), mkSheet("Field", [["year", "player"]]), mkSheet("Pairings", [["year"]]), mkSheet("START HERE", [])]);
+  loadPolish(inEvent).polish();
+  const en = inEvent.sheets.map(x => x.name), lp = Math.max(...en.map((n, i) => PRIV.includes(n) ? -1 : i)), fp = Math.min(...en.map((n, i) => PRIV.includes(n) ? i : 99));
+  check("PC4: ... also in the event-week order (START HERE, Scores, Field, Pairings): private tabs still come last", fp > lp && en.slice(0, 4).join() === "START HERE,Scores,Field,Pairings", en.join());
 }
 
 console.log(`\nPOLISH ${pass}/${total}`);

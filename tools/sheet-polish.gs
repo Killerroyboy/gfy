@@ -15,11 +15,18 @@ const COURSE_DATA = [ [1,4,319],[2,5,469],[3,4,407],[4,3,124],[5,4,357],[6,4,348
   [10,4,286],[11,4,354],[12,4,344],[13,3,148],[14,4,406],[15,5,433],[16,4,352],[17,3,151],[18,5,533] ];
 const SAMPLE_COURSE = [ [1,4,385],[2,4,410],[3,3,175] ];
 const TAG = "gfy-polish";
+// ONE-FILE (WO-ONE-FILE): the private mailer tabs share this spreadsheet. They hold addresses and reply text and must
+// NEVER be published, so this (PUBLIC) polish skips them entirely - no checkboxes, no protection, no format, no data
+// writes - and keeps them AFTER every public tab, in this order. LOCKSTEP with tools/private-tabs.mjs and MAIL_PRIVATE_TABS
+// in gfy-mailer.gs (test/onefile.test.mjs fails if they differ). adminPolish (gfy-mailer.gs) owns them.
+const GFY_PRIVATE_TABS = ["Dashboard", "Contacts", "Replies", "RSVP", "SendLog", "Admin READ ME"];
+const isPrivateTab_ = name => GFY_PRIVATE_TABS.some(p => p.toLowerCase() === String(name == null ? "" : name).trim().replace(/\s+/g, " ").toLowerCase());
 
 function polish(){
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ss.getSheets().forEach(sh => {
     const name = sh.getName();
+    if (isPrivateTab_(name)) return;                    // ONE-FILE: the mailer's private tabs are adminPolish's, never ours
     if (name === "Invites") ensureInviteHeaders_(sh);   // before checkboxes: the new `committed` column gets its validation this run
     protectHeader_(sh);
     applyCheckboxes_(sh, CHECKBOX_COLS[name] || []);
@@ -347,7 +354,11 @@ function inEventWindow_(ss){
 }
 function orderTabs_(ss, eventWindow){
   const want = eventWindow ? ["START HERE","Scores","Field","Pairings"] : ["START HERE","Field","Invites","Rooms"];
-  want.forEach((n, i) => { const s = ss.getSheetByName(n); if (s){ ss.setActiveSheet(s); ss.moveActiveSheet(i + 1); } });
+  const at = n => ss.getSheets().map(x => x.getName()).indexOf(n);
+  want.forEach((n, i) => { const s = ss.getSheetByName(n); if (s && at(n) !== i){ ss.setActiveSheet(s); ss.moveActiveSheet(i + 1); } });     // only if out of place: a second run moves nothing
+  // ONE-FILE: the private tabs go LAST, in GFY_PRIVATE_TABS order. Placed last-to-first so a later move never shifts one already placed.
+  const have = GFY_PRIVATE_TABS.filter(n => ss.getSheetByName(n)), total = ss.getSheets().length;
+  for (let k = have.length - 1; k >= 0; k--){ const want0 = total - have.length + k; if (at(have[k]) !== want0){ ss.setActiveSheet(ss.getSheetByName(have[k])); ss.moveActiveSheet(want0 + 1); } }
   const home = ss.getSheetByName("START HERE"); if (home) ss.setActiveSheet(home);   // BACKLOG #17e: land on START HERE, not the last tab moved
 }
 function infoHasScoring_(ss){

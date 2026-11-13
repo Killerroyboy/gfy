@@ -1953,6 +1953,28 @@ const pubBlocked = (w, re) => w.sent.length === 0 && w.alerts.some(a => re.test(
   check("PG16: every tab MAIL_SCHEMA / MAIL_ORDER manages is on the private list (and Invites, the one public tab it writes, is not)", Object.keys(w.M.MAIL_SCHEMA).every(n => PT.PRIVATE_TABS.includes(n)) && !PT.PRIVATE_TABS.includes("Invites"));
 }
 
+
+// ---------- WO-ONE-FILE item 3: adminPolish beside the public tabs ----------
+{
+  const w = world({ oneFile: true });
+  const PUBN = ["START HERE", "Field", "Invites", "Info"];
+  const pubSnap = () => JSON.stringify(PUBN.map(n => { const x = w.sheet(n); return [n, x.rows, x.validations, x.rules, x.frozen, x.tabColor, x.protections.length, x.writes.length, x.backgrounds, x.notes]; }));
+  const before = pubSnap();
+  const r = run(w, "adminPolish");
+  const names = w.admin.sheets.map(x => x.name);
+  const tail = ["Dashboard", "Contacts", "Replies", "RSVP", "SendLog", "Admin READ ME"];
+  check("AO1: adminPolish in the Tournament sheet puts the private tabs LAST, in order, after every public tab, and creates the missing ones", r.ok && names.slice(-6).join() === tail.join() && names.slice(0, 4).join() === PUBN.join(), r.e || names.join());
+  check("AO2: ... and does not touch a public tab (no write, validation, rule, frozen row, colour, protection, note)", pubSnap() === before, "");
+  check("AO3: every private tab gets a tab colour (Admin READ ME red) and exactly one warning-only header protection; public tabs get none",
+    tail.every(n => !!w.sheet(n).tabColor) && w.sheet("Admin READ ME").tabColor === "#cc0000" && tail.every(n => w.sheet(n).protections.length === 1 && w.sheet(n).protections[0].warn === true) && PUBN.every(n => w.sheet(n).protections.length === 0 && !w.sheet(n).tabColor), tail.map(n => n + ":" + w.sheet(n).protections.length).join());
+  const snap2 = JSON.stringify({ o: w.admin.sheets.map(x => [x.name, x.rows, x.validations, x.rules, x.frozen, x.tabColor, x.protections.map(p => [p.desc, p.warn]), x.backgrounds]) });
+  const moves = []; const mv = w.admin.moveActiveSheet; w.admin.moveActiveSheet = i => { moves.push(i); mv(i); };
+  const nWrites = w.admin.sheets.reduce((a, x) => a + x.writes.length, 0);
+  const r2 = run(w, "adminPolish");
+  const snap3 = JSON.stringify({ o: w.admin.sheets.map(x => [x.name, x.rows, x.validations, x.rules, x.frozen, x.tabColor, x.protections.map(p => [p.desc, p.warn]), x.backgrounds]) });
+  check("AO4: a second adminPolish changes nothing (no tab moved, no cell written, same validations / rules / protections)", r2.ok && snap3 === snap2 && moves.length === 0 && w.admin.sheets.reduce((a, x) => a + x.writes.length, 0) === nWrites, r2.e || moves.join());
+}
+
 // ---------- no-'@' leak test ----------
 {
   const bad = allPublicWrites.filter(e => /@/.test(String(e.v)));

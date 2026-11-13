@@ -120,5 +120,14 @@ if (CP && PT) {
   check("CP12: no private tab name collides with a tab the site reads (config.js GID keys)", !Object.keys(gids).some(k => PT.PRIVATE_TABS.some(p => CP.normTab(p) === CP.normTab(k.replace(/_/g, " ")))));
 }
 
+// ---- LOCKSTEP: the one private-tab list ----
+if (PT) {
+  const ctx = vm.createContext({});
+  for (const n of claspOrder) vm.runInContext(src(n), ctx, { filename: n });
+  const get = e => JSON.parse(JSON.stringify(vm.runInContext(e, ctx)));
+  check("OF8: GFY_PRIVATE_TABS (sheet-polish.gs) == MAIL_PRIVATE_TABS (gfy-mailer.gs) == PRIVATE_TABS (tools/private-tabs.mjs), same order", JSON.stringify(get("GFY_PRIVATE_TABS")) === JSON.stringify(PT.PRIVATE_TABS) && JSON.stringify(get("MAIL_PRIVATE_TABS")) === JSON.stringify(PT.PRIVATE_TABS), JSON.stringify([get("GFY_PRIVATE_TABS"), get("MAIL_PRIVATE_TABS"), PT.PRIVATE_TABS]));
+  check("OF9: MAIL_ORDER (the tab order adminPolish applies) is the private list, and every tab MAIL_SCHEMA creates is on it", JSON.stringify(get("MAIL_ORDER")) === JSON.stringify(PT.PRIVATE_TABS) && Object.keys(get("MAIL_SCHEMA")).every(n => PT.PRIVATE_TABS.includes(n)));
+}
+
 console.log(`\nONEFILE ${pass}/${total}`);
 process.exit(pass === total ? 0 : 1);

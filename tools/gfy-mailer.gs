@@ -69,7 +69,7 @@ const MAIL_CHECKBOX = { "Contacts": ["do_not_invite"], "Replies": ["looks_yes", 
 // The tabs that must NEVER be published to the web (addresses, reply text, RSVP tokens). In the ONE-FILE layout they sit
 // in the same spreadsheet as the published tournament tabs. LOCKSTEP with tools/private-tabs.mjs and GFY_PRIVATE_TABS in
 // sheet-polish.gs (test/onefile.test.mjs fails if they differ). The legacy Admin file's "READ ME" is renamed on polish.
-const MAIL_PRIVATE_TABS = ["Contacts", "Replies", "RSVP", "SendLog", "Dashboard", "Admin READ ME"];
+const MAIL_PRIVATE_TABS = ["Dashboard", "Contacts", "Replies", "RSVP", "SendLog", "Admin READ ME"];   // == MAIL_ORDER; in the one-file project they sit LAST
 const MAIL_LEGACY_README = "READ ME";
 const MAIL_POLISH_TAG = "gfy-admin-polish";
 const MAIL_NUDGE_DEFAULT = 7;
@@ -1289,8 +1289,16 @@ function mailContactsRules_(sh){
   sh.setConditionalFormatRules(keep.concat(rules));
 }
 
-function mailOrderTabs_(admin){
-  MAIL_ORDER.forEach((n, i) => { const s = admin.getSheetByName(n); if (s){ admin.setActiveSheet(s); admin.moveActiveSheet(i + 1); } });
+function mailOrderTabs_(admin, oneFile){
+  const at = n => admin.getSheets().map(x => x.getName()).indexOf(n);
+  if (oneFile){
+    // ONE-FILE: the tournament's public tabs come first and are never moved; ours go LAST, in MAIL_ORDER. Placed
+    // last-to-first so a later move never shifts one already placed; a tab already in place is not moved (2nd run = no change).
+    const have = MAIL_ORDER.filter(n => admin.getSheetByName(n)), total = admin.getSheets().length;
+    for (let k = have.length - 1; k >= 0; k--){ const want = total - have.length + k; if (at(have[k]) !== want){ admin.setActiveSheet(admin.getSheetByName(have[k])); admin.moveActiveSheet(want + 1); } }
+  } else {
+    MAIL_ORDER.forEach((n, i) => { const s = admin.getSheetByName(n); if (s){ admin.setActiveSheet(s); admin.moveActiveSheet(i + 1); } });
+  }
   const home = admin.getSheetByName(MAIL_TAB.dash); if (home) admin.setActiveSheet(home);   // end on Dashboard
 }
 
@@ -1319,7 +1327,7 @@ function mailAdminPolish_(){
   const dash = admin.getSheetByName(MAIL_TAB.dash);
   mailProtectHeader_(dash);
   dash.setTabColor(MAIL_TAB_COLORS.Dashboard);
-  mailOrderTabs_(admin);
+  mailOrderTabs_(admin, mailOneFile_(props, admin));
   // Tabs this run just created are published at once when the sheet is published as "Entire document": the Dashboard
   // rebuild above re-checked pubhtml AFTER they existed - say so loudly.
   const after = String(props.getProperty("PUB_STATUS") || "");
