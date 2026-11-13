@@ -216,7 +216,7 @@ function world(o = {}) {
   const clock = { skew: 0 };
   class FakeDate extends Date { constructor(...a) { if (a.length) super(...a); else super(Date.now() + clock.skew); } static now() { return Date.now() + clock.skew; } static [Symbol.hasInstance](x) { return x instanceof Date; } }
   const env = { Date: FakeDate, SpreadsheetApp, GmailApp, MailApp, PropertiesService, LockService, ScriptApp, Session, Utilities, Logger, HtmlService, UrlFetchApp };
-  const names = ["onOpen", "sendInvites", "scanReplies", "installMailTriggers", "mailPublicWrite_", "adminPolish", "mailOnEdit", "mailDashboard_", "MAIL_SCHEMA", "sendNudges", "doGet", "recordRsvp", "mailAppend_", "mailWithLock_", "setNudgeDays", "clearRehearsalAnswers"];
+  const names = ["onOpen", "sendInvites", "scanReplies", "installMailTriggers", "mailPublicWrite_", "adminPolish", "mailOnEdit", "mailDashboard_", "MAIL_SCHEMA", "sendNudges", "doGet", "recordRsvp", "mailAppend_", "mailWithLock_", "setNudgeDays", "clearRehearsalAnswers", "mailPubTabNames_", "MAIL_PRIVATE_TABS", "migrateFromAdmin", "mailPublishCheck_"];
   let M;
   try { M = new Function(...Object.keys(env), SRC + "\nreturn {" + names.map(n => `${n}: typeof ${n}!=='undefined'?${n}:undefined`).join(",") + "};")(...Object.values(env)); }
   catch (e) { M = { _err: String(e) }; }
@@ -238,7 +238,7 @@ const noteWrites = w => { pubWrites(w).forEach(e => allPublicWrites.push(e)); };
   check("MA1: onOpen adds a 'GFY Mail' menu with 'Send invites…' -> sendInvites", r.ok && !!m && m.items.some(([l, f]) => l === "Send invites…" && f === "sendInvites"), r.e || JSON.stringify(w.menus));
 }
 {
-  const w = world({ noPublicId: true });
+  const w = world({ noPublicId: true, props: { PUB_ID: PUBTOKEN } });   // no PUBLIC_ID = the one-file layout: this file must hold the Invites tab (it does not here)
   const r = run(w, "sendInvites");
   check("MA2: no PUBLIC_ID script property -> alert, public sheet never opened, nothing sent; and the source hardcodes no sheet id",
     r.ok && w.sent.length === 0 && w.opened.length === 0 && w.alerts.some(a => /PUBLIC_ID/.test(a.msg)) && !/["'][A-Za-z0-9_-]{30,}["']/.test(SRC.replace(/\/\/[^\n]*/g, "")), r.e || JSON.stringify(w.alerts));
@@ -1894,6 +1894,63 @@ const oneFileSend = (extra = {}) => { const w = world({ oneFile: true, props: { 
   const w2 = world({ oneFile: true, adminSheets: log => [mkSheet("READ ME", [["not ours"], ["leave me"]], log)] });
   run(w2, "adminPolish");
   check("OF18: one-file: a tab named 'READ ME' in the Tournament sheet is NOT ours and is never renamed; 'Admin READ ME' is created beside it", !!w2.sheet("READ ME") && w2.sheet("READ ME").rows[1][0] === "leave me" && !!w2.sheet("Admin READ ME"));
+}
+
+
+// ---------- WO-ONE-FILE item 4b/4c: publish guard inside Apps Script ----------
+const LEAK_HTML = pubFx("items-leak.html");
+const pubBlocked = (w, re) => w.sent.length === 0 && w.alerts.some(a => re.test(a.msg)) && w.sheet("SendLog").rows.length === 1;
+{
+  const w = world({ oneFile: true, props: { GFY_MAIL_TEST: "0" }, pubhtml: LEAK_HTML }); const r = run(w, "sendInvites");
+  check("PG1: a private tab is published -> Send invites BLOCKED naming it, nothing sent, nothing logged", r.ok && pubBlocked(w, /PRIVATE TAB PUBLISHED:[^\n]*Contacts[^\n]*Admin READ ME|PRIVATE TAB PUBLISHED:[^\n]*Admin READ ME[^\n]*Contacts/), r.e || JSON.stringify(w.alerts));
+  const t = world({ oneFile: true, pubhtml: LEAK_HTML }); run(t, "sendInvites");
+  check("PG1b: the guard applies in TEST mode too (a rehearsal must not run beside a published email tab)", t.sent.length === 0 && t.alerts.some(a => /PRIVATE TAB PUBLISHED/.test(a.msg)));
+  const f = world({ oneFile: true, props: { GFY_MAIL_TEST: "0" }, pubhtml: { throws: "dns boom" } }); const rf = run(f, "sendInvites");
+  check("PG2: pubhtml fetch throws -> Send BLOCKED: 'can't confirm the email tabs are private'", rf.ok && pubBlocked(f, /can't confirm the email tabs are private/), rf.e || JSON.stringify(f.alerts));
+  const h = world({ oneFile: true, props: { GFY_MAIL_TEST: "0" }, pubhtml: { status: 500, body: "oops" } }); run(h, "sendInvites");
+  check("PG3: HTTP 500, or a page with no readable tab list -> BLOCKED the same way (unparseable is never 'clean')", pubBlocked(h, /can't confirm/) && (() => { const g = world({ oneFile: true, props: { GFY_MAIL_TEST: "0" }, pubhtml: pubFx("garbage.html") }); run(g, "sendInvites"); return pubBlocked(g, /can't confirm/); })());
+  const n = world({ oneFile: true, props: { GFY_MAIL_TEST: "0" }, noPubId: true }); run(n, "sendInvites");
+  check("PG4: PUB_ID script property unset -> BLOCKED ('can't confirm'), and nothing was fetched", pubBlocked(n, /can't confirm[^\n]*|PUB_ID/) && n.fetched.length === 0, JSON.stringify(n.alerts));
+  const ok = world({ oneFile: true, props: { GFY_MAIL_TEST: "0" } }); const ro = run(ok, "sendInvites");
+  check("PG5: only public tabs published -> the send goes ahead; the URL is built from the PUB_ID property (muteHttpExceptions on); the source hardcodes no 2PACX token",
+    ro.ok && ok.sent.length === 2 && ok.fetched.length >= 1 && ok.fetched[0].url === `https://docs.google.com/spreadsheets/d/e/${PUBTOKEN}/pubhtml` && !!(ok.fetched[0].opts && ok.fetched[0].opts.muteHttpExceptions) && !/2PACX-[A-Za-z0-9_-]{10,}/.test(SRC), ro.e || JSON.stringify(ok.fetched));
+  const tw = world({ props: { GFY_MAIL_TEST: "0" }, pubhtml: LEAK_HTML }); run(tw, "sendInvites");
+  check("PG6: two-file layout (private tabs are in a different, unpublished file): no pubhtml fetch, the send is not affected", tw.fetched.length === 0 && tw.sent.length === 2);
+}
+{
+  const w2 = world({ oneFile: true, props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT, NUDGE_DRAFT], contacts: NU_CONTACTS, invites: NU_INVITES, pubhtml: LEAK_HTML, answers: ["YES"] });
+  const r = run(w2, "sendNudges");
+  check("PG7: Send nudges is BLOCKED by a published private tab too", r.ok && w2.sent.length === 0 && w2.alerts.some(a => /PRIVATE TAB PUBLISHED[^\n]*Contacts/.test(a.msg)), r.e || JSON.stringify(w2.alerts));
+  const w3 = world({ oneFile: true, props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT, NUDGE_DRAFT], contacts: NU_CONTACTS, invites: NU_INVITES, pubhtml: { throws: "net down" } });
+  run(w3, "sendNudges");
+  check("PG7b: ... and by an unreadable pubhtml ('can't confirm')", w3.sent.length === 0 && w3.alerts.some(a => /can't confirm the email tabs are private/.test(a.msg)));
+}
+{
+  const before = world({ oneFile: true, pubhtml: LEAK_HTML }); const snap0 = JSON.stringify(before.admin.sheets.map(x => [x.name, x.rows]));
+  const r = run(before, "adminPolish");
+  check("PG8: private tab published -> adminPolish BLOCKED: names it, changes nothing (no tab created, no cell written)", before.alerts.some(a => /PRIVATE TAB PUBLISHED[^\n]*Contacts/.test(a.msg)) && JSON.stringify(before.admin.sheets.map(x => [x.name, x.rows])) === snap0 && before.admin.sheets.every(x => x.writes.length === 0), r.e || JSON.stringify(before.alerts));
+  const f = world({ oneFile: true, pubhtml: { throws: "boom" } }); const rf = run(f, "adminPolish");
+  check("PG9: pubhtml unreadable -> adminPolish only WARNS and still polishes (the Dashboard line says the check could not run)", rf.ok && !!f.sheet("Dashboard") && f.alerts.some(a => /can't confirm/.test(a.msg)) && /publish check[^\]]*(UNKNOWN|can't confirm)/i.test(dashText(f)), rf.e || dashText(f));
+}
+{
+  const ok = world({ oneFile: true }); run(ok, "adminPolish");
+  const lk = world({ oneFile: true, pubhtml: LEAK_HTML }); lk.M.mailDashboard_(lk.admin, { getProperty: k => (k in lk.props ? lk.props[k] : null), setProperty: (k, v) => { lk.props[k] = String(v); }, deleteProperty: k => { delete lk.props[k]; } }, true);
+  const two = world({}); run(two, "adminPolish");
+  check("PG10: Dashboard line 'publish check': OK — private tabs not published", dashVals(ok)["publish check"] === "OK — private tabs not published", JSON.stringify(dashVals(ok)));
+  check("PG11: ... 'PRIVATE TAB PUBLISHED: <names>' when a private tab is published", /^PRIVATE TAB PUBLISHED: (Contacts, Admin READ ME|Admin READ ME, Contacts)$/.test(String(dashVals(lk)["publish check"])), JSON.stringify(dashVals(lk)));
+  check("PG12: two-file layout has no 'publish check' line (nothing to check) and fetches nothing", !("publish check" in dashVals(two)) && two.fetched.length === 0);
+  const rs = world({ oneFile: true, props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP }, drafts: [RSVP_DRAFT] });
+  run(rs, "sendInvites"); const n0 = rs.fetched.length; const tk = String(rs.sheet("RSVP").rows[1][2]);
+  rs.M.recordRsvp(tk, "IN");
+  check("PG13: an RSVP answer never triggers a pubhtml fetch (the web app reuses the cached status)", rs.fetched.length === n0);
+}
+{
+  const CP = await import("../tools/check-publish.mjs"), PT = await import("../tools/private-tabs.mjs");
+  const w = world({});
+  const fixtures = ["items-public.html", "items-leak.html", "items-unknown.html", "buttons-public.html", "buttons-leak.html", "single-public.html", "single-leak.html", "garbage.html"];
+  check("PG14: LOCKSTEP - the .gs tab-list parser returns exactly what tools/check-publish.mjs returns, on every fixture", w.M.mailPubTabNames_ && fixtures.every(f => JSON.stringify(w.M.mailPubTabNames_(pubFx(f))) === JSON.stringify(CP.parsePublishedTabs(pubFx(f)).names)), fixtures.map(f => w.M.mailPubTabNames_ ? JSON.stringify(w.M.mailPubTabNames_(pubFx(f))) : "none").join(" | "));
+  check("PG15: LOCKSTEP - MAIL_PRIVATE_TABS equals tools/private-tabs.mjs", JSON.stringify(w.M.MAIL_PRIVATE_TABS) === JSON.stringify(PT.PRIVATE_TABS), JSON.stringify(w.M.MAIL_PRIVATE_TABS));
+  check("PG16: every tab MAIL_SCHEMA / MAIL_ORDER manages is on the private list (and Invites, the one public tab it writes, is not)", Object.keys(w.M.MAIL_SCHEMA).every(n => PT.PRIVATE_TABS.includes(n)) && !PT.PRIVATE_TABS.includes("Invites"));
 }
 
 // ---------- no-'@' leak test ----------

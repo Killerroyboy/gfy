@@ -430,6 +430,56 @@ function mailSendOpts_(m){
   return o;
 }
 
+// ---- publish guard (WO-ONE-FILE): the private tabs share a spreadsheet with PUBLISHED tabs ------------------
+// Google publishes "Entire document" by default, so a private tab that is listed on the published page is on the web.
+// Before Send invites / Send nudges / adminPolish (one-file layout only) the published page (pubhtml) is fetched and
+// read. The id comes from the PUB_ID Script Property (the 2PACX-... token from config.js; never hardcoded here).
+// A private tab listed => BLOCK. Can't read it => BLOCK sends ("can't confirm"), only WARN for polish.
+// LOCKSTEP: mailPubTabNames_ == parsePublishedTabs in tools/check-publish.mjs (test/mailer.test.mjs PG14).
+function mailPubTabNames_(html){
+  const text = String(html == null ? "" : html), names = [];
+  const add = n => { const t = String(n).trim(); if (t && !names.some(x => mailNorm_(x) === mailNorm_(t))) names.push(t); };
+  const unesc = x => String(x).replace(/\\x([0-9a-f]{2})/gi, (m, h) => String.fromCharCode(parseInt(h, 16))).replace(/\\u([0-9a-f]{4})/gi, (m, h) => String.fromCharCode(parseInt(h, 16))).replace(/\\(.)/g, "$1");
+  const unent = x => String(x).replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  const re1 = /items\.push\(\{\s*name:\s*"((?:[^"\\]|\\.)*)"/g, re2 = /<li\b[^>]*\bid="sheet-button-[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
+  let m;
+  while ((m = re1.exec(text))) add(unesc(m[1]));
+  while ((m = re2.exec(text))) add(unent(m[1].replace(/<[^>]*>/g, "")));
+  return names;
+}
+// { level: "NA" | "OK" | "FAIL" | "UNVERIFIED", private: [names], message }. NA = two-file layout (the private tabs are in
+// a different file that is never published): nothing to check, nothing fetched.
+function mailPublishCheck_(props, admin){
+  if (!mailOneFile_(props, admin)) return { level: "NA", private: [], message: "" };
+  const unver = message => ({ level: "UNVERIFIED", private: [], message });
+  const pub = String(props.getProperty("PUB_ID") == null ? "" : props.getProperty("PUB_ID")).trim();
+  if (!pub) return unver("the PUB_ID script property is not set");
+  if (!/^2PACX-[A-Za-z0-9_-]+$/.test(pub)) return unver("the PUB_ID script property is not a published-sheet id (it starts 2PACX-)");
+  let html;
+  try {
+    const res = UrlFetchApp.fetch("https://docs.google.com/spreadsheets/d/e/" + pub + "/pubhtml", { muteHttpExceptions: true, followRedirects: true });
+    const code = res.getResponseCode();
+    if (code !== 200) return unver("the published page answered HTTP " + code);
+    html = res.getContentText();
+  } catch (e){ return unver("could not fetch the published page: " + (e && e.message || e)); }
+  const names = mailPubTabNames_(html);
+  if (!names.length) return unver("the published page lists no tabs I can read");
+  const priv = new Set(MAIL_PRIVATE_TABS.map(mailNorm_));
+  const bad = names.filter(n => priv.has(mailNorm_(n)));
+  return bad.length ? { level: "FAIL", private: bad, message: "PRIVATE TAB PUBLISHED: " + bad.join(", ") } : { level: "OK", private: [], message: "OK \u2014 private tabs not published" };
+}
+// The text of a BLOCK, or "" when the check passed / does not apply. `lenient` (polish) lets an unreadable page through.
+function mailPublishBlock_(chk, lenient){
+  if (chk.level === "FAIL") return chk.message + "\n\nThe email tabs are visible on the web. In the Tournament sheet: File > Share > Publish to web > stop publishing, then publish only the public tabs (not 'Entire document'). Nothing was changed.";
+  if (chk.level === "UNVERIFIED" && !lenient) return "Nothing was sent - can't confirm the email tabs are private (" + chk.message + "). Fix that, then run it again.";
+  return "";
+}
+function mailPublishStatusLive_(props, admin){
+  const c = mailPublishCheck_(props, admin);
+  return c.level === "NA" ? "" : c.level === "UNVERIFIED" ? "UNKNOWN \u2014 can't confirm the email tabs are private (" + c.message + ")" : c.message;
+}
+function mailTell_(title, msg){ try { const ui = SpreadsheetApp.getUi(); ui.alert(title, msg, ui.ButtonSet.OK); } catch (e){ Logger.log(title + ": " + msg); } }
+
 // ---- A: the button ---------------------------------------------------------
 
 function sendInvites(e){ mailGuard_(e, "sendInvites"); mailSendInvites_(); }
@@ -439,6 +489,8 @@ function mailSendInvites_(){
   const say = (title, msg) => ui.alert(title, msg, ui.ButtonSet.OK);
   const props = PropertiesService.getScriptProperties();
   const admin = SpreadsheetApp.getActiveSpreadsheet();
+  const pb = mailPublishBlock_(mailPublishCheck_(props, admin));
+  if (pb){ say("Send BLOCKED - publish check (nothing was sent)", pb); return; }
   const invSheet = mailInvitesSheet_(props, admin);
   if (!invSheet){ say("GFY Mail", MAIL_NO_INVITES + " Nothing sent."); return; }
   const conSheet = admin.getSheetByName(MAIL_TAB.contacts), logSheet = admin.getSheetByName(MAIL_TAB.log);
@@ -654,6 +706,8 @@ function mailSendNudges_(){
   const say = (title, msg) => ui.alert(title, msg, ui.ButtonSet.OK);
   const props = PropertiesService.getScriptProperties();
   const admin = SpreadsheetApp.getActiveSpreadsheet();
+  const pb = mailPublishBlock_(mailPublishCheck_(props, admin));
+  if (pb){ say("Nudge BLOCKED - publish check (nothing was sent)", pb); return; }
   const invSheet = mailInvitesSheet_(props, admin);
   if (!invSheet){ say("GFY Mail", MAIL_NO_INVITES + " Nothing sent."); return; }
   const conSheet = admin.getSheetByName(MAIL_TAB.contacts), logSheet = admin.getSheetByName(MAIL_TAB.log);
@@ -1244,6 +1298,11 @@ function adminPolish(e){ mailGuard_(e, "adminPolish"); mailAdminPolish_(); }
 function mailAdminPolish_(){
   const admin = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
+  // Publish guard, BEFORE any tab is created or touched: a published private tab blocks; an unreadable page only warns.
+  const chk = mailPublishCheck_(props, admin);
+  const blk = mailPublishBlock_(chk, true);
+  if (blk){ mailTell_("Polish BLOCKED - private tab published (nothing was changed)", blk); return; }
+  if (chk.level === "UNVERIFIED") mailTell_("GFY Mail - publish check", "Continuing, but I can't confirm the email tabs are private (" + chk.message + "). Run 'npm run check-publish' or look at File > Share > Publish to web before sending anything.");
   // The old two-file Admin file called its notes tab "READ ME"; the one-file project calls it "Admin READ ME" (it can
   // never be confused with START HERE). Rename it in place - only in the Admin-only file, never in the Tournament sheet.
   if (!admin.getSheetByName(MAIL_TAB.readme) && !mailOneFile_(props, admin) && admin.getSheetByName(MAIL_LEGACY_README)) admin.getSheetByName(MAIL_LEGACY_README).setName(MAIL_TAB.readme);
@@ -1261,6 +1320,10 @@ function mailAdminPolish_(){
   mailProtectHeader_(dash);
   dash.setTabColor(MAIL_TAB_COLORS.Dashboard);
   mailOrderTabs_(admin);
+  // Tabs this run just created are published at once when the sheet is published as "Entire document": the Dashboard
+  // rebuild above re-checked pubhtml AFTER they existed - say so loudly.
+  const after = String(props.getProperty("PUB_STATUS") || "");
+  if (/^PRIVATE TAB PUBLISHED/.test(after)) mailTell_("PRIVATE TAB PUBLISHED", after + "\n\nThe tabs polish just created are on the web. Stop publishing 'Entire document' and publish only the public tabs NOW.");
   Logger.log("adminPolish complete");
 }
 
@@ -1295,7 +1358,8 @@ function mailDashboard_(admin, props, refreshDrafts, debounce){
     if (age >= 0 && age < MAIL_DASH_DEBOUNCE_MS) return;
   }
   const tplStatus = refreshDrafts ? mailTplStatusLive_(props) : null;
-  mailWithLock_(() => mailDashboardNL_(admin, props, tplStatus));
+  const pubStatus = refreshDrafts ? mailPublishStatusLive_(props, admin) : null;     // also OUTSIDE the lock (a network read)
+  mailWithLock_(() => mailDashboardNL_(admin, props, tplStatus, pubStatus));
   try { props.setProperty("DASH_AT", String(Date.now())); } catch (e){ /* debounce stamp only */ }
 }
 function mailTplStatusLive_(props){
@@ -1306,7 +1370,7 @@ function mailTplStatusLive_(props){
   } catch (e){ return "UNKNOWN \u2014 Gmail unreadable"; }
 }
 // Caller holds the lock. tplStatus = a freshly read status (string) or null = use the cached TPL_STATUS.
-function mailDashboardNL_(admin, props, tplStatus){
+function mailDashboardNL_(admin, props, tplStatus, pubStatus){
   let sh = admin.getSheetByName(MAIL_TAB.dash);
   if (!sh) sh = admin.insertSheet(MAIL_TAB.dash);
 
@@ -1403,6 +1467,12 @@ function mailDashboardNL_(admin, props, tplStatus){
   } else {
     tplStatus = props.getProperty("TPL_STATUS") || "not checked yet \u2014 run Polish admin sheet";
   }
+  // publish guard line (one-file layout only; "" = two-file, nothing to show). Cached in PUB_STATUS like the template status.
+  let pubLine = "";
+  if (mailOneFile_(props, admin)){
+    if (pubStatus != null && pubStatus !== ""){ try { props.setProperty("PUB_STATUS", String(pubStatus).slice(0, 600)); } catch (e){ /* cache only */ } pubLine = String(pubStatus); }
+    else pubLine = props.getProperty("PUB_STATUS") || "not checked yet \u2014 run Polish admin sheet";
+  }
   const missByKind = {};      // per THREAD kind (an invite thread and a nudge thread are different things)
   mailMissingLoad_(props.getProperty("SCAN_MISSING")).forEach(m => { (missByKind[m.k] = missByKind[m.k] || new Set()).add(String(m.p).trim()); });
   ["invite", "nudge"].forEach(k => { if (missByKind[k] && missByKind[k].size) notes.push(`${k} thread missing in Gmail (deleted?) - replies not watched for: ` + Array.from(missByKind[k]).sort().join(", ")); });
@@ -1422,6 +1492,7 @@ function mailDashboardNL_(admin, props, tplStatus){
     [L.scan, stamp],
     [L.status, status],
     ["template draft", tplStatus],
+    ...(pubLine ? [["publish check", pubLine]] : []),
     ...notes.map(n => ["note", n]),
   ];
   const height = Math.max(left.length, 2 + Math.max(...MAIL_DASH_LISTS.map(k => lists[k].length)));
