@@ -54,7 +54,7 @@ window.CONFIG = {
   // August). Drives the countdown and the calendar button. A first_tee row
   // in the sheet's Info tab overrides this value.
   // Example: FIRST_TEE: "2026-08-15T09:00:00-06:00",
-  FIRST_TEE: "2026-08-15T09:00:00-06:00",
+  FIRST_TEE: "2027-08-14T09:00:00-06:00",
 
   // Currency symbol shown in front of every money figure.
   // Example: CURRENCY: "$",

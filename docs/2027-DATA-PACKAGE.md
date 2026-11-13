@@ -161,11 +161,11 @@ constant is present in what you pushed — that single grep separates "stale han
 
 | Row | Key | Current (= template) | Decision | Consequence if skipped |
 |---|---|---|---|---|
-| 2 | `dates` | `Aug 14–16` | **Replace** with the real 2027 dates | Poster and captain cards print `[ 2027 DATES ]`; the site shows last year's window |
+| 2 | `dates` | `Aug 14–16` | **DONE 2026-11-13: `Aug 13–15`** (Riley: Fri–Sun Aug 13–15, 2027) | Poster and captain cards print `[ 2027 DATES ]`; the site shows last year's window |
 | 3 | `course` | `Meadow Creek` | **Confirm real or replace** (see the finding above) | Residue FAIL that may never clear |
 | 4 | `lodging` | `Bear Creek Lodge` | **Confirm real or replace** | Poster venue line prints `[TBD]` if blanked |
 | 5 | `format` | `2-day scramble` | **Confirm real or replace** | Residue FAIL that may never clear |
-| 6 | `first_tee` | `2026-08-15T09:00:00-06:00` | **Replace** — full ISO **with offset**, e.g. `2027-08-13T09:00:00-06:00` | Drives season, schedule window, scorer key, countdown, Now/Next. Everything. |
+| 6 | `first_tee` | `2026-08-15T09:00:00-06:00` | **DONE 2026-11-13: `2027-08-14T09:00:00-06:00`** (Sat 9:00 = 2026 pattern; change the time if the 2027 tee time differs) | Drives season, schedule window, scorer key, countdown, Now/Next. Everything. |
 | 7 | `est_year` | `2019` | **Confirm real** (likely correct) | Residue FAIL that may never clear |
 | 8 | `calcutta_rake` | `10` | Confirm or change — policy, may legitimately stay | Residue FAIL if unchanged |
 | 9 | `calcutta_basis` | `gross` | Confirm or change — note net basis is never suppressed | Residue FAIL if unchanged |
