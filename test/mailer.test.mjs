@@ -56,6 +56,8 @@ function mkSheet(name, rows, log, ss) {
       getValues: () => { const out = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push((sh.rows[r - 1 + i] || [])[c - 1 + j] ?? ""); out.push(row); } return out; },
       setValue: v => { logW(r, c, v, "setValue"); ensure(r, c); sh.rows[r - 1][c - 1] = coerce(v, r, c); },
       setValues: vs => { vs.forEach((row, i) => row.forEach((v, j) => { logW(r + i, c + j, v, "setValues"); ensure(r + i, c + j); sh.rows[r - 1 + i][c - 1 + j] = coerce(v, r + i, c + j); })); },
+      getNumberFormats: () => { const out = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push(sh.fmt[(r + i) + "," + (c + j)] || "General"); out.push(row); } return out; },
+      setNumberFormats: fs => { fs.forEach((row, i) => row.forEach((f, j) => { sh.fmt[(r + i) + "," + (c + j)] = f; })); return rng; },
       setNumberFormat: f => { for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) sh.fmt[(r + i) + "," + (c + j)] = f; return rng; },
       getFormulas: () => { const out = []; for (let i = 0; i < nr; i++) { const row = []; for (let j = 0; j < nc; j++) row.push(sh.formulas[(r + i) + "," + (c + j)] || ""); out.push(row); } return out; },
       setDataValidation: dv => { sh.validations[key] = { r, c, nr, nc, kind: dv && dv.kind }; },
@@ -1428,7 +1430,7 @@ for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
   const globals = new Set([...code.matchAll(/^function\s+([A-Za-z0-9_$]+)/gm)].map(m => m[1]).concat([...code.matchAll(/^(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>/gm)].map(m => m[1])));
   const open = [...globals].filter(n => !/_$/.test(n)).sort();
   check("M4a: the ONLY globals without a trailing underscore are the allowlist (menu/trigger entrypoints + doGet + recordRsvp)",
-    JSON.stringify(open) === JSON.stringify(["adminPolish", "clearRehearsalAnswers", "doGet", "installMailTriggers", "mailOnEdit", "onOpen", "recordRsvp", "scanReplies", "sendInvites", "sendNudges", "setNudgeDays"]), JSON.stringify(open));
+    JSON.stringify(open) === JSON.stringify(["adminPolish", "clearRehearsalAnswers", "doGet", "installMailTriggers", "mailOnEdit", "migrateFromAdmin", "onOpen", "recordRsvp", "scanReplies", "sendInvites", "sendNudges", "setNudgeDays"]), JSON.stringify(open));
 }
 {
   const gone = () => { const x = world({ props: { GFY_MAIL_TEST: "0", WEBAPP_URL: WEBAPP, ALERT_TO: ALERT } }); x.flags.noUi = true; return x; };
@@ -1973,6 +1975,85 @@ const pubBlocked = (w, re) => w.sent.length === 0 && w.alerts.some(a => re.test(
   const r2 = run(w, "adminPolish");
   const snap3 = JSON.stringify({ o: w.admin.sheets.map(x => [x.name, x.rows, x.validations, x.rules, x.frozen, x.tabColor, x.protections.map(p => [p.desc, p.warn]), x.backgrounds]) });
   check("AO4: a second adminPolish changes nothing (no tab moved, no cell written, same validations / rules / protections)", r2.ok && snap3 === snap2 && moves.length === 0 && w.admin.sheets.reduce((a, x) => a + x.writes.length, 0) === nWrites, r2.e || moves.join());
+}
+
+
+// ---------- WO-ONE-FILE item 5: migrateFromAdmin (menu: GFY Mail > Import from old Admin file...) ----------
+const OLD_ID = "OLD_ADMIN_ID_FAKE";
+function oldAdmin(o = {}) {
+  const l = [];
+  const sheets = [
+    mkSheet("Contacts", [HDR_CON, ["Alice Able", "alice@example.com", "", "555-0101", true, "because", "keep"], ["Bob Baker", "bob@example.com", "bob.alt@example.com", "", false, "", ""], ["Cy Dnì", "cy@example.com", "", "", false, "", "BOUNCED 2027-01-03"]], l),
+    mkSheet("Replies", [HDR_REP, ["2027-01-06", "Alice Able", "Alice <alice@example.com>", "Yes! Count me in", true, false, "msg-0001"], ["2027-01-07", "Bob Baker", "Bob <bob@example.com>", "not this year", false, false, "msg-0002"]], l),
+    mkSheet("RSVP", [HDR_RSVP, [2027, "Alice Able", "T".repeat(32), "IN", "2027-01-06 10:00", "2027-01-06 10:00 IN", ""], [2027, "Bob Baker", "U".repeat(32), "", "", "", ""]], l),
+    mkSheet("SendLog", [HDR_LOG, ["2027-01-05", "Alice Able", "alice@example.com", "invite", "season 2027 sent", "0189300123456789"], ["2027-01-05", "Bob Baker", "bob@example.com", "invite", "season 2027 sent", "0189300123456790"]], l),
+  ];
+  // text columns stay TEXT in the source (the mailer formats them "@" before writing)
+  const txt = (sh, col, from, to) => { for (let r = from; r <= to; r++) sh.fmt[r + "," + col] = "@"; };
+  txt(sheets[2], 3, 2, 3); txt(sheets[2], 5, 2, 3); txt(sheets[2], 6, 2, 3); txt(sheets[3], 1, 2, 3); txt(sheets[3], 6, 2, 3); txt(sheets[1], 1, 2, 3); txt(sheets[1], 7, 2, 3);
+  const keep = o.omit || [];
+  return mkSS(OLD_ID, sheets.filter(x => !keep.includes(x.name)), l);
+}
+const emptyPriv = log => [mkSheet("Contacts", [HDR_CON], log), mkSheet("SendLog", [HDR_LOG], log), mkSheet("RSVP", [HDR_RSVP], log), mkSheet("Replies", [HDR_REP], log), mkSheet("Admin READ ME", [["warning", "last_reply_scan"], ["be careful", ""]], log)];
+const migWorld = (o = {}) => { const src = o.src || oldAdmin(); return { src, w: world({ oneFile: true, props: { ADMIN_ID: OLD_ID, ...(o.props || {}) }, adminSheets: o.adminSheets || emptyPriv, sources: { [OLD_ID]: src }, ...(o.world || {}) }) }; };
+const dataRowsOf = sh => sh.rows.slice(1).filter(r => r.some(v => String(v) !== ""));
+const PRIV4 = ["Contacts", "Replies", "RSVP", "SendLog"];
+{
+  const { src, w } = migWorld();
+  const pubBefore = JSON.stringify(["START HERE", "Field", "Invites", "Info"].map(n => w.sheet(n).rows));
+  const r = run(w, "migrateFromAdmin");
+  const same = PRIV4.every(n => JSON.stringify(w.sheet(n).rows) === JSON.stringify(src.getSheetByName(n).rows));
+  check("MG1: copies Contacts, Replies, RSVP, SendLog from the old Admin file into the same-name tabs: every cell equal", r.ok && same, r.e || JSON.stringify(PRIV4.map(n => [w.sheet(n).rows.length, src.getSheetByName(n).rows.length])));
+  const rep = w.alerts.map(a => a.msg).join("\n");
+  check("MG2: the report states, per tab, rows copied vs source rows (all equal), and the old file is never written", PRIV4.every(n => new RegExp(n + "[^\\n]*" + dataRowsOf(src.getSheetByName(n)).length + "[^\\n]*" + dataRowsOf(src.getSheetByName(n)).length).test(rep)) && src.sheets.every(x => x.writes.length === 0), rep);
+  check("MG3: text columns stay text (tokens, dates, thread ids keep their cell format and type) and '@' addresses land only on private tabs",
+    w.sheet("RSVP").fmt["2,3"] === "@" && typeof w.sheet("RSVP").rows[1][2] === "string" && typeof w.sheet("SendLog").rows[1][5] === "string" && w.sheet("SendLog").rows[1][5] === "0189300123456789" && typeof w.sheet("SendLog").rows[1][0] === "string"
+    && JSON.stringify(["START HERE", "Field", "Invites", "Info"].map(n => w.sheet(n).rows)) === pubBefore, "");
+  check("MG4: the publish guard ran first (pubhtml fetched once before the copy) and no Script Property was copied or written", w.fetched.length >= 1 && Object.keys(w.props).sort().join() === "ADMIN_ID,PUB_ID", Object.keys(w.props).join());
+  const snap = JSON.stringify(PRIV4.map(n => w.sheet(n).rows)); w.alerts.length = 0;
+  const r2 = run(w, "migrateFromAdmin");
+  check("MG5: a second run is REFUSED (the destination tabs now have data), changes nothing, and says so", r2.ok && JSON.stringify(PRIV4.map(n => w.sheet(n).rows)) === snap && w.alerts.some(a => /already (has|have) data/i.test(a.msg)), r2.e || JSON.stringify(w.alerts));
+  const pol = run(w, "adminPolish");
+  check("MG6: adminPolish afterwards turns the copied do_not_invite / looks_yes text into real checkboxes and rebuilds the Dashboard", pol.ok && w.sheet("Contacts").validations && Object.values(w.sheet("Contacts").validations).some(v => v.kind === "checkbox") && !!w.sheet("Dashboard"), pol.e);
+}
+{
+  const { src, w } = migWorld({ adminSheets: log => [mkSheet("Contacts", [HDR_CON], log), mkSheet("SendLog", [HDR_LOG], log), mkSheet("RSVP", [HDR_RSVP, [2027, "Zed", "x".repeat(30), "", "", "", ""]], log), mkSheet("Replies", [HDR_REP], log)] });
+  const snap = JSON.stringify(w.admin.sheets.map(x => [x.name, x.rows])); const r = run(w, "migrateFromAdmin");
+  check("MG7: refuses when ANY destination tab already has data rows - names it, copies NOTHING to any tab (all-or-nothing)", r.ok && JSON.stringify(w.admin.sheets.map(x => [x.name, x.rows])) === snap && w.alerts.some(a => /RSVP/.test(a.msg) && /already/i.test(a.msg)), r.e || JSON.stringify(w.alerts));
+}
+{
+  for (const [label, o, re] of [
+    ["a private tab is published", { world: { pubhtml: LEAK_HTML } }, /PRIVATE TAB PUBLISHED/],
+    ["pubhtml cannot be read", { world: { pubhtml: { throws: "down" } } }, /can't confirm/],
+    ["PUB_ID is not set", { world: { noPubId: true } }, /can't confirm|PUB_ID/],
+  ]) {
+    const { w } = migWorld(o); const snap = JSON.stringify(w.admin.sheets.map(x => [x.name, x.rows])); const r = run(w, "migrateFromAdmin");
+    check("MG8: refuses unless the publish guard passes (" + label + "): nothing copied, the old file is not even opened", r.ok && JSON.stringify(w.admin.sheets.map(x => [x.name, x.rows])) === snap && w.alerts.some(a => re.test(a.msg)) && !w.opened.includes(OLD_ID), r.e || JSON.stringify(w.alerts));
+  }
+}
+{
+  const a = migWorld({ props: { ADMIN_ID: "" } }); const ra = run(a.w, "migrateFromAdmin");
+  const b = migWorld({ props: { ADMIN_ID: "TOURNEY_ID" } }); const rb = run(b.w, "migrateFromAdmin");
+  const c = migWorld({ world: { oneFile: false, props: { PUBLIC_ID: PUB, ADMIN_ID: OLD_ID } } }); const rc = run(c.w, "migrateFromAdmin");
+  check("MG9: refuses with a clear message when ADMIN_ID is unset, is this very file, or the project is still the two-file layout (PUBLIC_ID names another file)",
+    ra.ok && rb.ok && rc.ok && a.w.alerts.some(x => /ADMIN_ID/.test(x.msg)) && b.w.alerts.some(x => /ADMIN_ID/.test(x.msg)) && c.w.alerts.some(x => /PUBLIC_ID|two-file/i.test(x.msg)) && [a, b, c].every(x => PRIV4.every(n => !x.w.sheet(n) || dataRowsOf(x.w.sheet(n)).length === 0)), JSON.stringify([ra, rb, rc, a.w.alerts, b.w.alerts, c.w.alerts]));
+  const m = migWorld({ src: oldAdmin({ omit: ["RSVP"] }) }); const rm = run(m.w, "migrateFromAdmin");
+  check("MG10: a source tab missing in the old file -> refused before anything is written, names the missing tab", rm.ok && m.w.alerts.some(x => /RSVP/.test(x.msg) && /missing|no .*tab/i.test(x.msg)) && PRIV4.every(n => dataRowsOf(m.w.sheet(n)).length === 0), JSON.stringify(m.w.alerts));
+  const no = migWorld({ world: { answers: ["NO"] } }); run(no.w, "migrateFromAdmin");
+  check("MG11: the confirm dialog (it lists what will be copied and says the old file is not changed); NO copies nothing", no.w.alerts.some(x => x.btns === "YES_NO" && /not changed|untouched|unchanged/i.test(x.msg) && /Contacts/.test(x.msg)) && PRIV4.every(n => dataRowsOf(no.w.sheet(n)).length === 0));
+}
+{
+  const { src, w } = migWorld();
+  const rp = w.sheet("Replies"); const og = rp.getRange; rp.getRange = (...a) => { const rg = og(...a); const sv = rg.setValues; rg.setValues = vs => sv(vs.length > 2 ? vs.slice(0, -1) : vs); return rg; };
+  const r = run(w, "migrateFromAdmin");
+  check("MG12: if the read-back does not match (a row went missing) the report says MISMATCH, the tabs this run wrote are cleared again (re-runnable), and the source is untouched",
+    r.ok && w.alerts.some(a => /MISMATCH/.test(a.msg) && /Replies/.test(a.msg)) && PRIV4.every(n => dataRowsOf(w.sheet(n)).length === 0) && src.sheets.every(x => x.writes.length === 0), r.e || JSON.stringify(w.alerts));
+}
+{
+  const w = world({ oneFile: true, noUi: true, props: { ADMIN_ID: OLD_ID }, sources: { [OLD_ID]: oldAdmin() }, adminSheets: emptyPriv });
+  const r = run(w, "migrateFromAdmin");
+  const m = world({ oneFile: true }); run(m, "onOpen");
+  check("MG13: migrateFromAdmin refuses outside the sheet UI (anonymous web app cannot call it) and has a menu item 'Import from old Admin file…'", !r.ok && /Not available here/.test(r.e) && PRIV4.every(n => dataRowsOf(w.sheet(n)).length === 0) && (m.menus.find(x => x.title === "GFY Mail") || { items: [] }).items.some(([l, f]) => l === "Import from old Admin file…" && f === "migrateFromAdmin"), r.e || JSON.stringify(m.menus));
 }
 
 // ---------- no-'@' leak test ----------

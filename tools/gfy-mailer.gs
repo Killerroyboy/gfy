@@ -114,6 +114,7 @@ function mailMenu_(){
     .addItem("Clear rehearsal answers", "clearRehearsalAnswers")
     .addItem("Polish admin sheet", "adminPolish")
     .addItem("Install / repair triggers", "installMailTriggers")
+    .addItem("Import from old Admin file…", "migrateFromAdmin")
     .addToUi();
 }
 
@@ -1333,6 +1334,77 @@ function mailAdminPolish_(){
   const after = String(props.getProperty("PUB_STATUS") || "");
   if (/^PRIVATE TAB PUBLISHED/.test(after)) mailTell_("PRIVATE TAB PUBLISHED", after + "\n\nThe tabs polish just created are on the web. Stop publishing 'Entire document' and publish only the public tabs NOW.");
   Logger.log("adminPolish complete");
+}
+
+// ---- migrateFromAdmin (menu: GFY Mail -> Import from old Admin file...) ----------------------------------
+// One-time move of the four DATA tabs from the old GFY Admin file into this (Tournament) spreadsheet. The old file's id
+// is the ADMIN_ID Script Property. All-or-nothing preflight; refuses unless the publish guard passes (the data lands in
+// a file that has published tabs); refuses if any destination tab already has data rows (so a second run is a refusal,
+// never a duplicate); verifies the copy by reading it back; never writes to the old file. Script Properties are NOT
+// copied (the README lists the ones to set by hand). Run adminPolish afterwards for the checkboxes.
+const MAIL_MIGRATE_TABS = ["Contacts", "Replies", "RSVP", "SendLog"];
+function migrateFromAdmin(e){ mailGuard_(e, "migrateFromAdmin"); mailMigrate_(); }
+const mailDataRows_ = vals => vals.slice(1).filter(r => r.some(v => String(v == null ? "" : v) !== ""));
+function mailMigrate_(){
+  const ui = SpreadsheetApp.getUi();
+  const say = (title, msg) => ui.alert(title, msg, ui.ButtonSet.OK);
+  const props = PropertiesService.getScriptProperties();
+  const admin = SpreadsheetApp.getActiveSpreadsheet();
+  if (!mailOneFile_(props, admin)){ say("Import BLOCKED", "The PUBLIC_ID script property names another file, so this is still the two-file layout. Import runs in the Tournament spreadsheet's own project (clear PUBLIC_ID there). Nothing copied."); return; }
+  const oldId = String(props.getProperty("ADMIN_ID") == null ? "" : props.getProperty("ADMIN_ID")).trim();
+  if (!oldId){ say("Import BLOCKED", "Set the ADMIN_ID script property to the old GFY Admin file's id (the long id in its URL) first. Nothing copied."); return; }
+  if (admin && typeof admin.getId === "function" && admin.getId() === oldId){ say("Import BLOCKED", "ADMIN_ID is this very spreadsheet - it must be the OLD Admin file. Nothing copied."); return; }
+  const pb = mailPublishBlock_(mailPublishCheck_(props, admin));
+  if (pb){ say("Import BLOCKED - publish check (nothing was copied)", pb); return; }
+
+  let old;
+  try { old = SpreadsheetApp.openById(oldId); } catch (err){ say("Import BLOCKED", "Could not open the old Admin file (" + (err && err.message || err) + "). Check ADMIN_ID and that this account can open it. Nothing copied."); return; }
+  const missing = MAIL_MIGRATE_TABS.filter(n => !old.getSheetByName(n));
+  if (missing.length){ say("Import BLOCKED", "The old Admin file has no " + missing.join(", ") + " tab (missing). Nothing copied."); return; }
+  const full = MAIL_MIGRATE_TABS.filter(n => { const d = admin.getSheetByName(n); return d && mailDataRows_(d.getDataRange().getValues()).length > 0; });
+  if (full.length){ say("Import BLOCKED", "These tabs here already have data, so nothing is copied (an import never merges or overwrites): " + full.join(", ") + ".\n\nIf this was a half-finished import, clear those tabs (keep the header row) and run it again."); return; }
+
+  const plan = MAIL_MIGRATE_TABS.map(n => {
+    const vals = old.getSheetByName(n).getDataRange().getValues();
+    const nc = Math.max(1, vals.reduce((m, r) => Math.max(m, r.length), 0));
+    const grid = vals.map(r => { const o = r.slice(); while (o.length < nc) o.push(""); return o; });
+    return { n, grid, nr: grid.length, nc, rows: mailDataRows_(grid).length };
+  });
+  const ask = "Copy these tabs from the old Admin file into this spreadsheet?\n\n" + plan.map(p => `${p.n}: ${p.rows} row(s)`).join("\n") + "\n\nThe old file is not changed. Script properties are not copied.";
+  if (ui.alert("Import from old Admin file", ask, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+
+  const wrote = [];
+  try {
+    mailWithLock_(() => {
+      plan.forEach(p => {
+        const src = old.getSheetByName(p.n), dst = admin.getSheetByName(p.n) || admin.insertSheet(p.n);
+        const nr = p.nr, nc = p.nc, grid = p.grid;
+        if (!nr) return;
+        wrote.push(p.n);
+        const fmts = src.getRange(1, 1, nr, nc).getNumberFormats();
+        dst.getRange(1, 1, nr, nc).setNumberFormats(fmts);                 // text columns (tokens, dates, ids) stay text
+        dst.getRange(1, 1, nr, nc).setValues(grid);
+      });
+    }, 30000);
+  } catch (err){
+    mailWithLock_(() => wrote.forEach(n => { const d = admin.getSheetByName(n); if (d) d.clearContents(); }), 10000);
+    say("Import FAILED", "The copy stopped (" + (err && err.message || err) + "). The tabs it had written were cleared again; the old file is untouched. Run it again.");
+    return;
+  }
+  const lines = [], bad = [];
+  const flat = rows => JSON.stringify(rows.map(r => r.map(v => v instanceof Date ? v.getTime() : v)));
+  plan.forEach(p => {
+    const back = mailDataRows_(admin.getSheetByName(p.n).getDataRange().getValues());
+    const same = back.length === p.rows && flat(back) === flat(mailDataRows_(p.grid));
+    lines.push(`${p.n}: ${back.length} copied / ${p.rows} in the old file${same ? " - equal" : " - MISMATCH"}`);
+    if (!same) bad.push(p.n);
+  });
+  if (bad.length){
+    mailWithLock_(() => plan.forEach(p => { const d = admin.getSheetByName(p.n); if (d) d.clearContents(); }), 10000);
+    say("Import MISMATCH - " + bad.join(", "), lines.join("\n") + "\n\nThe copy did not read back equal, so every tab this import wrote was cleared again. The old file is untouched. Run it again.");
+    return;
+  }
+  say("Import done", lines.join("\n") + "\n\nNext: GFY Mail > Polish admin sheet (checkboxes), then Install / repair triggers. The old file is untouched - keep it until you have checked the Dashboard.");
 }
 
 // ---- Dashboard (PRIVATE admin tab - names are fine here, never on a published tab) ----
