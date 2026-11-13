@@ -48,10 +48,15 @@ export function verdict({ exists, hasManifest, present, canonical, identityOk })
   // surprise: BACKLOG #9 pastes it to wire the accept->Field invites flow. It is
   // listed here so that landing #9 does not trip a false alarm on a legitimate
   // file — but it is never REQUIRED, because it is not part of arming.
-  const KNOWN = ["Code.gs", "triggers.gs", "appsscript.json", "gfy-promote.gs"];
+  const KNOWN = ["Code.gs", "triggers.gs", "appsscript.json", "gfy-promote.gs", "gfy-mailer.gs"];
   const extras = present.filter(f => !KNOWN.includes(f));
   if (present.includes("gfy-promote.gs")) {
     notes.push("gfy-promote.gs is present — recognised (BACKLOG #9, the accept->Field invites flow). It will be uploaded by the push. That is correct once #9 is wired, and harmless before: nothing calls it until the Invites headers exist.");
+  }
+  // gfy-mailer.gs (WO-ONE-FILE): the mailer lives in this same project once the Admin file is migrated in. Recognised,
+  // md5-checked against tools/gfy-mailer.gs when present (the `canonical` map above), never REQUIRED for arming.
+  if (present.includes("gfy-mailer.gs")) {
+    notes.push("gfy-mailer.gs is present — recognised (WO-ONE-FILE: the mailer runs in the Tournament project). It will be uploaded by the push, and its doGet/onOpen are the project's ONLY ones (the scorer's doGet is scorerDoGet_ behind it). Deploy as a NEW VERSION of the existing scorer deployment so the score_endpoint URL does not change.");
   }
   for (const e of extras) {
     if (/^Untitled\.gs$/i.test(e)) notes.push("Untitled.gs is still here — that is the §18 spike. DELETE IT LOCALLY (rm) so the push removes it remotely; leaving it means the spike keeps winning the shared global scope.");
@@ -65,7 +70,8 @@ function main() {
   const exists = existsSync(WS);
   const present = exists ? readdirSync(WS).filter(f => !f.startsWith(".")) : [];
   const canonical = {};
-  for (const [local, repo] of [["Code.gs", "sheet-polish.gs"], ["triggers.gs", "sheet-triggers.gs"]]) {
+  for (const [local, repo] of [["Code.gs", "sheet-polish.gs"], ["triggers.gs", "sheet-triggers.gs"], ["gfy-promote.gs", "gfy-promote.gs"], ["gfy-mailer.gs", "gfy-mailer.gs"]]) {
+    if (!existsSync(join(WS, local))) { if (local === "Code.gs" || local === "triggers.gs") canonical[local] = false; continue; }
     canonical[local] = existsSync(join(WS, local)) && existsSync(join(HERE, repo))
       && md5(join(WS, local)) === md5(join(HERE, repo));
   }

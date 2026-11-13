@@ -8940,6 +8940,15 @@ results.forEach(([name, ok]) => {
     && !says(promote, /not a file this project expects/)
     && withoutPromote.ok === true,
     JSON.stringify({ withPromote: promote && promote.ok, notes: promote && promote.notes, without: withoutPromote && withoutPromote.ok }));
+
+  // WO-ONE-FILE: the mailer joins this project. Recognised + drift-checked, never required for arming.
+  const mailer = V({ present: [...base.present, "gfy-mailer.gs"], canonical: { "Code.gs": true, "triggers.gs": true, "gfy-mailer.gs": true } });
+  const mailerDrift = V({ present: [...base.present, "gfy-mailer.gs"], canonical: { "Code.gs": true, "triggers.gs": true, "gfy-mailer.gs": false } });
+  check("ARMKIT-4: gfy-mailer.gs (WO-ONE-FILE) is RECOGNISED (not an unexpected file), a copy drifted from tools/gfy-mailer.gs is refused, and it is never REQUIRED — arming stays green without it",
+    !!mailer && mailer.ok === true && says(mailer, /gfy-mailer\.gs/) && !says(mailer, /not a file this project expects/)
+    && mailerDrift.ok === false && says(mailerDrift, /gfy-mailer\.gs does NOT match the repo's canonical source/)
+    && withoutPromote.ok === true,
+    JSON.stringify({ mailer: mailer && mailer.notes, drift: mailerDrift && mailerDrift.problems }));
 }
 
 console.log("");

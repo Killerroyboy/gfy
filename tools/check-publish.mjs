@@ -51,6 +51,17 @@ export function publishVerdict({ html, gids }) {
   return { level: "OK", tabs: names, private: [], unknown: [], message: "OK - private tabs not published" };
 }
 
+// For `npm run event-ready`: the verdict as event-ready result rows ({level, detail}). A FAIL for a published private
+// tab AND for "could not read it" (an unverified publish state is not a clean one); WARN for an unknown public tab.
+export function eventReadyResults({ html, error, gids }) {
+  if (error || html == null) return [{ level: "FAIL", detail: `publish check: could not read pubhtml (${error || "no page"}) - cannot confirm the private tabs are unpublished` }];
+  const v = publishVerdict({ html, gids });
+  if (v.level === "FAIL") return [{ level: "FAIL", detail: `publish check: ${v.message}` }];
+  if (v.level === "UNVERIFIED") return [{ level: "FAIL", detail: `publish check: ${v.message}` }];
+  if (v.level === "WARN") return [{ level: "WARN", detail: `publish check: ${v.message}` }];
+  return [{ level: "PASS", detail: `publish check: ${v.message}` }];
+}
+
 export async function fetchPubhtml(pub, fetchFn = fetch) {
   const res = await fetchFn(`https://docs.google.com/spreadsheets/d/e/${pub}/pubhtml`);
   if (!res.ok) throw new Error("HTTP " + res.status);

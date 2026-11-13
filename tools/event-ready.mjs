@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { readConfig } from "./presend-check.mjs";
+import { eventReadyResults, fetchPubhtml } from "./check-publish.mjs";
 const HERE=dirname(fileURLToPath(import.meta.url));
 
 export function parseCsv(text){            // minimal quoted-field CSV → array of arrays
@@ -409,6 +410,10 @@ export async function main(){
 
   const { pub, gids } = readConfig(configText);
   if(!pub){ push({level:"FAIL", detail:"config.js has no PUB_ID — is the sheet wired?"}); return finish(); }
+
+  // WO-ONE-FILE: the private email tabs share this spreadsheet. A published private tab is a FAIL, whatever else is green.
+  { let ph=null, perr=""; try{ ph=await fetchPubhtml(pub); }catch(e){ perr=(e&&e.message)||String(e); }
+    push(eventReadyResults({ html:ph, error:perr, gids })); }
 
   const csvUrl=g=>`https://docs.google.com/spreadsheets/d/e/${pub}/pub?gid=${g}&single=true&output=csv`;
   async function fetchTab(tab){

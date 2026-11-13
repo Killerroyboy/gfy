@@ -5,6 +5,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -127,6 +128,49 @@ if (PT) {
   const get = e => JSON.parse(JSON.stringify(vm.runInContext(e, ctx)));
   check("OF8: GFY_PRIVATE_TABS (sheet-polish.gs) == MAIL_PRIVATE_TABS (gfy-mailer.gs) == PRIVATE_TABS (tools/private-tabs.mjs), same order", JSON.stringify(get("GFY_PRIVATE_TABS")) === JSON.stringify(PT.PRIVATE_TABS) && JSON.stringify(get("MAIL_PRIVATE_TABS")) === JSON.stringify(PT.PRIVATE_TABS), JSON.stringify([get("GFY_PRIVATE_TABS"), get("MAIL_PRIVATE_TABS"), PT.PRIVATE_TABS]));
   check("OF9: MAIL_ORDER (the tab order adminPolish applies) is the private list, and every tab MAIL_SCHEMA creates is on it", JSON.stringify(get("MAIL_ORDER")) === JSON.stringify(PT.PRIVATE_TABS) && Object.keys(get("MAIL_SCHEMA")).every(n => PT.PRIVATE_TABS.includes(n)));
+}
+
+// ---- 4d: the publish check is part of `npm run event-ready` (a FAIL) ----
+if (CP) {
+  const R = h => CP.eventReadyResults(h);
+  const { readConfig } = await import("../tools/presend-check.mjs");
+  const { gids } = readConfig(readFileSync(path.join(ROOT, "config.js"), "utf8"));
+  const ok = R({ html: fx("items-public.html"), gids })[0], bad = R({ html: fx("items-leak.html"), gids })[0], unk = R({ html: fx("items-unknown.html"), gids })[0];
+  const gone = R({ html: null, error: "offline", gids })[0], garb = R({ html: fx("garbage.html"), gids })[0];
+  check("ER1: result levels - OK=PASS, unknown public tab=WARN, private tab=FAIL naming it, unreadable/unparseable=FAIL (never silently clean)",
+    ok.level === "PASS" && unk.level === "WARN" && /Scratch work/.test(unk.detail) && bad.level === "FAIL" && /Contacts/.test(bad.detail) && /Admin READ ME/.test(bad.detail) && gone.level === "FAIL" && /offline/.test(gone.detail) && garb.level === "FAIL", JSON.stringify([ok, unk, bad, gone, garb]));
+  const runER = fixture => { const env = { ...process.env, GFY_PUBHTML_FIXTURE: fixture || "" }; const r = spawnSync(process.execPath, ["--import", path.join(ROOT, "test", "helpers", "fetch-stub.mjs"), path.join(ROOT, "tools", "event-ready.mjs")], { cwd: ROOT, env, encoding: "utf8" }); return { code: r.status, out: String(r.stdout) + String(r.stderr) }; };
+  const a = runER(path.join(ROOT, "fixtures", "pubhtml", "items-leak.html")), b = runER(path.join(ROOT, "fixtures", "pubhtml", "items-public.html"));
+  check("ER2: `npm run event-ready` prints a FAIL naming the published private tab and exits 1", a.code === 1 && /FAIL\s+publish check: PRIVATE TAB PUBLISHED: Contacts, Admin READ ME/.test(a.out), a.code + " " + a.out.slice(0, 300));
+  check("ER3: ... and prints PASS for the publish check when only public tabs are published (the run then fails later only because the stub has no sheet data)", /PASS\s+publish check: OK/.test(b.out), b.out.slice(0, 300));
+}
+
+// ---- 7: the deployable copy (tools/clasp/) and its merged manifest ----
+{
+  const live = JSON.parse(readFileSync(T("appsscript.merged.json"), "utf8"));
+  const scorerNow = existsSync(path.join(ROOT, "tools", "clasp", "appsscript.json")) ? JSON.parse(readFileSync(path.join(ROOT, "tools", "clasp", "appsscript.json"), "utf8")) : null;
+  const adminNow = existsSync(path.join(ROOT, "tools", "clasp-admin", "appsscript.json")) ? JSON.parse(readFileSync(path.join(ROOT, "tools", "clasp-admin", "appsscript.json"), "utf8")) : null;
+  const wa = x => x && JSON.stringify(x.webapp);
+  check("OF10: the merged manifest's web app is EXACTLY the scorer deployment's (executeAs USER_DEPLOYING, access ANYONE_ANONYMOUS) and the mailer's - the two never conflicted",
+    live.webapp.executeAs === "USER_DEPLOYING" && live.webapp.access === "ANYONE_ANONYMOUS" && (!scorerNow || wa(scorerNow) === wa(live)) && (!adminNow || wa(adminNow) === wa(live)), JSON.stringify([live.webapp, scorerNow && scorerNow.webapp, adminNow && adminNow.webapp]));
+  check("OF11: the merged manifest keeps the scorer project's timeZone, runtime and logging (nothing else of the live manifest changes)", !scorerNow || (live.timeZone === scorerNow.timeZone && live.runtimeVersion === scorerNow.runtimeVersion && live.exceptionLogging === scorerNow.exceptionLogging), JSON.stringify(scorerNow));
+  // Explicit scopes override the @OnlyCurrentDoc annotations (which would otherwise block openById of the old Admin file),
+  // so EVERY service the four files call must be covered here.
+  const all = claspOrder.map(src).join("\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const need = [[/\bSpreadsheetApp\.(?!getUi)/, "https://www.googleapis.com/auth/spreadsheets"], [/\bSpreadsheetApp\.getUi/, "https://www.googleapis.com/auth/script.container.ui"], [/\bGmailApp\./, "https://mail.google.com/"], [/\bMailApp\./, "https://www.googleapis.com/auth/script.send_mail"],
+    [/\bUrlFetchApp\./, "https://www.googleapis.com/auth/script.external_request"], [/\bScriptApp\./, "https://www.googleapis.com/auth/script.scriptapp"], [/\bSession\.get(Effective|Active)User/, "https://www.googleapis.com/auth/userinfo.email"]];
+  const missing = need.filter(([re, sc]) => re.test(all) && !(live.oauthScopes || []).includes(sc)).map(x => x[1]);
+  check("OF12: explicit oauthScopes cover every Google service the four files call (incl. UrlFetchApp for the publish guard)", missing.length === 0 && (live.oauthScopes || []).includes("https://www.googleapis.com/auth/script.external_request"), missing.join());
+  check("OF13: the merged project calls no service the scope map does not know about (a new service must be added to the manifest AND this test)", !/\b(DriveApp|DocumentApp|CalendarApp|FormApp|SlidesApp|CacheService|ScriptProperties\.|UrlFetchApp\.(?!fetch))/.test(all));
+  const ws = path.join(ROOT, "tools", "clasp");
+  if (existsSync(ws)) {
+    const md5 = f => createHash("md5").update(readFileSync(f)).digest("hex");
+    const diff = Object.keys(CLASP_FILES).filter(n => !existsSync(path.join(ws, n)) || md5(path.join(ws, n)) !== md5(T(CLASP_FILES[n])));
+    check("OF14: tools/clasp/ (the local arming workspace) holds all four files, identical md5 to the canonical tools/ sources; gfy-mailer.gs in particular", diff.length === 0 && md5(path.join(ws, "gfy-mailer.gs")) === md5(T("gfy-mailer.gs")), "drifted/missing: " + diff.join());
+    check("OF15: tools/clasp/appsscript.json is the merged manifest", existsSync(path.join(ws, "appsscript.json")) && JSON.stringify(JSON.parse(readFileSync(path.join(ws, "appsscript.json"), "utf8"))) === JSON.stringify(live), "");
+  } else {
+    check("OF14: (tools/clasp/ is gitignored; absent on this checkout - nothing to compare)", true);
+  }
 }
 
 console.log(`\nONEFILE ${pass}/${total}`);
