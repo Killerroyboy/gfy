@@ -6,7 +6,13 @@ do-not-invite reason (spec §12 P-VAULT, §13 V-TABS). Upload to Drive →
 save as Google Sheet → do NOT publish, do NOT add as a tab of the public
 sheet (the public sheet publishes Entire-document; new tabs auto-publish).
 Sample rows are deliberately fake (V-SAMPLE) — this xlsx ships in a
-public repo."""
+public repo.
+
+LEGACY (WO-ONE-FILE, 2026-11-13): the GFY Admin file is being folded into the
+GFY Tournament spreadsheet; the private tabs now live there (tools/gfy-mailer.gs
+creates them with adminPolish, and its notes tab is called "Admin READ ME", not
+"READ ME"). This template and its "READ ME" tab are kept only for the two-file
+layout until migration day; test/mailer.test.mjs AP1 maps READ ME -> Admin READ ME."""
 from pathlib import Path
 
 from openpyxl import Workbook

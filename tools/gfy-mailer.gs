@@ -1,10 +1,18 @@
 /** GFY Mail — invite sender (BACKLOG #33 part A) + reply watcher (part C).
  *
- *  Bound to the PRIVATE "GFY Admin" sheet (Extensions → Apps Script → paste this
- *  file as its own file). It is NOT for the public GFY sheet's project.
+ *  ONE-FILE (WO-ONE-FILE, 2026-11-13): this file is part of the GFY Tournament sheet's own project (tools/clasp/:
+ *  Code.gs, gfy-mailer.gs, gfy-promote.gs, triggers.gs share ONE global scope). The private tabs (Dashboard, Contacts,
+ *  Replies, RSVP, SendLog, Admin READ ME) live in the SAME spreadsheet as the published tournament tabs, after them.
+ *  Until migration day it can still run alone in the old private "GFY Admin" project (PUBLIC_ID = the public sheet's id).
+ *  This file owns the project's ONE onOpen (menus GFY + GFY Mail) and ONE doGet (RSVP token -> RSVP page, anything
+ *  else -> the scorer's scorerDoGet_ in triggers.gs). See README "One file".
  *
  *  Script Properties (Project Settings → Script properties):
- *    PUBLIC_ID      the public GFY sheet's spreadsheet id (never hardcoded here)
+ *    PUBLIC_ID      two-file layout only: the public GFY sheet's spreadsheet id. UNSET (or equal to this
+ *                   spreadsheet's own id) = the active spreadsheet holds the Invites tab too (one file).
+ *    PUB_ID         one-file layout: the 2PACX-... published-sheet id from config.js. The publish guard fetches
+ *                   its pubhtml before Send invites / Send nudges / Polish / Import and BLOCKS if a private tab is
+ *                   published (or, for sends and Import, if it cannot tell). Never hardcoded here.
  *    GFY_MAIL_TEST  anything but the exact value 0 (including unset) = TEST MODE:
  *                   every message goes to goodfriendsyearly@gmail.com, subject
  *                   prefixed "[TEST → real address]", nothing is ticked on the
@@ -22,13 +30,13 @@
  *    NUDGE_DAYS     optional: days between a send and its nudge (default 7). Set it from the menu
  *                   (GFY Mail > Set nudge days...); the Dashboard only DISPLAYS it.
  *    (managed by the code, do not edit: SEND_RUN = the send/nudge run lease, SCAN_CURSOR, SCAN_MISSING,
- *     SCAN_THROWS = per-thread count of consecutive unreadable scans, SCAN_AUTO, TPL_STATUS,
+ *     SCAN_THROWS = per-thread count of consecutive unreadable scans, SCAN_AUTO, TPL_STATUS, PUB_STATUS,
  *     DASH_AT = when the Dashboard was last rebuilt (RSVP / onEdit rebuilds are skipped within 60 s), ALERT_LAST)
- *    ADMIN_ID       optional fallback for the Web App if getActiveSpreadsheet() is
- *                   unavailable there: the Admin sheet's own id.
+ *    ADMIN_ID       one-file: the OLD Admin file's id, read ONLY by "Import from old Admin file…" (delete it after).
+ *                   Two-file: optional fallback for the Web App if getActiveSpreadsheet() is unavailable there.
  *
- *  Privacy rule: addresses, reply text and bounce notes live ONLY on the Admin
- *  sheet. The one thing this file writes to the public sheet is a boolean tick
+ *  Privacy rule: addresses, reply text and bounce notes live ONLY on the private tabs, which must never be
+ *  published (MAIL_PRIVATE_TABS; the publish guard enforces it). The one thing this file writes to a published tab is a boolean tick
  *  in Invites (`invited` / `responded` / `committed`, and `declined` into a blank status),
  *  through mailPublicWrite_, which refuses any value containing '@'.
  *

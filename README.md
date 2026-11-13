@@ -158,6 +158,95 @@ Screen*. It installs like an app, icon and all.
 
 ---
 
+## One file: the Tournament sheet holds the mailer too (WO-ONE-FILE, 2026-11-13)
+
+> **Status: built and tested offline on branch `one-file`; nothing is installed or pushed.** Until migration day
+> the two-file layout below ("The Admin vault", "Send invites + reply watcher") is what is live and keeps working
+> (`PUBLIC_ID` set to the public sheet's id). After migration day the Admin file is retired.
+
+**Layout.** The Apps Script project bound to the GFY Tournament sheet (`tools/clasp/`) holds four files that share
+ONE global scope: `Code.gs` (= `tools/sheet-polish.gs`), `gfy-mailer.gs`, `gfy-promote.gs`, `triggers.gs`
+(= `tools/sheet-triggers.gs`, the scorer). The private tabs live in the SAME spreadsheet, always **after** every
+public tab, red-tabbed with a warning-only header protection: `Dashboard, Contacts, Replies, RSVP, SendLog,
+Admin READ ME` (the old Admin file's `READ ME` is renamed `Admin READ ME` so it cannot be confused with START HERE).
+`PUBLIC_ID` unset, or equal to the active spreadsheet's own id, means "this file plays both roles"; set to another
+id it still means the old two-file layout. Public `polish()` skips the private tabs entirely; `adminPolish` touches
+only them; a second run of either changes nothing.
+
+**Name collisions (a project has one global scope).** Exactly two: `onOpen` (gfy-promote vs mailer) and `doGet`
+(scorer vs RSVP page). Now: ONE `onOpen` in `gfy-mailer.gs` builds the `GFY` menu (`pcMenu_` in gfy-promote.gs) and
+the `GFY Mail` menu; ONE `doGet` router in `gfy-mailer.gs` sends a request carrying the RSVP token parameter `t`
+to the RSVP page (`mailRsvpGet_`) and everything else to the scorer's old answer, now named `scorerDoGet_`
+(byte-identical; the endpoint URL and `check-endpoint` do not change). `doPost` is the scorer's alone.
+`npm run check-onefile` loads all four files into one scope in both file orders and fails on any duplicate
+top-level declaration. Pasting `triggers.gs` or `gfy-promote.gs` into a project WITHOUT `gfy-mailer.gs` now leaves
+it with no `doGet` / `GFY` menu: they are parts of this one project.
+
+**Publish guard (why this is safe).** The Tournament sheet is published as the entire document. A private tab is on
+the web if pubhtml lists it, so:
+- `npm run check-publish` fetches `https://docs.google.com/spreadsheets/d/e/<PUB_ID>/pubhtml` (PUB_ID from
+  `config.js`), lists the published tabs, exits **1** naming any private tab (`tools/private-tabs.mjs`, the one
+  closed list), prints WARN for a tab the site does not read, exits **2** when it cannot read the page (never a
+  clean result). `npm run event-ready` runs the same check first and FAILs on it.
+- Inside Apps Script, before **Send invites**, **Send nudges**, **Polish admin sheet** and **Import**, the same
+  page is fetched (Script Property `PUB_ID`, never in the code). A published private tab BLOCKS all four. An
+  unreadable page BLOCKS sends and Import ("can't confirm the email tabs are private") and only WARNS for polish.
+  The Dashboard shows `publish check: OK - private tabs not published` or `PRIVATE TAB PUBLISHED: <names>`
+  (refreshed by polish / the scan, not by an RSVP tap). Not applied in the two-file layout (nothing private is in
+  the published file).
+- Invariant: nothing containing `@` is ever written to a published tab (any tab outside the private list).
+  `mailPublicWrite_` refuses it, and the leak test checks every write of every scenario.
+- Caveat the guard cannot see: if the sheet is still published as "Entire document", a private tab created
+  AFTER the check is published at once. polish re-checks after creating tabs and says so loudly; publish **selected
+  tabs only** first (step 1 below).
+
+**Script Properties the merged project needs** (Project Settings; properties are NOT copied between projects):
+
+| Property | Value |
+|---|---|
+| `PUB_ID` | the `2PACX-...` token from `config.js` (required: the publish guard) |
+| `WEBAPP_URL` | the existing scorer deployment's `/exec` URL (RSVP links; same URL, new version) |
+| `ADMIN_ID` | the OLD Admin file's id, only for Import; delete it afterwards |
+| `GFY_MAIL_TEST` | unset = TEST MODE; exactly `0` = live (by hand, January) |
+| `ALERT_TO` | optional health-alert address |
+| `NUDGE_DAYS`, `TEMPLATE_PREFIX`, `NUDGE_PREFIX`, `SCAN_BUDGET_MS` | optional (menu / defaults as before) |
+| `PUBLIC_ID` | leave UNSET (or the Tournament sheet's own id) |
+
+Managed by code, do not set: `SEND_RUN, SCAN_CURSOR, SCAN_MISSING, SCAN_THROWS, SCAN_AUTO, TPL_STATUS, PUB_STATUS,
+DASH_AT, ALERT_LAST` and the scorer's `idem:*` keys.
+
+**Manifest.** `tools/appsscript.merged.json` is the deployable `appsscript.json`: the scorer deployment's own web
+app settings (`USER_DEPLOYING`, `ANYONE_ANONYMOUS`, identical to the mailer's), timezone/runtime unchanged, plus
+explicit `oauthScopes` (spreadsheets, Gmail, send_mail, external_request for the publish guard, scriptapp, UI,
+userinfo.email). Explicit scopes override the three `@OnlyCurrentDoc` lines, which would otherwise stop
+`openById(ADMIN_ID)` in Import. The consent screen will therefore ask for more than the scorer alone ever did.
+After `clasp pull` on migration day, the pulled manifest should differ from this file only by `oauthScopes`.
+
+**Migration day (Riley; order matters).**
+1. Tournament sheet > File > Share > Publish to web: stop publishing, then publish **selected tabs only** (the 16
+   public tabs: START HERE, Field, Invites, Rooms, Announce, Form Responses 1, Info, Course, Scores, Schedule,
+   Pairings, Calcutta, Payout, Ledger, Champions, Shame). If Google issues a new `2PACX-` id, update `PUB_ID` in
+   `config.js` (push is Riley's) and run `npm run check-gids`.
+2. `npm run check-publish` is green (exit 0).
+3. Refresh the workspace from `tools/` (`Code.gs`, `gfy-mailer.gs`, `gfy-promote.gs`, `triggers.gs`; manifest from
+   `tools/appsscript.merged.json`), `npm run check-armkit` is correct, then `clasp push` from `tools/clasp/`.
+4. Deploy > Manage deployments > **edit the EXISTING scorer deployment** > Version: **New version** (the
+   `score_endpoint` URL must not change). `npm run check-endpoint` still prints REAL.
+5. Set the Script Properties above; `WEBAPP_URL` = that same `/exec` URL. Reload the sheet.
+6. Run any **GFY Mail** menu item once and consent.
+7. **GFY Mail > Import from old Admin file...** copies Contacts, Replies, RSVP, SendLog (values and text formats)
+   into same-name tabs, prints rows copied vs rows in the old file per tab, reads the copy back and clears it again
+   on any mismatch. It refuses if any destination tab already has data rows (so a second run is a refusal), if the
+   publish guard does not pass, or if `ADMIN_ID` is missing. It never writes to the old file.
+8. **GFY Mail > Polish admin sheet** (checkboxes, Dashboard, tab order/colours), then **Install / repair
+   triggers**. Look at the Dashboard: counts, `publish check: OK`, template draft OK.
+9. In the OLD Admin project delete its triggers (Triggers page) so two scanners do not run, then trash the Admin
+   file last.
+
+**Rollback.** Nothing before step 9 deletes anything. To back out: Manage deployments > edit the scorer
+deployment > the previous version (same URL); delete the six private tabs here (they hold only copies); the old
+Admin project, its triggers and file are untouched until step 9; Drive keeps a trashed file 30 days.
+
 ## The Admin vault (emails)
 
 Everything published from the main GFY sheet is public — that's the whole
@@ -216,8 +305,7 @@ before sending. That list exists because someone once had a reason.
 
 ### Send invites + reply watcher (`tools/gfy-mailer.gs`, BACKLOG #33 A+C)
 
-Lives in the **GFY Admin** sheet's own Apps Script project (never the public
-sheet's). It sends invites on a button press and watches the replies. Built and
+Lives in the **GFY Admin** sheet's own Apps Script project until migration day (then in the Tournament project: see "One file" above). It sends invites on a button press and watches the replies. Built and
 tested offline; **not installed anywhere yet.**
 
 **Install (once, by hand):**
@@ -226,7 +314,7 @@ tested offline; **not installed anywhere yet.**
    sheet's spreadsheet id (the long id in its edit URL). It is deliberately not in the code.
 3. Make sure the Admin sheet has the tabs from the current `gfy-admin-template.xlsx`:
    `Contacts`, `SendLog` (with a `thread_id` column — the button adds the header
-   if it is missing), `Replies`, `RSVP`, `READ ME`. (There is **no** InviteTemplate tab any
+   if it is missing), `Replies`, `RSVP`, `Admin READ ME` (called `READ ME` in older Admin files; polish renames it in place). (There is **no** InviteTemplate tab any
    more: an old one is left alone, and the Dashboard says it is safe to delete.)
 4. Write the invite as a normal **Gmail draft** in goodfriendsyearly@gmail.com whose subject
    starts `[GFY TEMPLATE]` (copy is in `docs/invite-copy.md`). `{first}`, `{rsvp}` and `{rsvp_button}`
@@ -289,7 +377,7 @@ the Dashboard says "test mode: would mark responded X". A bounce writes `BOUNCED
 that person's Contacts notes and does **not** count as a response. The reply text
 goes only to the private `Replies` tab (`looks_yes` is a guess; `confirm` is yours
 to tick) — **it never auto-commits anyone.** The last successful scan time is
-written to `READ ME` B2 as TEXT (`yyyy-MM-dd HH:mm`; Sheets would otherwise turn it into a Date,
+written to `Admin READ ME` B2 as TEXT (`yyyy-MM-dd HH:mm`; Sheets would otherwise turn it into a Date,
 and every reader also accepts a Date or number; a scan with an unreadable thread does not
 stamp). `thread_id`, `msg_id`, `token`, `date`, `answered_at` are also written as text. The only thing ever written to the public sheet is a TRUE tick in
 `invited`/`responded`; the code refuses any public write containing `@`.
@@ -304,7 +392,7 @@ protection, puts real checkboxes on `Contacts.do_not_invite`, `Replies.looks_yes
 and `Replies.confirm` (existing `TRUE`/`FALSE` *text* in those columns becomes a
 real boolean, nothing else is touched; validation covers last data row + 50), highlights
 malformed `email`/`email_alt` (highlight only, never rejects), colours the tabs and
-orders them Dashboard, Contacts, Replies, RSVP, SendLog, READ ME (ending on
+orders them Dashboard, Contacts, Replies, RSVP, SendLog, Admin READ ME (ending on
 Dashboard). `Contacts.player` names with no match (trim / spaces / case) on ANY year of the
 public Invites are highlighted and listed on the Dashboard (a veteran simply not invited this
 year is not a mismatch). Contacts
@@ -403,7 +491,7 @@ lists names. **Test mode** sends fresh messages to goodfriendsyearly@ (`[TEST �
 make people candidates, so a test-only rehearsal (invites in test mode, then nudges in test mode) works.
 
 **Health alerts.** Script property `ALERT_TO` (empty = off): if a scan throws, or the last
-good scan (READ ME B2) is over 3 h old when a scan starts, one `MailApp` alert goes to
+good scan (Admin READ ME B2) is over 3 h old when a scan starts, one `MailApp` alert goes to
 `ALERT_TO`, at most one per 24 h (stored in `ALERT_LAST`). The alert text carries no addresses.
 
 **Web surface.** The Web App is anonymous, and `google.script.run` can call any global function
