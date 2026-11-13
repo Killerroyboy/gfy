@@ -93,7 +93,14 @@ function mailGuard_(e, handler){
   catch (err){ throw new Error("Not available here: run this from the GFY Mail menu or by its trigger."); }
 }
 
+// ONE-FILE (WO-ONE-FILE): a project has exactly ONE onOpen, and it is this one. It builds the scorer-side "GFY"
+// menu when gfy-promote.gs is in the project (pcMenu_) and then the "GFY Mail" menu. Alone (the old Admin project)
+// it builds just "GFY Mail".
 function onOpen(){
+  if (typeof pcMenu_ === "function") pcMenu_();
+  mailMenu_();
+}
+function mailMenu_(){
   SpreadsheetApp.getUi().createMenu("GFY Mail")
     .addItem("Send invites…", "sendInvites")
     .addItem("Send nudges…", "sendNudges")
@@ -816,8 +823,16 @@ function mailRsvpInvalid_(){
   return `<!doctype html><html><head><meta charset="utf-8"><title>Good Friends Yearly</title><style>body{margin:0;background:#0E2019;color:#E9E3D3;font-family:Jost,Futura,Arial,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center}</style></head><body><main><h1>This link is not valid</h1><p>It may be from an older year. Just reply to the email and we will sort it out.</p></main></body></html>`;
 }
 
-/** Web App GET. Records NOTHING (link scanners prefetch GETs); only renders. */
+/** THE Web App GET (ONE-FILE router). An RSVP request - the mailer's token parameter `t` present, even empty - gets
+ *  the RSVP page; anything else gets the scorer's own doGet answer (scorerDoGet_ in triggers.gs), unchanged. Alone
+ *  (the old Admin project, no scorer file) every request gets the RSVP page / "not valid" as before. */
 function doGet(e){
+  const isRsvp = !!(e && e.parameter && Object.prototype.hasOwnProperty.call(e.parameter, "t"));
+  if (!isRsvp && typeof scorerDoGet_ === "function") return scorerDoGet_();
+  return mailRsvpGet_(e);
+}
+/** The RSVP page. Records NOTHING (link scanners prefetch GETs); only renders. */
+function mailRsvpGet_(e){
   const props = PropertiesService.getScriptProperties();
   const token = String((e && e.parameter && e.parameter.t) || "").trim();
   let html = null;

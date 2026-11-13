@@ -228,7 +228,9 @@ function doPost(e){
 // cannot produce these, which is exactly how check-endpoint tells them apart.
 const SCORER_HANDLER = "gfy-scorer";
 const SCORER_CONTRACT = 1;
-function doGet(){
+// ONE-FILE (WO-ONE-FILE): this project's Web App has ONE doGet. It lives in gfy-mailer.gs as a router: an RSVP
+// request (query param `t`) goes to the RSVP page, EVERYTHING else comes here, unchanged. Same deployment URL.
+function scorerDoGet_(){
   try{
     const ss = SpreadsheetApp.getActive();
     const year = firstTeeYear_(ss);

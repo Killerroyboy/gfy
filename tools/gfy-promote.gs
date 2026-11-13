@@ -1,8 +1,8 @@
 /** @OnlyCurrentDoc */
 /**
  * GFY accept→Field promotion — the invites funnel's missing middle step.
- * Paste into the LIVE sheet's Apps Script project (same project as polish/
- * triggers is fine) and reload the sheet — a "GFY" menu appears.
+ * Part of the ONE-FILE project (tools/clasp/): its "GFY" menu is added by the project's single onOpen
+ * (gfy-mailer.gs). Reload the sheet — a "GFY" menu appears.
  *
  * Workflow: GFY → "Seed next season's Invites" pre-fills the tab with every
  * returning player from Field's trailing three seasons, VETERANS FIRST
@@ -42,7 +42,9 @@ function pcCommitted_(committedCell, statusCell){
   return pcYes_(committedCell) || /^(y|yes)$/i.test(String(statusCell == null ? "" : statusCell).trim());
 }
 
-function onOpen(){
+// ONE-FILE (WO-ONE-FILE): a project has ONE onOpen. It lives in gfy-mailer.gs and calls this to add the "GFY" menu
+// (and mailMenu_ for "GFY Mail"). Renamed from onOpen so the two files can share a scope.
+function pcMenu_(){
   const menu = SpreadsheetApp.getUi().createMenu("GFY")
     .addItem("Promote committed → Field", "promoteCommitted")
     .addItem("Seed next season's Invites", "seedInvites");

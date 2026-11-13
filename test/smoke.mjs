@@ -2163,11 +2163,11 @@ dom.window.close();
 /* ---------- SC27: §27 go-live hardening — SC-IDENT + SC-PROBE ---------- */
 {
   const trig = (() => { try { return readFileSync(path.join(ROOT, "tools", "sheet-triggers.gs"), "utf8"); } catch { return ""; } })();
-  const doGetBody = (trig.match(/function doGet\(\)[\s\S]*?\n\}/) || [""])[0];
+  const doGetBody = (trig.match(/function scorerDoGet_\(\)[\s\S]*?\n\}/) || [""])[0];   // ONE-FILE: the scorer half of the doGet router (doGet itself lives in gfy-mailer.gs)
   // SC-IDENT is only useful if BOTH exits carry it: a bound-but-broken real
   // handler that answered anonymously would be misread as the echo stub and
   // send the operator to redeploy instead of to the actual error (S2).
-  check("SC27-1: SC-IDENT — doGet declares handler/writes/contract on BOTH its success AND its catch path, and the additive keys never displace ok/year/teams",
+  check("SC27-1: SC-IDENT — the scorer's doGet (scorerDoGet_, behind the ONE-FILE router) declares handler/writes/contract on BOTH its success AND its catch path, and the additive keys never displace ok/year/teams",
     doGetBody.length > 0
     && (doGetBody.match(/handler:\s*SCORER_HANDLER/g) || []).length === 2
     && (doGetBody.match(/writes:\s*true/g) || []).length === 2
