@@ -49,7 +49,7 @@
  */
 
 const MAIL_TEST_ADDR = "goodfriendsyearly@gmail.com";
-const MAIL_TAB = { contacts: "Contacts", log: "SendLog", replies: "Replies", readme: "READ ME", invites: "Invites", dash: "Dashboard", rsvp: "RSVP", oldTpl: "InviteTemplate" };
+const MAIL_TAB = { contacts: "Contacts", log: "SendLog", replies: "Replies", readme: "Admin READ ME", invites: "Invites", dash: "Dashboard", rsvp: "RSVP", oldTpl: "InviteTemplate" };
 const MAIL_TPL_PREFIX = "[GFY TEMPLATE]";     // the ONE Gmail draft whose subject starts with this is the invite
 const MAIL_NUDGE_PREFIX = "[GFY NUDGE]";      // the ONE Gmail draft whose subject starts with this is the nudge
 
@@ -61,11 +61,16 @@ const MAIL_SCHEMA = {
   "SendLog": ["date", "player", "address_used", "what", "note", "thread_id"],
   "Replies": ["date", "player", "from", "snippet", "looks_yes", "confirm", "msg_id"],
   "RSVP": ["year", "player", "token", "answer", "answered_at", "history", "test"],
-  "READ ME": ["warning", "last_reply_scan"],
+  "Admin READ ME": ["warning", "last_reply_scan"],
 };
-const MAIL_ORDER = ["Dashboard", "Contacts", "Replies", "RSVP", "SendLog", "READ ME"];
-const MAIL_TAB_COLORS = { "Dashboard": "#1155cc", "Contacts": "#6aa84f", "Replies": "#f1c232", "SendLog": "#999999", "RSVP": "#e69138", "READ ME": "#cc0000" };
+const MAIL_ORDER = ["Dashboard", "Contacts", "Replies", "RSVP", "SendLog", "Admin READ ME"];
+const MAIL_TAB_COLORS = { "Dashboard": "#1155cc", "Contacts": "#6aa84f", "Replies": "#f1c232", "SendLog": "#999999", "RSVP": "#e69138", "Admin READ ME": "#cc0000" };
 const MAIL_CHECKBOX = { "Contacts": ["do_not_invite"], "Replies": ["looks_yes", "confirm"] };   // CLOSED list
+// The tabs that must NEVER be published to the web (addresses, reply text, RSVP tokens). In the ONE-FILE layout they sit
+// in the same spreadsheet as the published tournament tabs. LOCKSTEP with tools/private-tabs.mjs and GFY_PRIVATE_TABS in
+// sheet-polish.gs (test/onefile.test.mjs fails if they differ). The legacy Admin file's "READ ME" is renamed on polish.
+const MAIL_PRIVATE_TABS = ["Contacts", "Replies", "RSVP", "SendLog", "Dashboard", "Admin READ ME"];
+const MAIL_LEGACY_README = "READ ME";
 const MAIL_POLISH_TAG = "gfy-admin-polish";
 const MAIL_NUDGE_DEFAULT = 7;
 const MAIL_STALE_MS = 60 * 60 * 1000;
@@ -176,6 +181,20 @@ function mailPublicWrite_(sheet, r, c, v){
   if (/@/.test(String(v))) throw new Error("refusing to write '@' to the public sheet");
   sheet.getRange(r, c).setValue(v);
 }
+
+// ---- which spreadsheet holds the PUBLISHED tabs (Invites) ------------------------------------------
+// ONE-FILE (WO-ONE-FILE): the mailer lives in the Tournament spreadsheet's own project, so the private tabs and the
+// published tabs are the same file. Script Property PUBLIC_ID unset, or equal to the active spreadsheet's id => the
+// active spreadsheet plays both roles. PUBLIC_ID set to ANOTHER id keeps the old two-file layout (the Admin file).
+function mailPublicSS_(props, active){
+  const pid = String(props.getProperty("PUBLIC_ID") == null ? "" : props.getProperty("PUBLIC_ID")).trim();
+  if (!pid) return active || null;
+  if (active && typeof active.getId === "function" && active.getId() === pid) return active;
+  return SpreadsheetApp.openById(pid);
+}
+function mailOneFile_(props, active){ return mailPublicSS_(props, active) === active; }
+function mailInvitesSheet_(props, active){ const ss = mailPublicSS_(props, active); return ss ? ss.getSheetByName(MAIL_TAB.invites) : null; }
+const MAIL_NO_INVITES = "The Invites tab was not found (this spreadsheet, or the one named by the PUBLIC_ID script property).";
 
 // True only while THIS execution holds the script lock (each execution has fresh globals).
 let MAIL_LOCK_HELD_ = false;
@@ -419,13 +438,11 @@ function mailSendInvites_(){
   const ui = SpreadsheetApp.getUi();
   const say = (title, msg) => ui.alert(title, msg, ui.ButtonSet.OK);
   const props = PropertiesService.getScriptProperties();
-  const pid = props.getProperty("PUBLIC_ID");
-  if (!pid){ say("GFY Mail", "Script property PUBLIC_ID is not set (Project Settings → Script properties). Nothing sent."); return; }
-
   const admin = SpreadsheetApp.getActiveSpreadsheet();
-  const invSheet = SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites);
+  const invSheet = mailInvitesSheet_(props, admin);
+  if (!invSheet){ say("GFY Mail", MAIL_NO_INVITES + " Nothing sent."); return; }
   const conSheet = admin.getSheetByName(MAIL_TAB.contacts), logSheet = admin.getSheetByName(MAIL_TAB.log);
-  if (!invSheet || !conSheet || !logSheet){ say("GFY Mail", "Missing tab (public Invites, or Admin Contacts / SendLog). Nothing sent."); return; }
+  if (!conSheet || !logSheet){ say("GFY Mail", "Missing tab (Contacts / SendLog). Nothing sent."); return; }
 
   const plan = mailPlan_(mailTable_(conSheet).rows, mailTable_(invSheet).rows, mailTable_(logSheet).rows);
   if (plan.blocks.length){
@@ -611,9 +628,8 @@ function mailClearRehearsal_(){
   const admin = SpreadsheetApp.getActiveSpreadsheet();
   const rs = admin.getSheetByName(MAIL_TAB.rsvp), logSheet = admin.getSheetByName(MAIL_TAB.log);
   if (!rs || !logSheet){ ui.alert("GFY Mail", "No RSVP / SendLog tab. Nothing cleared.", ui.ButtonSet.OK); return; }
-  const pid = props.getProperty("PUBLIC_ID");
-  const invSheet = pid ? SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites) : null;
-  if (!invSheet){ ui.alert("GFY Mail", "PUBLIC_ID / public Invites tab unavailable (the current season is needed). Nothing cleared.", ui.ButtonSet.OK); return; }
+  const invSheet = mailInvitesSheet_(props, admin);
+  if (!invSheet){ ui.alert("GFY Mail", MAIL_NO_INVITES + " (the current season is needed). Nothing cleared.", ui.ButtonSet.OK); return; }
   const year = mailCurrentYear_(mailTable_(invSheet).rows);
   const pick = () => {
     const stale = new Set(mailStaleRehearsal_(admin, year, mailTable_(logSheet).rows).map(mailNorm_));
@@ -637,12 +653,11 @@ function mailSendNudges_(){
   const ui = SpreadsheetApp.getUi();
   const say = (title, msg) => ui.alert(title, msg, ui.ButtonSet.OK);
   const props = PropertiesService.getScriptProperties();
-  const pid = props.getProperty("PUBLIC_ID");
-  if (!pid){ say("GFY Mail", "Script property PUBLIC_ID is not set. Nothing sent."); return; }
   const admin = SpreadsheetApp.getActiveSpreadsheet();
-  const invSheet = SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites);
+  const invSheet = mailInvitesSheet_(props, admin);
+  if (!invSheet){ say("GFY Mail", MAIL_NO_INVITES + " Nothing sent."); return; }
   const conSheet = admin.getSheetByName(MAIL_TAB.contacts), logSheet = admin.getSheetByName(MAIL_TAB.log);
-  if (!invSheet || !conSheet || !logSheet){ say("GFY Mail", "Missing tab (public Invites, or Admin Contacts / SendLog). Nothing sent."); return; }
+  if (!conSheet || !logSheet){ say("GFY Mail", "Missing tab (Contacts / SendLog). Nothing sent."); return; }
 
   let tpl;
   try { tpl = mailLoadDraft_(mailNudgePrefix_(props)); } catch (e){ say("GFY Mail", "Could not read Gmail drafts (" + (e && e.message || e) + "). Nothing sent."); return; }
@@ -774,15 +789,17 @@ function mailRsvpTokenNL_(sheet, year, player, test){
 function mailAdmin_(props){
   let a = null;
   try { a = SpreadsheetApp.getActiveSpreadsheet(); } catch (e){ a = null; }
-  if (!a && props.getProperty("ADMIN_ID")) a = SpreadsheetApp.openById(props.getProperty("ADMIN_ID"));
+  // Fallback ONLY in the two-file layout (PUBLIC_ID set): in the one-file project ADMIN_ID is the OLD Admin file
+  // (the migration source) and must never be mistaken for "this" spreadsheet.
+  if (!a && props.getProperty("PUBLIC_ID") && props.getProperty("ADMIN_ID")) a = SpreadsheetApp.openById(props.getProperty("ADMIN_ID"));
   return a;
 }
 
 // { admin, rsvp, inv, year } or null when anything is unavailable.
 function mailRsvpCtx_(props){
-  const admin = mailAdmin_(props), pid = props.getProperty("PUBLIC_ID");
-  if (!admin || !pid) return null;
-  const rsvp = admin.getSheetByName(MAIL_TAB.rsvp), inv = SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites);
+  const admin = mailAdmin_(props);
+  if (!admin) return null;
+  const rsvp = admin.getSheetByName(MAIL_TAB.rsvp), inv = mailInvitesSheet_(props, admin);
   if (!rsvp || !inv) return null;
   return { admin, rsvp, inv, year: mailCurrentYear_(mailTable_(inv).rows) };
 }
@@ -970,9 +987,7 @@ function mailScanRun_(){
 function mailScan_(){
   const admin = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
-  const pid = props.getProperty("PUBLIC_ID");
-  if (!pid) throw new Error("PUBLIC_ID script property is not set");
-  const invSheet = SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites);
+  const invSheet = mailInvitesSheet_(props, admin);
   const logSheet = admin.getSheetByName(MAIL_TAB.log), repSheet = admin.getSheetByName(MAIL_TAB.replies);
   const conSheet = admin.getSheetByName(MAIL_TAB.contacts), readme = admin.getSheetByName(MAIL_TAB.readme);
   if (!invSheet || !logSheet || !repSheet || !conSheet) throw new Error("missing tab (Invites / SendLog / Replies / Contacts)");
@@ -1113,9 +1128,8 @@ function mailOnEditRun_(e){
   const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIL_TAB.log);
   const note = (player, text) => { if (logSheet) mailWithLock_(() => mailAppend_(logSheet, { date: mailToday_(), player, what: "note", note: text })); else Logger.log(player + ": " + text); };
 
-  const pid = PropertiesService.getScriptProperties().getProperty("PUBLIC_ID");
-  const invSheet = pid ? SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites) : null;
-  if (!invSheet){ Logger.log("mailOnEdit: PUBLIC_ID / Invites unavailable - nothing written"); return; }
+  const invSheet = mailInvitesSheet_(PropertiesService.getScriptProperties(), SpreadsheetApp.getActiveSpreadsheet());
+  if (!invSheet){ Logger.log("mailOnEdit: Invites tab unavailable - nothing written"); return; }
   const year = mailCurrentYear_(mailTable_(invSheet).rows);
 
   const test = mailIsTest_(PropertiesService.getScriptProperties());     // test mode never writes the public sheet
@@ -1230,6 +1244,9 @@ function adminPolish(e){ mailGuard_(e, "adminPolish"); mailAdminPolish_(); }
 function mailAdminPolish_(){
   const admin = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
+  // The old two-file Admin file called its notes tab "READ ME"; the one-file project calls it "Admin READ ME" (it can
+  // never be confused with START HERE). Rename it in place - only in the Admin-only file, never in the Tournament sheet.
+  if (!admin.getSheetByName(MAIL_TAB.readme) && !mailOneFile_(props, admin) && admin.getSheetByName(MAIL_LEGACY_README)) admin.getSheetByName(MAIL_LEGACY_README).setName(MAIL_TAB.readme);
   Object.keys(MAIL_SCHEMA).forEach(name => {
     const sh = admin.getSheetByName(name) || admin.insertSheet(name);
     mailAdminHeaders_(sh, MAIL_SCHEMA[name]);
@@ -1300,8 +1317,7 @@ function mailDashboardNL_(admin, props, tplStatus){
   const lists = {}; MAIL_DASH_LISTS.forEach(k => { lists[k] = []; });
   let year = "", counts = null;
 
-  const pid = props.getProperty("PUBLIC_ID");
-  const invSheet = pid ? SpreadsheetApp.openById(pid).getSheetByName(MAIL_TAB.invites) : null;
+  const invSheet = mailInvitesSheet_(props, admin);
   const conSheet = admin.getSheetByName(MAIL_TAB.contacts), logSheet = admin.getSheetByName(MAIL_TAB.log), repSheet = admin.getSheetByName(MAIL_TAB.replies);
 
   if (conSheet) mailTable_(conSheet).rows.forEach(c => { if (mailNorm_(c.player) && /BOUNCED/.test(String(c.notes == null ? "" : c.notes))) lists["Bounced"].push(String(c.player).trim()); });
@@ -1317,7 +1333,7 @@ function mailDashboardNL_(admin, props, tplStatus){
 
   if (mailIsTest_(props)) notes.push("RSVP test mode: answers are recorded on the RSVP tab only; the public sheet is not written.");
   if (!invSheet){
-    notes.push(pid ? "Public Invites tab not found - counts and name checks unavailable." : "PUBLIC_ID script property not set - counts and name checks unavailable.");
+    notes.push(props.getProperty("PUBLIC_ID") ? "Public Invites tab not found - counts and name checks unavailable." : "Invites tab not found in this spreadsheet (PUBLIC_ID not set) - counts and name checks unavailable.");
   } else {
     const inv = mailTable_(invSheet).rows;
     year = mailCurrentYear_(inv);

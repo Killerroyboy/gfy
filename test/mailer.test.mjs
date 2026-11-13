@@ -29,7 +29,8 @@ function mkSheet(name, rows, log, ss) {
   };
   const ensure = (r, c) => { while (sh.rows.length < r) sh.rows.push([]); const row = sh.rows[r - 1]; while (row.length < c) row.push(""); };
   const logW = (r, c, v, op) => { log.dirty = true; sh.writes.push({ r, c, v, op }); log.push({ ev: "write", sheet: name, r, c, v, op, locked: log.isLocked ? log.isLocked() : null }); delete sh.formulas[r + "," + c]; };
-  sh.getName = () => name;
+  sh.getName = () => sh.name;
+  sh.setName = n => { sh.name = n; return sh; };
   sh.getSheetId = () => 1;
   sh.getDataRange = () => ({ getValues: () => { const w = Math.max(0, ...sh.rows.map(r => r.length)); return sh.rows.map(r => { const o = r.slice(); while (o.length < w) o.push(""); return o; }); } });
   sh.getLastRow = () => sh.rows.length;
@@ -82,6 +83,9 @@ const mkRuleB = () => { const o = { f: null, bg: null, ranges: [], getBooleanCon
 const mkDVB = () => { const o = { kind: null }; const b = { requireCheckbox: () => { o.kind = "checkbox"; return b; }, build: () => o }; return b; };
 
 const PUB = "PUBLIC_SHEET_ID_FAKE";
+const PUBTOKEN = "2PACX-1vFIXTUREFIXTUREFIXTUREFIXTUREFIXTUREFIXTUREFIXTURE";
+const pubFx = f => readFileSync(path.join(ROOT, "fixtures", "pubhtml", f), "utf8");
+const PUBHTML_OK = pubFx("items-public.html");
 const HDR_INV = ["year", "player", "invited", "responded", "status", "committed", "invited_by"];
 const HDR_CON = ["player", "email", "email_alt", "phone", "do_not_invite", "reason", "notes"];
 const HDR_LOG = ["date", "player", "address_used", "what", "note", "thread_id"];
@@ -108,11 +112,24 @@ function world(o = {}) {
     mkSheet("SendLog", [HDR_LOG, ...(o.sendlog || [])], log),
     mkSheet("RSVP", [HDR_RSVP, ...(o.rsvp || [])], log),
     mkSheet("Replies", [HDR_REP, ...(o.replies || [])], log),
-    mkSheet("READ ME", [["warning", "last_reply_scan"], ["be careful", ""]], log),
+    mkSheet("Admin READ ME", [["warning", "last_reply_scan"], ["be careful", ""]], log),
   ];
-  const admin = mkSS("ADMIN_ID", o.adminSheets ? o.adminSheets(log) : adminSheets, log);
-  const pub = mkSS(PUB, [mkSheet("Invites", [HDR_INV, ...invites], log)], log);
-  const props = { ...(o.props || {}) }; if (!("PUBLIC_ID" in props) && !o.noPublicId) props.PUBLIC_ID = PUB;
+  // oneFile = the WO-ONE-FILE layout: private tabs AND the published tabs live in ONE spreadsheet (the Tournament sheet).
+  const pubTabs = () => [mkSheet("START HERE", [["GFY"], ["welcome"]], log), mkSheet("Field", [["year", "player", "team", "deposit"], [2027, "Alice Able", "Eagles", true]], log), mkSheet("Invites", [HDR_INV, ...invites], log), mkSheet("Info", [["key", "value"], ["first_tee", "2027-08-14"]], log)];
+  const admin = o.oneFile ? mkSS("TOURNEY_ID", [...pubTabs(), ...(o.adminSheets ? o.adminSheets(log) : adminSheets)], log) : mkSS("ADMIN_ID", o.adminSheets ? o.adminSheets(log) : adminSheets, log);
+  const pub = o.oneFile ? admin : mkSS(PUB, [mkSheet("Invites", [HDR_INV, ...invites], log)], log);
+  const props = { ...(o.props || {}) }; if (!("PUBLIC_ID" in props) && !o.noPublicId && !o.oneFile) props.PUBLIC_ID = PUB;
+  if (o.oneFile && !("PUB_ID" in props) && !o.noPubId) props.PUB_ID = PUBTOKEN;
+  // UrlFetchApp: a fake of the pubhtml fetch only. o.pubhtml = html string | { throws } | { status } ; default = public tabs only.
+  const fetched = [];
+  const UrlFetchApp = { fetch: (url, opts) => {
+    fetched.push({ url, opts });
+    const ph = "pubhtml" in o ? o.pubhtml : PUBHTML_OK;
+    if (ph && typeof ph === "object" && ph.throws) throw new Error(ph.throws);
+    const status = ph && typeof ph === "object" && ph.status ? ph.status : 200;
+    const body = typeof ph === "string" ? ph : (ph && ph.body) || "";
+    return { getResponseCode: () => status, getContentText: () => body };
+  } };
   const prompts = [];
   const alerts = []; const answers = o.answers || ["YES"];
   const opened = [];
@@ -128,7 +145,7 @@ function world(o = {}) {
     getActiveSpreadsheet: () => admin, getActive: () => admin,
     getUi: () => { if (o.noUi || flags.noUi) throw new Error("Cannot call SpreadsheetApp.getUi() from this context."); return ui; },
     newConditionalFormatRule: mkRuleB, newDataValidation: mkDVB, ProtectionType: { RANGE: "RANGE" },
-    openById: id => { opened.push(id); if (id === PUB) return pub; throw new Error("unknown id " + id); },
+    openById: id => { opened.push(id); if (id === PUB) return pub; if (o.oneFile && id === "TOURNEY_ID") return admin; if (o.sources && o.sources[id]) return o.sources[id]; throw new Error("unknown id " + id); },
   };
   // Gmail
   const sent = []; const threads = {}; let tn = 0;
@@ -198,7 +215,7 @@ function world(o = {}) {
   const HtmlService = { createHtmlOutput: h => { const out = { html: h, title: "", getContent: () => h, setTitle: t => { out.title = t; return out; }, addMetaTag: () => out, setXFrameOptionsMode: () => out }; htmlPages.push(out); return out; }, XFrameOptionsMode: { ALLOWALL: "ALLOWALL" } };
   const clock = { skew: 0 };
   class FakeDate extends Date { constructor(...a) { if (a.length) super(...a); else super(Date.now() + clock.skew); } static now() { return Date.now() + clock.skew; } static [Symbol.hasInstance](x) { return x instanceof Date; } }
-  const env = { Date: FakeDate, SpreadsheetApp, GmailApp, MailApp, PropertiesService, LockService, ScriptApp, Session, Utilities, Logger, HtmlService };
+  const env = { Date: FakeDate, SpreadsheetApp, GmailApp, MailApp, PropertiesService, LockService, ScriptApp, Session, Utilities, Logger, HtmlService, UrlFetchApp };
   const names = ["onOpen", "sendInvites", "scanReplies", "installMailTriggers", "mailPublicWrite_", "adminPolish", "mailOnEdit", "mailDashboard_", "MAIL_SCHEMA", "sendNudges", "doGet", "recordRsvp", "mailAppend_", "mailWithLock_", "setNudgeDays", "clearRehearsalAnswers"];
   let M;
   try { M = new Function(...Object.keys(env), SRC + "\nreturn {" + names.map(n => `${n}: typeof ${n}!=='undefined'?${n}:undefined`).join(",") + "};")(...Object.values(env)); }
@@ -206,7 +223,7 @@ function world(o = {}) {
   const sheet = n => admin.getSheetByName(n);
   const invSheet = pub.getSheetByName("Invites");
   const addIncoming = (threadId, m) => { threads[threadId].msgs.push({ id: threadId + "m" + threads[threadId].msgs.length, ...m }); };
-  return { clock, M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages, hooks, lockState, pendingDrafts, flags, counters, prompts };
+  return { fetched, clock, M, log, admin, pub, sheet, invSheet, sent, alerts, opened, menus, triggers, threads, addIncoming, props, draftOps, threadReplies, mails, htmlPages, hooks, lockState, pendingDrafts, flags, counters, prompts };
 }
 const run = (w, fn) => { try { return { ok: true, v: w.M[fn]() }; } catch (e) { return { ok: false, e: String(e && e.message || e) }; } };
 const pubWrites = w => w.log.filter(e => e.ev !== "lock" && e.ev !== "unlock" && e.ev !== "send" && e.sheet === "Invites");
@@ -451,7 +468,7 @@ function afterSend(extra = {}) {
   const ev = w.log.map(e => e.ev + (e.sheet ? ":" + e.sheet : ""));
   const lockedOk = ev.every((e, i) => e !== "write:Invites" || (ev.slice(0, i).lastIndexOf("lock") > ev.slice(0, i).lastIndexOf("unlock")));
   check("MC7: public `responded` writes happen inside LockService", lockedOk && ev.includes("lock"), ev.join(","));
-  const rr = w.sheet("READ ME").rows;
+  const rr = w.sheet("Admin READ ME").rows;
   check("MC8: health stamp - READ ME B2 gets a timestamp (and contains no player names/addresses)", /^\d{4}-\d{2}-\d{2}/.test(String(rr[1][1])) && !/Alice|Bob|@/.test(String(rr[1][1])), JSON.stringify(rr));
   const n = reps.length; run(w, "scanReplies");
   check("MC9: re-running the scan does not duplicate Replies rows (msg_id dedupe)", w.sheet("Replies").rows.length - 1 === n, String(w.sheet("Replies").rows.length));
@@ -468,7 +485,7 @@ function afterSend(extra = {}) {
   const alice = w.invSheet.rows.find(x => x[1] === "Alice Able");
   check("MC10: out-of-office subject, Auto-Submitted header, 'automatic reply' subject, and the account's own messages never count as a reply",
     r.ok && alice[3] === false && w.sheet("Replies").rows.length === 1 && pubWrites(w).length === 0, r.e || JSON.stringify(w.invSheet.rows));
-  const rr = w.sheet("READ ME").rows;
+  const rr = w.sheet("Admin READ ME").rows;
   check("MC11: a clean scan with nothing to report still stamps the last-scan time", /^\d{4}-\d{2}-\d{2}/.test(String(rr[1][1])));
 }
 {
@@ -498,12 +515,12 @@ function afterSend(extra = {}) {
   run(w3, "sendInvites");
   w3.addIncoming("thr1", { from: "A <alice@example.com>", subject: "Re:", body: "yes" });
   const r = run(w3, "scanReplies");
-  const rr = w3.sheet("READ ME").rows;
+  const rr = w3.sheet("Admin READ ME").rows;
   check("MC15: one unreadable thread does not abort the others, but the scan then throws and does NOT stamp a 'successful' scan time",
     !r.ok && w3.invSheet.rows.find(x => x[1] === "Alice Able")[3] === true && String(rr[1][1]) === "", r.e || JSON.stringify(rr));
   const r2 = run(w3, "scanReplies"), r3 = run(w3, "scanReplies");
   check("MC15b (WO-FIX-33-FINAL #4): the 1st and 2nd consecutive throw of the same thread are errors; the 3rd treats it as MISSING (scan succeeds, stamps, never a permanent failure)",
-    !r2.ok && r3.ok && /^\d{4}-/.test(String(w3.sheet("READ ME").rows[1][1])), JSON.stringify([r2, r3, w3.sheet("READ ME").rows]));
+    !r2.ok && r3.ok && /^\d{4}-/.test(String(w3.sheet("Admin READ ME").rows[1][1])), JSON.stringify([r2, r3, w3.sheet("Admin READ ME").rows]));
   noteWrites(w3);
 }
 
@@ -528,7 +545,9 @@ const dashText = w => { const sh = w.sheet("Dashboard"); return sh ? JSON.string
   try { py = JSON.parse(execFileSync("python3", ["-c", "import sys,json; sys.dont_write_bytecode=True; sys.path.insert(0,'tools'); import make_admin_template as m; print(json.dumps({k:v['headers'] for k,v in m.TABS.items()}))"], { cwd: ROOT, encoding: "utf8", env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } })); } catch (e) { err = String(e); }
   const w = world();
   const sch = w.M.MAIL_SCHEMA;
-  check("AP1: the .gs MAIL_SCHEMA equals make_admin_template.py TABS (same tab names, same header rows) - single source",
+  // make_admin_template.py is LEGACY (the two-file layout); its "READ ME" tab became "Admin READ ME" in the one-file project.
+  if (py && py["READ ME"]) { py["Admin READ ME"] = py["READ ME"]; delete py["READ ME"]; }
+  check("AP1: the .gs MAIL_SCHEMA equals make_admin_template.py TABS (same tab names, same header rows; legacy READ ME == Admin READ ME) - single source",
     !!py && !!sch && JSON.stringify(Object.keys(py).sort()) === JSON.stringify(Object.keys(sch).sort()) && Object.keys(py).every(k => JSON.stringify(py[k]) === JSON.stringify(sch[k])), err || JSON.stringify([py, sch]));
 }
 function bareAdmin(log) {
@@ -538,7 +557,7 @@ function bareAdmin(log) {
   const w = world({ adminSheets: bareAdmin });
   const r = run(w, "adminPolish");
   const sch = w.M.MAIL_SCHEMA || {};
-  const okTabs = ["Replies", "SendLog", "RSVP", "READ ME"].every(n => w.sheet(n) && JSON.stringify(w.sheet(n).rows[0]) === JSON.stringify(sch[n]));
+  const okTabs = ["Replies", "SendLog", "RSVP", "Admin READ ME"].every(n => w.sheet(n) && JSON.stringify(w.sheet(n).rows[0]) === JSON.stringify(sch[n]));
   check("AP2: adminPolish creates every missing tab with its template headers (and a Dashboard)", r.ok && okTabs && !!w.sheet("Dashboard"), r.e || w.admin.sheets.map(s => s.name).join(","));
   check("AP2b: existing Contacts data untouched when tabs are added", JSON.stringify(w.sheet("Contacts").rows[1]) === JSON.stringify(["Alice Able", "alice@example.com", "", "", false, "", "keep me"]) || JSON.stringify(w.sheet("Contacts").rows[1]) === JSON.stringify(["Alice Able", "alice@example.com", "", "", "FALSE", "", "keep me"]), JSON.stringify(w.sheet("Contacts").rows));
 }
@@ -594,8 +613,8 @@ function bareAdmin(log) {
   const w = world();
   run(w, "adminPolish");
   const names = w.admin.sheets.map(s => s.name).join();
-  check("AP8: tab order Dashboard, Contacts, Replies, RSVP, SendLog, READ ME; active tab ends on Dashboard; every tab coloured",
-    names === "Dashboard,Contacts,Replies,RSVP,SendLog,READ ME" && w.admin.active && w.admin.active.name === "Dashboard" && w.admin.sheets.every(s => !!s.tabColor), names);
+  check("AP8: tab order Dashboard, Contacts, Replies, RSVP, SendLog, Admin READ ME; active tab ends on Dashboard; every tab coloured",
+    names === "Dashboard,Contacts,Replies,RSVP,SendLog,Admin READ ME" && w.admin.active && w.admin.active.name === "Dashboard" && w.admin.sheets.every(s => !!s.tabColor), names);
 }
 {
   const w = world({ contacts: [["Alice Able", "alice@example.com", "", "", "TRUE", "", ""], ["Bob Baker", "bob@example.com", "", "", "FALSE", "", ""], ["Zed Nomatch", "z@example.com", "", "", "FALSE", "", ""]],
@@ -675,13 +694,13 @@ function dashWorld(extra = {}) {
 }
 {
   const w = dashWorld();
-  w.sheet("READ ME").rows[1][1] = "2020-01-01 00:00";
+  w.sheet("Admin READ ME").rows[1][1] = "2020-01-01 00:00";
   run(w, "adminPolish");
   const stale = dashVals(w);
-  w.sheet("READ ME").rows[1][1] = freshStamp();
+  w.sheet("Admin READ ME").rows[1][1] = freshStamp();
   run(w, "adminPolish");
   const fresh = dashVals(w);
-  w.sheet("READ ME").rows[1][1] = "";
+  w.sheet("Admin READ ME").rows[1][1] = "";
   run(w, "adminPolish");
   const never = dashVals(w);
   check("D6: last scan time is shown; STALE when more than 1 h old at rebuild; fresh is not STALE; never-scanned is flagged",
@@ -702,9 +721,9 @@ function dashWorld(extra = {}) {
   run(w3, "sendInvites");
   const r = run(w3, "scanReplies");
   check("D9: a scan that fails on an unreadable thread still throws, does not stamp a success time, and still refreshes the Dashboard (so STALE can show)",
-    !r.ok && !!w3.sheet("Dashboard") && String(w3.sheet("READ ME").rows[1][1]) === "", r.e);
+    !r.ok && !!w3.sheet("Dashboard") && String(w3.sheet("Admin READ ME").rows[1][1]) === "", r.e);
   run(w3, "scanReplies"); const r3 = run(w3, "scanReplies");
-  check("D9b (WO-FIX-33-FINAL #4): by the 3rd consecutive throw the thread is 'missing' on the Dashboard and the scan is healthy again", r3.ok && /missing[^"]*Bob Baker/i.test(dashText(w3)) && /^\d{4}-/.test(String(w3.sheet("READ ME").rows[1][1])), r3.e || dashText(w3));
+  check("D9b (WO-FIX-33-FINAL #4): by the 3rd consecutive throw the thread is 'missing' on the Dashboard and the scan is healthy again", r3.ok && /missing[^"]*Bob Baker/i.test(dashText(w3)) && /^\d{4}-/.test(String(w3.sheet("Admin READ ME").rows[1][1])), r3.e || dashText(w3));
   noteWrites(w3);
 }
 
@@ -1060,11 +1079,11 @@ function failingScanWorld(props = {}) {
 }
 {
   const w = world({ props: { ALERT_TO: ALERT } });
-  w.sheet("READ ME").rows[1][1] = "2020-01-01 00:00";
+  w.sheet("Admin READ ME").rows[1][1] = "2020-01-01 00:00";
   const r = run(w, "scanReplies");
   check("HL6: last good scan older than 3 h when a scan starts => one alert, even though this scan succeeds", r.ok && w.mails.length === 1 && w.mails[0].to === ALERT && /stale|old|3 h/i.test(w.mails[0].subj + w.mails[0].body), r.e || JSON.stringify(w.mails));
   const f = world({ props: { ALERT_TO: ALERT } });
-  f.sheet("READ ME").rows[1][1] = new Date(Date.now() - 2 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
+  f.sheet("Admin READ ME").rows[1][1] = new Date(Date.now() - 2 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
   run(f, "scanReplies");
   const n = world({ props: { ALERT_TO: ALERT } });          // never scanned: first scan, no alert
   run(n, "scanReplies");
@@ -1118,12 +1137,12 @@ function failingScanWorld(props = {}) {
 {
   const w = world({ props: { GFY_MAIL_TEST: "0", ALERT_TO: ALERT } });
   run(w, "scanReplies");
-  const raw = w.sheet("READ ME").rows[1][1];
+  const raw = w.sheet("Admin READ ME").rows[1][1];
   const r2 = run(w, "scanReplies");
   check("H2a: the scan stamp is stored as TEXT (not coerced to a Date), so a second scan reads it, stays quiet and the Dashboard says ok",
     typeof raw === "string" && r2.ok && w.mails.length === 0 && !/STALE/.test(String(dashVals(w)[DASH.status])), JSON.stringify([raw, r2.e, w.mails, dashVals(w)]));
   // a stamp already coerced to a Date / number by an earlier version is still understood by every reader
-  const mk = v => { const x = world({ props: { ALERT_TO: ALERT } }); x.sheet("READ ME").rows[1][1] = v; return x; };
+  const mk = v => { const x = world({ props: { ALERT_TO: ALERT } }); x.sheet("Admin READ ME").rows[1][1] = v; return x; };
   const fresh = mk(new Date(Date.now() - 20 * 60 * 1000)); run(fresh, "scanReplies");
   const old = mk(new Date(Date.now() - 5 * 3600 * 1000)); run(old, "scanReplies");
   const oldNum = mk(Date.now() - 5 * 3600 * 1000); run(oldNum, "scanReplies");
@@ -1426,7 +1445,7 @@ for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
   const w = gone();
   w.M.installMailTriggers && (w.flags.noUi = false, w.M.installMailTriggers(), w.flags.noUi = true);
   let ok = true; try { w.M.scanReplies({ triggerUid: "uid-scanReplies" }); } catch (e) { ok = false; }
-  check("M4d: a REAL trigger event (uid of an installed trigger) runs scanReplies with no UI", ok && w.sheet("READ ME").rows[1][1] !== "", "");
+  check("M4d: a REAL trigger event (uid of an installed trigger) runs scanReplies with no UI", ok && w.sheet("Admin READ ME").rows[1][1] !== "", "");
   const rep = world({ props: { GFY_MAIL_TEST: "0" }, replies: [["2027-01-02", "Alice Able", "A", "yes", true, true, "m1"]], invites: [[2027, "Alice Able", true, true, "", false, ""]] });
   rep.flags.noUi = true;
   const cc = colOf(rep.sheet("Replies").rows, "confirm");
@@ -1471,7 +1490,7 @@ for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
   w.addIncoming(tid("bob@example.com"), { from: "Bob <bob@example.com>", subject: "Re:", body: "yes in" });
   const r = run(w, "scanReplies");
   check("M6c: a deleted/missing thread does not fail the scan: it still succeeds, still stamps, processes the other threads, and the Dashboard names the missing one",
-    r.ok && w.invSheet.rows.find(x => x[1] === "Bob Baker")[3] === true && /^\d{4}-/.test(String(w.sheet("READ ME").rows[1][1])) && /missing[^"]*Alice Able/i.test(dashText(w)), r.e || dashText(w));
+    r.ok && w.invSheet.rows.find(x => x[1] === "Bob Baker")[3] === true && /^\d{4}-/.test(String(w.sheet("Admin READ ME").rows[1][1])) && /missing[^"]*Alice Able/i.test(dashText(w)), r.e || dashText(w));
   const r2 = run(w, "scanReplies");
   check("M6c2: ... and keeps reporting it on later scans (no alert loop: it is not an error)", r2.ok && /missing[^"]*Alice Able/i.test(dashText(w)), r2.e);
 }
@@ -1480,9 +1499,9 @@ for (const st of ["No", "not coming", "NOPE", "n", " N "]) {
   w.addIncoming(tid("alice@example.com"), { from: "Alice <alice@example.com>", subject: "Re:", body: "yes" });
   w.addIncoming(tid("bob@example.com"), { from: "Bob <bob@example.com>", subject: "Re:", body: "yes" });
   const r1 = run(w, "scanReplies");
-  const after1 = w.sheet("Replies").rows.length - 1, stamp1 = String(w.sheet("READ ME").rows[1][1]);
+  const after1 = w.sheet("Replies").rows.length - 1, stamp1 = String(w.sheet("Admin READ ME").rows[1][1]);
   const r2 = run(w, "scanReplies");
-  const after2 = w.sheet("Replies").rows.length - 1, stamp2 = String(w.sheet("READ ME").rows[1][1]);
+  const after2 = w.sheet("Replies").rows.length - 1, stamp2 = String(w.sheet("Admin READ ME").rows[1][1]);
   check("M6d: the scan is budgeted: when the time budget is spent it stops, remembers where, does not stamp a success time, and the next run resumes and completes (then stamps)",
     r1.ok && after1 === 1 && stamp1 === "" && r2.ok && after2 === 2 && /^\d{4}-/.test(stamp2), JSON.stringify([r1, after1, stamp1, r2, after2, stamp2]));
 }
@@ -1781,7 +1800,7 @@ const fourPlayers = () => { const names = ["Ann Zed", "Ben Zed", "Cat Zed", "Dan
   const opts = { props: { GFY_MAIL_TEST: "0" }, threadError: "thr2" };
   const w = world(opts); run(w, "sendInvites");
   const a = run(w, "scanReplies"), b = run(w, "scanReplies"), c = run(w, "scanReplies");
-  check("F4a: throw #1 and #2 are scan errors (alert/stale path); the 3rd consecutive throw => 'missing' and the scan succeeds + stamps", !a.ok && !b.ok && c.ok && /^\d{4}-/.test(String(w.sheet("READ ME").rows[1][1])) && /missing[^"]*Bob Baker/i.test(dashText(w)), JSON.stringify([a, b, c]));
+  check("F4a: throw #1 and #2 are scan errors (alert/stale path); the 3rd consecutive throw => 'missing' and the scan succeeds + stamps", !a.ok && !b.ok && c.ok && /^\d{4}-/.test(String(w.sheet("Admin READ ME").rows[1][1])) && /missing[^"]*Bob Baker/i.test(dashText(w)), JSON.stringify([a, b, c]));
   const d = run(w, "scanReplies");
   check("F4b: a thread that keeps throwing stays 'missing' (never a permanent failure)", d.ok, d.e);
   const o2 = { props: { GFY_MAIL_TEST: "0" }, threadError: "thr2" };
@@ -1825,6 +1844,56 @@ const fourPlayers = () => { const names = ["Ann Zed", "Ben Zed", "Cat Zed", "Dan
   check("F10: nudge subject is 'Reminder: <invite subject>' (no fake Re:), and the confirm dialog says so", n.sent.every(s => /^Reminder: Are you in, /.test(s.subject)) && n.sent.length === 2 && !!conf && /Reminder:/.test(conf.msg) && !/Re: </.test(conf.msg), JSON.stringify([n.sent.map(s => s.subject), conf && conf.msg]));
   const docs = readFileSync(path.join(ROOT, "docs", "invite-copy.md"), "utf8") + readFileSync(path.join(ROOT, "README.md"), "utf8");
   check("F10b: README + invite-copy describe the Reminder: subject", /Reminder: <(their )?original invite subject>|Reminder: <invite subject>/.test(docs) && !/`Re: <(their )?original invite subject>`/.test(docs));
+}
+
+
+// ---------- WO-ONE-FILE item 1: private tabs + published tabs in ONE spreadsheet ----------
+const oneFileSend = (extra = {}) => { const w = world({ oneFile: true, props: { GFY_MAIL_TEST: "0", ...(extra.props || {}) }, ...extra }); const r = run(w, "sendInvites"); return { w, r }; };
+{
+  const { w, r } = oneFileSend();
+  const inv = w.invSheet.rows;
+  check("OF10: PUBLIC_ID unset -> the active spreadsheet plays both roles: invites go out, `invited` is ticked on the SAME file's Invites tab, no other file is opened",
+    r.ok && w.sent.length === 2 && inv.find(x => x[1] === "Alice Able")[2] === true && inv.find(x => x[1] === "Bob Baker")[2] === true && w.opened.length === 0, r.e || JSON.stringify([w.sent.length, w.opened]));
+  const { w: w2, r: r2 } = oneFileSend({ props: { PUBLIC_ID: "TOURNEY_ID" } });
+  check("OF11: PUBLIC_ID equal to the active spreadsheet's own id behaves the same (no second open of itself)", r2.ok && w2.sent.length === 2 && w2.opened.length === 0, r2.e || JSON.stringify(w2.opened));
+  const w3 = world({ props: { GFY_MAIL_TEST: "0" } }); run(w3, "sendInvites");
+  check("OF12: PUBLIC_ID set to ANOTHER file keeps the two-file layout working (public sheet opened by id)", w3.sent.length === 2 && w3.opened.every(id => id === PUB) && w3.opened.length > 0);
+}
+{
+  const w = world({ oneFile: true, props: { GFY_MAIL_TEST: "0", WEBAPP_URL: "https://script.google.com/macros/s/X/exec" }, drafts: [RSVP_DRAFT] });
+  run(w, "sendInvites"); w.alerts.length = 0;
+  const tok = String(w.sheet("RSVP").rows[1][2]);
+  const g = w.M.doGet({ parameter: { t: tok } });
+  const rr = (() => { try { return w.M.recordRsvp(tok, "IN"); } catch (e) { return { e: String(e && e.message || e) }; } })();
+  const alice = w.invSheet.rows.find(x => x[1] === "Alice Able");
+  check("OF13: RSVP page + answer work in the one-file project: the token is found on the same file's RSVP tab and the Invites row is ticked responded+committed",
+    /are you in/.test(String(g.html)) && rr.answer === "IN" && alice[3] === true && alice[5] === true && w.opened.length === 0, JSON.stringify([rr, alice, w.opened]));
+}
+{
+  const { w } = oneFileSend();
+  w.addIncoming(w.sent.find(s => s.to === "alice@example.com").threadId, { from: "Alice Able <alice@example.com>", subject: "Re: x", body: "Yes! Count me in.", date: "2027-01-06T09:00:00Z" });
+  const r = run(w, "scanReplies");
+  check("OF14: the reply scan works in the one-file project: `responded` ticked on the same file, reply text only on the private Replies tab, stamp on Admin READ ME",
+    r.ok && w.invSheet.rows.find(x => x[1] === "Alice Able")[3] === true && w.sheet("Replies").rows.length === 2 && /^\d{4}-/.test(String(w.sheet("Admin READ ME").rows[1][1])) && w.opened.length === 0, r.e || JSON.stringify(w.sheet("Replies").rows));
+  const d = run(w, "adminPolish");
+  check("OF15: the Dashboard counts come from the same file's Invites tab", d.ok && dashVals(w).season === 2027 && dashVals(w).invited === 2, d.e || JSON.stringify(dashVals(w)));
+}
+{
+  const w = world({ oneFile: true, props: { GFY_MAIL_TEST: "0" }, invites: [[2027, "Alice Able", true, true, "", false, ""], [2027, "Bob Baker", true, true, "", false, ""]], replies: [["2027-01-02", "Alice Able", "A", "yes", true, true, "m1"]] });
+  const cc = colOf(w.sheet("Replies").rows, "confirm");
+  let err = ""; try { w.M.mailOnEdit({ range: w.sheet("Replies").getRange(2, cc, 1, 1) }); } catch (e) { err = String(e && e.message || e); }
+  check("OF16: confirm -> committed works in the one-file project (the same file's Invites row)", !err && w.invSheet.rows.find(x => x[1] === "Alice Able")[5] === true && w.opened.length === 0, err);
+}
+{
+  const legacy = log => [mkSheet("Contacts", [HDR_CON], log), mkSheet("SendLog", [HDR_LOG], log), mkSheet("RSVP", [HDR_RSVP], log), mkSheet("Replies", [HDR_REP], log), mkSheet("READ ME", [["warning", "last_reply_scan"], ["be careful", "2027-01-01 10:00"]], log)];
+  const w = world({ adminSheets: legacy });
+  const r = run(w, "adminPolish");
+  const names = w.admin.sheets.map(x => x.name);
+  const rm = w.sheet("Admin READ ME");
+  check("OF17: two-file (old Admin file): an existing 'READ ME' tab is RENAMED to 'Admin READ ME' (content kept, no second tab)", r.ok && !!rm && names.indexOf("READ ME") < 0 && names.filter(n => /READ ME/.test(n)).length === 1 && rm.rows[1][1] === "2027-01-01 10:00", r.e || names.join());
+  const w2 = world({ oneFile: true, adminSheets: log => [mkSheet("READ ME", [["not ours"], ["leave me"]], log)] });
+  run(w2, "adminPolish");
+  check("OF18: one-file: a tab named 'READ ME' in the Tournament sheet is NOT ours and is never renamed; 'Admin READ ME' is created beside it", !!w2.sheet("READ ME") && w2.sheet("READ ME").rows[1][0] === "leave me" && !!w2.sheet("Admin READ ME"));
 }
 
 // ---------- no-'@' leak test ----------
