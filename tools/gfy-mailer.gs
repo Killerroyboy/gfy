@@ -178,8 +178,12 @@ function mailIsTest_(props){
 }
 
 // THE only function allowed to write to the public sheet.
+// Invariant (WO-ONE-FILE): never an '@' on a PUBLISHED tab = any tab outside MAIL_PRIVATE_TABS. It is for published tabs
+// only, so it also refuses a private tab as its target (private tabs are written by the mailer's own helpers).
 function mailPublicWrite_(sheet, r, c, v){
   if (/@/.test(String(v))) throw new Error("refusing to write '@' to the public sheet");
+  const tab = mailNorm_(sheet && typeof sheet.getName === "function" ? sheet.getName() : "");
+  if (MAIL_PRIVATE_TABS.some(n => mailNorm_(n) === tab)) throw new Error("refusing: " + sheet.getName() + " is a private tab, not a published one");
   sheet.getRange(r, c).setValue(v);
 }
 

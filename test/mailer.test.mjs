@@ -28,7 +28,7 @@ function mkSheet(name, rows, log, ss) {
     return v;
   };
   const ensure = (r, c) => { while (sh.rows.length < r) sh.rows.push([]); const row = sh.rows[r - 1]; while (row.length < c) row.push(""); };
-  const logW = (r, c, v, op) => { log.dirty = true; sh.writes.push({ r, c, v, op }); log.push({ ev: "write", sheet: name, r, c, v, op, locked: log.isLocked ? log.isLocked() : null }); delete sh.formulas[r + "," + c]; };
+  const logW = (r, c, v, op) => { log.dirty = true; sh.writes.push({ r, c, v, op }); log.push({ ev: "write", sheet: sh.name, r, c, v, op, locked: log.isLocked ? log.isLocked() : null }); delete sh.formulas[r + "," + c]; };
   sh.getName = () => sh.name;
   sh.setName = n => { sh.name = n; return sh; };
   sh.getSheetId = () => 1;
@@ -69,7 +69,7 @@ function mkSheet(name, rows, log, ss) {
     };
     return rng;
   };
-  sh.appendRow = vals => { log.dirty = true; sh.writes.push({ op: "appendRow", v: vals }); log.push({ ev: "append", sheet: name, v: vals }); const rn = sh.rows.length + 1; sh.rows.push(vals.map((v, j) => coerce(v, rn, j + 1))); };
+  sh.appendRow = vals => { log.dirty = true; sh.writes.push({ op: "appendRow", v: vals }); log.push({ ev: "append", sheet: sh.name, v: vals }); const rn = sh.rows.length + 1; sh.rows.push(vals.map((v, j) => coerce(v, rn, j + 1))); };
   return sh;
 }
 function mkSS(id, sheets, log) {
@@ -96,8 +96,9 @@ const HDR_RSVP = ["year", "player", "token", "answer", "answered_at", "history",
 const TPL_DRAFT = { subject: "[GFY TEMPLATE] Good Friends Yearly 2027, {first}?", html: "<p>Hi {first},</p><p>You in for 2027?</p>", plain: "Hi {first},\n\nYou in for 2027?\n\n- R" };
 const NUDGE_DRAFT = { subject: "[GFY NUDGE] Still in, {first}?", html: "<p>{first}, nudge: <a href=\"{rsvp}\">answer here</a></p>", plain: "{first}, nudge: {rsvp}" };
 
+const allLogs = []; // every world's write log, for the leak invariant
 function world(o = {}) {
-  const log = [];
+  const log = []; allLogs.push(log);
   const contacts = o.contacts || [
     ["Alice Able", "alice@example.com", "", "", "FALSE", "", ""],
     ["Bob Baker", "bob@example.com", "bob.alt@example.com", "", "FALSE", "", ""],
@@ -2060,11 +2061,21 @@ const PRIV4 = ["Contacts", "Replies", "RSVP", "SendLog"];
 {
   const bad = allPublicWrites.filter(e => /@/.test(String(e.v)));
   check("MX1: across every scenario above, no public-sheet write carries an '@' (" + allPublicWrites.length + " writes inspected)", allPublicWrites.length >= 5 && bad.length === 0, JSON.stringify(bad));
+  // WO-ONE-FILE: the invariant is now "never '@' to a PUBLISHED tab" - i.e. to any tab outside the private closed list.
+  const PRIVATE = ["Dashboard", "Contacts", "Replies", "RSVP", "SendLog", "Admin READ ME", "READ ME"];   // READ ME = the legacy Admin-file name, private too
+  const writes = allLogs.flat().filter(e => (e.ev === "write" || e.ev === "append") && e.sheet);
+  const toPublished = writes.filter(e => !PRIVATE.includes(e.sheet));
+  const leaked = toPublished.filter(e => /@/.test(JSON.stringify(e.v)));
+  check("MX1b: across EVERY scenario (two-file and one-file), no '@' is written to any tab outside the private list (" + toPublished.length + " writes to published tabs, " + writes.length + " in all)", toPublished.length >= 5 && leaked.length === 0 && writes.some(e => e.sheet === "Contacts" && /@/.test(JSON.stringify(e.v))), JSON.stringify(leaked.slice(0, 3)));
+  check("MX1c: the scenarios did exercise the one-file layout (writes to Invites in a spreadsheet that also holds Contacts with addresses)", allLogs.length > 20);
   const w = world();
   const sh = w.invSheet;
   const r1 = run({ M: { f: () => w.M.mailPublicWrite_(sh, 2, 3, "someone@example.com") } }, "f");
   const r2 = run({ M: { f: () => w.M.mailPublicWrite_(sh, 2, 3, true) } }, "f");
   check("MX2: the single public-write helper REFUSES any value containing '@' (and allows a plain boolean tick)", !r1.ok && /@/.test(r1.e) && sh.writes.filter(x => /@/.test(String(x.v))).length === 0 && r2.ok && sh.rows[1][2] === true, r1.e + "|" + r2.e);
+  const w1 = world({ oneFile: true });
+  const r3 = run({ M: { f: () => w1.M.mailPublicWrite_(w1.sheet("Contacts"), 2, 2, true) } }, "f");
+  check("MX2b: the single public-write helper also REFUSES a private tab as its target (it is only for published tabs)", !r3.ok && /private/i.test(r3.e), r3.e);
   const src = SRC.replace(/\/\/[^\n]*/g, "");
   const direct = (src.match(/\.setValues?\(/g) || []).length;
   check("MX3: public sheet is only ever written through mailPublicWrite_ (the only .setValue on a non-admin sheet lives inside it)", /function mailPublicWrite_/.test(src) && !/appendRow\(\s*[^)]*pub/i.test(src) && direct >= 1);
